@@ -18,6 +18,7 @@ import { calculatePaymentState, createAccountDebtMovement } from "./sale.payment
 import { addHours, resolveQuotationHours, queueSalePdfGeneration } from "./sale.query";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
+import { promotionService } from "../promotion.service";
 
 export async function create(data: CreateSaleInput) {
   if (!Array.isArray(data.items) || data.items.length === 0) {
@@ -85,12 +86,38 @@ export async function create(data: CreateSaleInput) {
   const discountBaseSubtotal = round2(subtotal - deliveryLineSubtotal);
 
   let discountAmount = 0;
+  let appliedPromotionId: string | null = null;
+  let appliedPromotionDiscount: number | null = null;
 
   if (data.discountType && typeof data.discountValue === "number") {
+    // Manual discount from the client — skip promotion lookup
     discountAmount =
       data.discountType === "PERCENTAGE"
         ? discountBaseSubtotal * (data.discountValue / 100)
         : data.discountValue;
+  } else {
+    // Try to automatically apply the best active promotion
+    const productIds = itemsWithPrices.map((i) => i.productId);
+    const productCategoryRows = await prisma.product.findMany({
+      where: { id: { in: productIds }, ...tenantScope() },
+      select: { categoryId: true },
+    });
+    const categoryIds = [
+      ...new Set(productCategoryRows.map((p) => p.categoryId).filter(Boolean)),
+    ] as string[];
+
+    const promoResult = await promotionService.applyToCart({
+      cartTotal: discountBaseSubtotal,
+      productIds,
+      categoryIds,
+      clientCategory: client?.category ?? undefined,
+    });
+
+    if (promoResult.bestPromotion && promoResult.discount > 0) {
+      discountAmount = promoResult.discount;
+      appliedPromotionId = promoResult.bestPromotion.id;
+      appliedPromotionDiscount = promoResult.discount;
+    }
   }
 
   discountAmount = round2(discountAmount);
@@ -170,8 +197,10 @@ export async function create(data: CreateSaleInput) {
 
           gmailSend: null,
 
-          discountType: data.discountType ?? null,
-          discountValue: data.discountValue ?? null,
+          discountType: data.discountType ?? (appliedPromotionId ? "FIXED" : null),
+          discountValue: data.discountValue ?? (appliedPromotionDiscount ?? null),
+          promotionId: appliedPromotionId,
+          promotionDiscount: appliedPromotionDiscount,
 
           paymentMethod: data.paymentMethod,
           receiptType: data.receiptType,

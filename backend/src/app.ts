@@ -43,6 +43,8 @@ import auditLogRoutes from "./routes/auditLog.routes";
 import notificationRoutes from "./routes/notification.routes";
 import loyaltyRoutes from "./routes/loyalty.routes";
 import priceListRoutes from "./routes/priceList.routes";
+import returnRoutes from "./routes/return.routes";
+import exportRoutes from "./routes/export.routes";
 dotenv.config();
 
 const app = express();
@@ -176,6 +178,8 @@ app.use("/audit-logs", auditLogRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/loyalty", loyaltyRoutes);
 app.use("/price-lists", priceListRoutes);
+app.use("/returns", returnRoutes);
+app.use("/exports", exportRoutes);
 
 // 🔹 Swagger
 swaggerDocs(app);
