@@ -1,0 +1,82 @@
+tags:
+  - name: Business Locations
+    description: Endpoints de sucursales / puntos de venta fisicos
+
+paths:
+  /business-locations:
+    get:
+      tags: [Business Locations]
+      summary: Lista sucursales
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de sucursales
+    post:
+      tags: [Business Locations]
+      summary: Crea una sucursal
+      security:
+        - bearerAuth: []
+      responses:
+        201:
+          description: Sucursal creada
+
+  /business-locations/{id}:
+    get:
+      tags: [Business Locations]
+      summary: Obtiene una sucursal por id
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Sucursal
+        404:
+          description: No encontrada
+    put:
+      tags: [Business Locations]
+      summary: Reemplaza una sucursal
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Sucursal actualizada
+    patch:
+      tags: [Business Locations]
+      summary: Actualiza parcialmente una sucursal
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Sucursal actualizada
+    delete:
+      tags: [Business Locations]
+      summary: Elimina una sucursal
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Sucursal eliminada

@@ -1,0 +1,80 @@
+tags:
+  - name: Tickets
+    description: Endpoints de impresion de tickets de venta
+  - name: Cash Close
+    description: Endpoints de impresion de cierre de caja
+  - name: Factura PDF
+    description: Endpoints de gestion de PDFs de facturas AFIP
+
+paths:
+  /tickets/sale/{saleId}/print:
+    post:
+      tags: [Tickets]
+      summary: Envia a imprimir el ticket de una venta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: saleId
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Ticket enviado a impresion
+
+  /cash-close/print:
+    post:
+      tags: [Cash Close]
+      summary: Imprime el cierre de caja
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Cierre enviado a impresion
+
+  /factura-pdf/all:
+    get:
+      tags: [Factura PDF]
+      summary: Lista todas las facturas con PDF generado
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de facturas
+        403:
+          description: Requiere rol ADMIN o CONTADOR
+
+  /factura-pdf/{saleId}/regenerar:
+    post:
+      tags: [Factura PDF]
+      summary: Regenera el PDF de la factura de una venta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: saleId
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: PDF regenerado
+        403:
+          description: Requiere rol ADMIN o CONTADOR
+
+  /factura-pdf/{saleId}/descargar:
+    get:
+      tags: [Factura PDF]
+      summary: Descarga el PDF de la factura de una venta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: saleId
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Archivo PDF

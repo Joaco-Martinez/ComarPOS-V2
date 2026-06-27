@@ -1,0 +1,56 @@
+tags:
+  - name: Purchases
+    description: Endpoints de compras a proveedores
+
+paths:
+  /purchases:
+    get:
+      tags: [Purchases]
+      summary: Lista compras
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de compras
+    post:
+      tags: [Purchases]
+      summary: Crea una compra
+      security:
+        - bearerAuth: []
+      responses:
+        201:
+          description: Compra creada
+
+  /purchases/{id}:
+    get:
+      tags: [Purchases]
+      summary: Obtiene una compra por id
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Compra
+        404:
+          description: No encontrada
+
+  /purchases/{id}/status:
+    patch:
+      tags: [Purchases]
+      summary: Actualiza el estado de una compra
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Compra actualizada

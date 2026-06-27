@@ -1,0 +1,273 @@
+tags:
+  - name: Arca Config
+    description: >
+      Configuracion fiscal ARCA/AFIP por sucursal: certificados, puntos de venta,
+      CAI de remitos y auditoria. Ruta canonica /arca-config (alias deprecado
+      /afip/configuracion, mantenido por compatibilidad).
+
+paths:
+  /arca-config:
+    get:
+      tags: [Arca Config]
+      summary: Obtiene la configuracion ARCA activa
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Configuracion ARCA
+    post:
+      tags: [Arca Config]
+      summary: Crea una configuracion ARCA (con certificados)
+      security:
+        - bearerAuth: []
+      responses:
+        201:
+          description: Configuracion creada
+
+  /arca-config/all:
+    get:
+      tags: [Arca Config]
+      summary: Lista todas las configuraciones ARCA
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de configuraciones
+
+  /arca-config/config:
+    get:
+      tags: [Arca Config]
+      summary: Obtiene la configuracion ARCA (alias)
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Configuracion ARCA
+    put:
+      tags: [Arca Config]
+      summary: Actualiza la configuracion ARCA
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Configuracion actualizada
+
+  /arca-config/generate-csr:
+    post:
+      tags: [Arca Config]
+      summary: Genera un CSR para tramitar certificado AFIP
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: CSR generado
+
+  /arca-config/{id}/download-csr:
+    get:
+      tags: [Arca Config]
+      summary: Descarga el CSR generado
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Archivo CSR
+
+  /arca-config/{id}/upload-cert:
+    post:
+      tags: [Arca Config]
+      summary: Sube el certificado firmado por AFIP
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Certificado cargado
+
+  /arca-config/certificados:
+    post:
+      tags: [Arca Config]
+      summary: Sube certificado y clave privada
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Certificados cargados
+    delete:
+      tags: [Arca Config]
+      summary: Elimina los certificados cargados
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Certificados eliminados
+
+  /arca-config/{id}/activate:
+    patch:
+      tags: [Arca Config]
+      summary: Activa una configuracion ARCA
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Configuracion activada
+
+  /arca-config/{id}/test:
+    post:
+      tags: [Arca Config]
+      summary: Prueba la configuracion contra AFIP
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Resultado de la prueba
+
+  /arca-config/test/wsaa:
+    post:
+      tags: [Arca Config]
+      summary: Prueba autenticacion WSAA
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Resultado de la prueba WSAA
+
+  /arca-config/test/wsfe-dummy:
+    post:
+      tags: [Arca Config]
+      summary: Prueba el metodo dummy de WSFE (healthcheck AFIP)
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Resultado del dummy
+
+  /arca-config/puntos-venta:
+    get:
+      tags: [Arca Config]
+      summary: Lista puntos de venta configurados
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de puntos de venta
+    post:
+      tags: [Arca Config]
+      summary: Crea o actualiza un punto de venta
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Punto de venta guardado
+
+  /arca-config/puntos-venta/{id}:
+    delete:
+      tags: [Arca Config]
+      summary: Elimina un punto de venta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Punto de venta eliminado
+
+  /arca-config/remitos-cai:
+    get:
+      tags: [Arca Config]
+      summary: Lista CAI de remitos configurados
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de CAI
+    post:
+      tags: [Arca Config]
+      summary: Crea un CAI de remito
+      security:
+        - bearerAuth: []
+      responses:
+        201:
+          description: CAI creado
+
+  /arca-config/remitos-cai/{id}:
+    put:
+      tags: [Arca Config]
+      summary: Actualiza un CAI de remito
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: CAI actualizado
+    delete:
+      tags: [Arca Config]
+      summary: Elimina un CAI de remito
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: CAI eliminado
+
+  /arca-config/auditoria:
+    get:
+      tags: [Arca Config]
+      summary: Lista la auditoria de cambios de configuracion ARCA
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de eventos de auditoria
+
+  /arca-config/{id}:
+    delete:
+      tags: [Arca Config]
+      summary: Elimina una configuracion ARCA
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Configuracion eliminada

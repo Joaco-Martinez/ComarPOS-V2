@@ -1,0 +1,15 @@
+node_modules
+# Keep environment variables out of version control
+.env
+.env.*
+!.env.example
+
+/generated/prisma
+
+# Secretos y artefactos que no deben viajar al repo/deploy
+certs/
+*.key
+*.crt
+tmp/
+uploads/
+*.pdf

@@ -1,0 +1,14 @@
+tags:
+  - name: Delivery
+    description: Endpoints de calculo de envios
+
+paths:
+  /delivery/calculate:
+    post:
+      tags: [Delivery]
+      summary: Calcula costo y distancia de envio para una direccion
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Costo y distancia calculados

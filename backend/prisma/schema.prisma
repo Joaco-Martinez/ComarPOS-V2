@@ -1,0 +1,1324 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === Multi-tenant (doc seccion 6) ===
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users             User[]
+  clients           Client[]
+  products          Product[]
+  sales             Sale[]
+  finances          Finance[]
+  stockMovements    StockMovement[]
+  purchases         Purchase[]
+  invoicesAfip      InvoiceAfip[]
+  remitos           Remito[]
+  arcaConfigs       ArcaConfig[]
+  businessLocations BusinessLocation[]
+  arcaAuditLogs     ArcaAuditLog[]
+  productCategories ProductCategory[]
+  cbteCounters      CbteCounter[]
+  // new modules
+  suppliers         Supplier[]
+  cashSessions      CashSession[]
+  recurringExpenses RecurringExpense[]
+  exchangeRates     ExchangeRate[]
+  salesGoals        SalesGoal[]
+  promotions        Promotion[]
+  stockCounts       StockCount[]
+  purchaseOrders    PurchaseOrder[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  priceLists        PriceList[]
+}
+
+model User {
+  id                   String            @id @default(uuid())
+  tenantId             String?
+  tenant               Tenant?           @relation(fields: [tenantId], references: [id])
+  email                String
+  password             String
+  name                 String
+  role                 Role
+  isActive             Boolean           @default(true)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  passwordResetExpires DateTime?
+  passwordResetToken   String?           @unique
+  mustChangePassword   Boolean           @default(false)
+  accountMovements     AccountMovement[]
+  client               Client?
+  remitos              Remito[]
+  Sale                 Sale[]
+  StockMovements       StockMovement[]
+  purchases            Purchase[]
+  // new modules
+  cashSessions         CashSession[]
+  stockCounts          StockCount[]
+  purchaseOrders       PurchaseOrder[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([role])
+  @@index([isActive])
+  @@index([passwordResetToken])
+  @@index([tenantId])
+}
+
+model Client {
+  id                String            @id @default(uuid())
+  tenantId          String?
+  tenant            Tenant?           @relation(fields: [tenantId], references: [id])
+  nombre            String
+  apellido          String
+  dni               String
+  telefono          String?
+  gmail             String?
+  category          CategoryClient    @default(Price)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  userId            String?           @unique
+  currentBalance    Float             @default(0)
+  creditLimit       Float?
+  isAccountEnabled  Boolean           @default(false)
+  addressApartment  String?
+  addressCity       String?
+  addressFloor      String?
+  addressNotes      String?
+  addressNumber     String?
+  addressPostalCode String?
+  addressProvince   String?
+  addressStreet     String?
+  latitude          Float?
+  longitude         Float?
+  // price list
+  priceListId       String?
+  priceList         PriceList?        @relation(fields: [priceListId], references: [id])
+  accountMovements  AccountMovement[]
+  user              User?             @relation(fields: [userId], references: [id])
+  remitos           Remito[]
+  sales             Sale[]
+  loyaltyAccount    LoyaltyAccount?
+
+  @@unique([tenantId, dni])
+  @@unique([tenantId, gmail])
+  @@index([dni])
+  @@index([gmail])
+  @@index([category])
+  @@index([userId])
+  @@index([tenantId])
+  @@index([priceListId])
+}
+
+model BusinessLocation {
+  id                String               @id @default(uuid())
+  tenantId          String?
+  tenant            Tenant?              @relation(fields: [tenantId], references: [id])
+  name              String
+  type              BusinessLocationType @default(BRANCH)
+  addressStreet     String?
+  addressNumber     String?
+  addressCity       String?
+  addressProvince   String?
+  addressPostalCode String?
+  addressNotes      String?
+  latitude          Float?
+  longitude         Float?
+  isDefault         Boolean              @default(false)
+  isActive          Boolean              @default(true)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  remitos           Remito[]
+  sales             Sale[]
+  cashSessions      CashSession[]
+
+  @@index([type])
+  @@index([isDefault])
+  @@index([isActive])
+  @@index([tenantId])
+}
+
+model ProductCategory {
+  id          String    @id @default(uuid())
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id])
+  name        String
+  slug        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@index([tenantId])
+}
+
+model Product {
+  id                  String             @id @default(uuid())
+  tenantId            String?
+  tenant              Tenant?            @relation(fields: [tenantId], references: [id])
+  name                String
+  description         String?
+  type                ProductType        @default(SIMPLE)
+  price               Float
+  wholesalePrice      Float
+  clientPrice         Float
+  minStock            Int?
+  stockLocal          Int                @default(0)
+  stockDeposito       Int                @default(0)
+  categoryId          String?
+  imageUrl            String?
+  imageId             String?
+  isActive            Boolean            @default(true)
+  sku                 String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  saleUnit            SaleUnit           @default(UNIT)
+  pricePerKg          Float?
+  wholesalePricePerKg Float?
+  clientPricePerKg    Float?
+  stockLocalKg        Float              @default(0)
+  stockDepositoKg     Float              @default(0)
+  minStockKg          Float?             @default(0)
+  purchasePrice       Float              @default(0)
+  isService           Boolean            @default(false)
+  minStockDeposito    Int?
+  minStockDepositoKg  Float?
+  alerts              Alert[]
+  BoxContent          BoxContent[]
+  category            ProductCategory?   @relation(fields: [categoryId], references: [id])
+  usedIn              ProductComponent[] @relation("ComponentProduct")
+  components          ProductComponent[] @relation("CompositeProduct")
+  stats               ProductStats[]
+  remitoItems         RemitoItem[]
+  SaleItem            SaleItem[]
+  StockMovement       StockMovement[]
+  purchaseItems       PurchaseItem[]
+  // new modules
+  stockCountItems     StockCountItem[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  priceListItems      PriceListItem[]
+
+  @@unique([tenantId, sku])
+  @@index([sku])
+  @@index([categoryId])
+  @@index([type])
+  @@index([isActive])
+  @@index([isActive, name])
+  @@index([tenantId])
+}
+
+model ProductComponent {
+  id          String   @id @default(uuid())
+  compositeId String
+  componentId String
+  quantity    Int?
+  quantityKg  Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  component   Product  @relation("ComponentProduct", fields: [componentId], references: [id])
+  composite   Product  @relation("CompositeProduct", fields: [compositeId], references: [id], onDelete: Cascade)
+
+  @@unique([compositeId, componentId])
+  @@index([componentId])
+}
+
+model ArcaConfig {
+  id                 String            @id @default(uuid())
+  tenantId           String?
+  tenant             Tenant?           @relation(fields: [tenantId], references: [id])
+  businessName       String
+  cuit               String
+  ivaCondition       String?
+  environment        ArcaEnvironment   @default(HOMOLOGACION)
+  status             ArcaConfigStatus  @default(INACTIVE)
+  certEncrypted      String?
+  keyEncrypted       String?
+  certExpiresAt      DateTime?
+  lastTokenAt        DateTime?
+  lastCheckAt        DateTime?
+  lastError          String?
+  isActive           Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  activityStart      DateTime?
+  certAlias          String?
+  defaultConcept     Int               @default(1)
+  defaultCurrencyId  String            @default("PES")
+  defaultPointOfSale Int?
+  fiscalAddress      String?
+  iibb               String?
+  lastSuccessAt      DateTime?
+  scope              String            @unique @default("GRUPO_VJ")
+  csrEncrypted       String?
+  csrGeneratedAt     DateTime?
+  tokens             AfipToken[]
+  auditLogs          ArcaAuditLog[]
+  pointsOfSale       ArcaPointOfSale[]
+  remitos            Remito[]
+  remitoCais         RemitoCaiConfig[]
+
+  @@index([cuit])
+  @@index([isActive])
+  @@index([environment])
+  @@index([status])
+  @@index([tenantId])
+}
+
+model AfipToken {
+  id             String     @id @default(uuid())
+  arcaConfigId   String
+  expiration     DateTime
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  service        String     @default("wsfe")
+  signEncrypted  String
+  tokenEncrypted String
+  arcaConfig     ArcaConfig @relation(fields: [arcaConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([arcaConfigId, service])
+  @@index([expiration])
+}
+
+model ArcaPointOfSale {
+  id               String     @id @default(uuid())
+  arcaConfigId     String
+  number           Int
+  description      String?
+  enabled          Boolean    @default(true)
+  isDefault        Boolean    @default(false)
+  enabledCbteTypes Int[]      @default([])
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  arcaConfig       ArcaConfig @relation(fields: [arcaConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([arcaConfigId, number])
+  @@index([number])
+  @@index([enabled])
+}
+
+model RemitoCaiConfig {
+  id           String     @id @default(uuid())
+  arcaConfigId String
+  mode         RemitoMode @default(PREPRINTED_FORM)
+  pointOfSale  Int
+  cai          String
+  expiresAt    DateTime
+  rangeFrom    Int?
+  rangeTo      Int?
+  nextNumber   Int?
+  enabled      Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  remitos      Remito[]
+  arcaConfig   ArcaConfig @relation(fields: [arcaConfigId], references: [id], onDelete: Cascade)
+
+  @@index([pointOfSale])
+  @@index([enabled])
+  @@index([expiresAt])
+}
+
+model Remito {
+  id                    String            @id @default(uuid())
+  tenantId              String?
+  tenant                Tenant?           @relation(fields: [tenantId], references: [id])
+  saleId                String?
+  clientId              String?
+  userId                String?
+  businessLocationId    String?
+  arcaConfigId          String?
+  remitoCaiConfigId     String?
+  status                RemitoStatus      @default(ISSUED)
+  mode                  RemitoMode        @default(DIGITAL_FULL)
+  pointOfSale           Int
+  number                Int
+  fullNumber            String            @unique
+  code                  String            @default("91")
+  issueDate             DateTime          @default(now())
+  placeOfIssue          String?
+  cai                   String?
+  caiExpiresAt          DateTime?
+  caiRangeFrom          Int?
+  caiRangeTo            Int?
+  businessName          String?
+  businessCuit          String?
+  businessIvaCondition  String?
+  businessIibb          String?
+  businessActivityStart DateTime?
+  businessFiscalAddress String?
+  businessAddress       String?
+  businessEmail         String?
+  businessPhone         String?
+  clientName            String?
+  clientDni             String?
+  clientCuit            String?
+  clientIvaCondition    String?
+  clientAddress         String?
+  clientLocality        String?
+  sellerName            String?
+  saleCondition         String?
+  transportName         String?
+  transportCuit         String?
+  packagesCount         Int?
+  declaredValue         Float?
+  observations          String?
+  pdfUrl                String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  arcaConfig            ArcaConfig?       @relation(fields: [arcaConfigId], references: [id])
+  businessLocation      BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+  client                Client?           @relation(fields: [clientId], references: [id])
+  remitoCaiConfig       RemitoCaiConfig?  @relation(fields: [remitoCaiConfigId], references: [id])
+  sale                  Sale?             @relation(fields: [saleId], references: [id])
+  user                  User?             @relation(fields: [userId], references: [id])
+  items                 RemitoItem[]
+
+  @@unique([pointOfSale, number])
+  @@index([saleId])
+  @@index([clientId])
+  @@index([userId])
+  @@index([businessLocationId])
+  @@index([arcaConfigId])
+  @@index([remitoCaiConfigId])
+  @@index([status])
+  @@index([issueDate])
+  @@index([tenantId])
+}
+
+model RemitoItem {
+  id          String   @id @default(uuid())
+  remitoId    String
+  productId   String?
+  code        String?
+  description String
+  quantity    Int?
+  quantityKg  Float?
+  saleUnit    SaleUnit @default(UNIT)
+  createdAt   DateTime @default(now())
+  product     Product? @relation(fields: [productId], references: [id])
+  remito      Remito   @relation(fields: [remitoId], references: [id], onDelete: Cascade)
+
+  @@index([remitoId])
+  @@index([productId])
+}
+
+model ArcaAuditLog {
+  id           String          @id @default(uuid())
+  tenantId     String?
+  tenant       Tenant?         @relation(fields: [tenantId], references: [id])
+  arcaConfigId String?
+  userId       String?
+  action       ArcaAuditAction
+  detail       String?
+  ip           String?
+  createdAt    DateTime        @default(now())
+  arcaConfig   ArcaConfig?     @relation(fields: [arcaConfigId], references: [id])
+
+  @@index([arcaConfigId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([tenantId])
+}
+
+model CbteCounter {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+  ptoVta     Int
+  cbteTipo   Int
+  lastNumber Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, ptoVta, cbteTipo])
+  @@index([tenantId])
+}
+
+model InvoiceAfip {
+  id                   String        @id @default(uuid())
+  tenantId             String?
+  tenant               Tenant?       @relation(fields: [tenantId], references: [id])
+  saleId               String?       @unique
+  relatedInvoiceId     String?
+  cuit                 String
+  puntoVenta           Int
+  tipoComprobante      Int
+  tipoDoc              Int
+  nroDoc               BigInt
+  numero               Int
+  fechaEmision         DateTime
+  resultado            String
+  cae                  String?
+  caeVto               DateTime?
+  total                Float
+  neto                 Float
+  iva                  Float
+  condicionIVAReceptor Int
+  moneda               String        @default("PES")
+  urlQR                String?
+  qrBase64             String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  relatedInvoice       InvoiceAfip?  @relation("CreditNoteRelation", fields: [relatedInvoiceId], references: [id])
+  creditNotes          InvoiceAfip[] @relation("CreditNoteRelation")
+  sale                 Sale?         @relation(fields: [saleId], references: [id])
+
+  @@unique([puntoVenta, tipoComprobante, numero])
+  @@index([cuit, puntoVenta, tipoComprobante])
+  @@index([tenantId])
+}
+
+model Sale {
+  id                      String            @id @default(uuid())
+  tenantId                String?
+  tenant                  Tenant?           @relation(fields: [tenantId], references: [id])
+  userId                  String?
+  clientId                String?
+  gmailSend               String?
+  subtotal                Float             @default(0)
+  total                   Float             @default(0)
+  discountType            DiscountType?
+  discountValue           Float?
+  isInvoiced              Boolean           @default(false)
+  isNoteCredit            Boolean           @default(false)
+  invoiceStatus           InvoiceStatus     @default(NONE)
+  afipLastError           String?
+  nextRetryAt             DateTime?
+  retryCount              Int               @default(0)
+  afipPayloadJson         Json?
+  paymentMethod           PaymentMethod
+  receiptType             ReceiptType
+  status                  SaleStatus        @default(PENDING)
+  isAccountSale           Boolean           @default(false)
+  accountDebtAmount       Float             @default(0)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  pdfUrl                  String?
+  stockLocation           Location          @default(LOCAL)
+  quotationExpiredAt      DateTime?
+  quotationExpiresAt      DateTime?
+  quotationPdfUrl         String?
+  grossProfit             Float             @default(0)
+  businessLocationId      String?
+  declaredValue           Float?
+  deliveryAddressSnapshot String?
+  deliveryCost            Float             @default(0)
+  deliveryDistanceKm      Float?
+  deliveryMethod          DeliveryMethod    @default(PICKUP)
+  deliveryStatus          DeliveryStatus    @default(NONE)
+  packagesCount           Int?
+  transportCuit           String?
+  transportName           String?
+  deliveryPricePerKm      Float?
+  // promotion
+  promotionId             String?
+  promotionDiscount       Float?
+  promotion               Promotion?        @relation(fields: [promotionId], references: [id])
+  accountMovements        AccountMovement[]
+  invoice                 Invoice?
+  invoiceAfip             InvoiceAfip?
+  remitos                 Remito[]
+  businessLocation        BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+  client                  Client?           @relation(fields: [clientId], references: [id])
+  user                    User?             @relation(fields: [userId], references: [id])
+  items                   SaleItem[]
+  payments                SalePayment[]
+
+  @@index([quotationExpiresAt])
+  @@index([clientId])
+  @@index([userId])
+  @@index([businessLocationId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([clientId, createdAt])
+  @@index([invoiceStatus, nextRetryAt])
+  @@index([tenantId])
+  @@index([promotionId])
+}
+
+model SaleItem {
+  id                    String            @id @default(uuid())
+  saleId                String
+  productId             String
+  quantity              Int
+  quantityKg            Float?
+  price                 Float
+  priceType             SaleItemPriceType @default(PRICE)
+  subtotal              Float             @default(0)
+  productNameSnapshot   String?
+  productSkuSnapshot    String?
+  createdAt             DateTime          @default(now())
+  profit                Float             @default(0)
+  purchasePriceSnapshot Float             @default(0)
+  boxContents           BoxContent[]
+  product               Product           @relation(fields: [productId], references: [id])
+  sale                  Sale              @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([productId])
+  @@index([priceType])
+}
+
+model BoxContent {
+  id         String   @id @default(uuid())
+  saleItemId String
+  productId  String
+  quantity   Int?
+  quantityKg Float?
+  product    Product  @relation(fields: [productId], references: [id])
+  saleItem   SaleItem @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+
+  @@index([saleItemId])
+  @@index([productId])
+}
+
+model SalePayment {
+  id        String        @id @default(uuid())
+  saleId    String
+  method    PaymentMethod
+  amount    Float
+  reference String?
+  notes     String?
+  createdAt DateTime      @default(now())
+  sale      Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([method])
+}
+
+model AccountMovement {
+  id              String              @id @default(uuid())
+  clientId        String
+  saleId          String?
+  userId          String?
+  type            AccountMovementType
+  amount          Float
+  previousBalance Float
+  newBalance      Float
+  paymentMethod   PaymentMethod?
+  reference       String?
+  description     String?
+  date            DateTime            @default(now())
+  createdAt       DateTime            @default(now())
+  client          Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sale            Sale?               @relation(fields: [saleId], references: [id])
+  user            User?               @relation(fields: [userId], references: [id])
+
+  @@index([clientId])
+  @@index([saleId])
+  @@index([type])
+  @@index([date])
+}
+
+model Alert {
+  id        String   @id @default(uuid())
+  productId String
+  message   String
+  createdAt DateTime @default(now())
+  resolved  Boolean  @default(false)
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([resolved])
+}
+
+model ProductStats {
+  id         String   @id @default(uuid())
+  productId  String
+  quantity   Int?
+  quantityKg Float?
+  date       DateTime @default(now())
+  createdAt  DateTime @default(now())
+  product    Product  @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([date])
+}
+
+model Finance {
+  id            String          @id @default(uuid())
+  tenantId      String?
+  tenant        Tenant?         @relation(fields: [tenantId], references: [id])
+  type          FinanceType
+  amount        Float
+  category      CategoryFinance
+  paymentMethod PaymentMethod?
+  description   String?
+  date          DateTime
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  purchase      Purchase?
+
+  @@index([type])
+  @@index([category])
+  @@index([date])
+  @@index([tenantId])
+}
+
+model StockMovement {
+  id         String       @id @default(uuid())
+  tenantId   String?
+  tenant     Tenant?      @relation(fields: [tenantId], references: [id])
+  productId  String
+  userId     String?
+  purchaseId String?
+  type       MovementType
+  from       Location?
+  to         Location?
+  quantity   Int?
+  quantityKg Float?
+  reason     String?
+  reference  String?
+  createdAt  DateTime     @default(now())
+  product    Product      @relation(fields: [productId], references: [id])
+  user       User?        @relation(fields: [userId], references: [id])
+  purchase   Purchase?    @relation(fields: [purchaseId], references: [id])
+
+  @@index([productId])
+  @@index([userId])
+  @@index([purchaseId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([tenantId])
+}
+
+model Purchase {
+  id              String         @id @default(uuid())
+  tenantId        String?
+  tenant          Tenant?        @relation(fields: [tenantId], references: [id])
+  providerName    String?
+  invoiceNumber   String?
+  description     String?
+  totalAmount     Float          @default(0)
+  paymentMethod   PaymentMethod?
+  to              Location       @default(DEPOSITO)
+  date            DateTime       @default(now())
+  status          PurchaseStatus @default(COMPLETED)
+  userId          String?
+  financeId       String?        @unique
+  // new: link to supplier entity and purchase order
+  supplierId      String?
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id])
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user           User?           @relation(fields: [userId], references: [id])
+  finance        Finance?        @relation(fields: [financeId], references: [id])
+  items          PurchaseItem[]
+  stockMovements StockMovement[]
+
+  @@index([userId])
+  @@index([financeId])
+  @@index([status])
+  @@index([date])
+  @@index([tenantId])
+  @@index([supplierId])
+  @@index([purchaseOrderId])
+}
+
+model PurchaseItem {
+  id                  String   @id @default(uuid())
+  purchaseId          String
+  productId           String
+  quantity            Int?
+  quantityKg          Float?
+  unitCost            Float
+  subtotal            Float
+  productNameSnapshot String?
+  productSkuSnapshot  String?
+  createdAt           DateTime @default(now())
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+model Invoice {
+  id        String   @id @default(uuid())
+  saleId    String   @unique
+  pdfUrl    String?
+  createdAt DateTime @default(now())
+  sale      Sale     @relation(fields: [saleId], references: [id])
+}
+
+// ═══════════════════════════════════════════════════
+// NEW MODULES
+// ═══════════════════════════════════════════════════
+
+model Supplier {
+  id          String    @id @default(uuid())
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id])
+  name        String
+  cuit        String?
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  notes       String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  purchases      Purchase[]
+  purchaseOrders PurchaseOrder[]
+
+  @@index([tenantId])
+  @@index([isActive])
+}
+
+model CashSession {
+  id                 String            @id @default(uuid())
+  tenantId           String?
+  tenant             Tenant?           @relation(fields: [tenantId], references: [id])
+  userId             String
+  user               User              @relation(fields: [userId], references: [id])
+  businessLocationId String?
+  businessLocation   BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+  status             CashSessionStatus @default(OPEN)
+  openedAt           DateTime          @default(now())
+  closedAt           DateTime?
+  openingBalance     Float             @default(0)
+  expectedBalance    Float             @default(0)
+  actualBalance      Float?
+  difference         Float?
+  notes              String?
+  closeNotes         String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  movements CashMovement[]
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([openedAt])
+  @@index([businessLocationId])
+}
+
+model CashMovement {
+  id          String           @id @default(uuid())
+  sessionId   String
+  session     CashSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type        CashMovementType
+  amount      Float
+  description String?
+  reference   String?
+  createdAt   DateTime         @default(now())
+
+  @@index([sessionId])
+  @@index([type])
+}
+
+model RecurringExpense {
+  id          String          @id @default(uuid())
+  tenantId    String?
+  tenant      Tenant?         @relation(fields: [tenantId], references: [id])
+  name        String
+  amount      Float
+  category    CategoryFinance
+  dayOfMonth  Int
+  isActive    Boolean         @default(true)
+  lastCreated DateTime?
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([tenantId])
+  @@index([isActive])
+}
+
+model ExchangeRate {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  currency  String   @default("USD")
+  rate      Float
+  source    String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([currency, date])
+}
+
+model SalesGoal {
+  id           String     @id @default(uuid())
+  tenantId     String?
+  tenant       Tenant?    @relation(fields: [tenantId], references: [id])
+  title        String
+  description  String?
+  metric       GoalMetric @default(REVENUE)
+  targetAmount Float
+  periodStart  DateTime
+  periodEnd    DateTime
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([tenantId])
+  @@index([isActive])
+  @@index([periodStart, periodEnd])
+}
+
+model Promotion {
+  id             String         @id @default(uuid())
+  tenantId       String?
+  tenant         Tenant?        @relation(fields: [tenantId], references: [id])
+  name           String
+  description    String?
+  type           PromotionType
+  discountValue  Float
+  discountType   DiscountType
+  startsAt       DateTime
+  endsAt         DateTime
+  isActive       Boolean        @default(true)
+  minAmount      Float?
+  categoryIds    String[]       @default([])
+  productIds     String[]       @default([])
+  clientCategory CategoryClient?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  sales Sale[]
+
+  @@index([tenantId])
+  @@index([isActive])
+  @@index([startsAt, endsAt])
+}
+
+model StockCount {
+  id          String           @id @default(uuid())
+  tenantId    String?
+  tenant      Tenant?          @relation(fields: [tenantId], references: [id])
+  userId      String?
+  user        User?            @relation(fields: [userId], references: [id])
+  status      StockCountStatus @default(DRAFT)
+  location    Location         @default(LOCAL)
+  notes       String?
+  startedAt   DateTime         @default(now())
+  completedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  items StockCountItem[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([userId])
+}
+
+model StockCountItem {
+  id           String     @id @default(uuid())
+  stockCountId String
+  stockCount   StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id])
+  systemStock  Float
+  countedStock Float?
+  difference   Float?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([stockCountId, productId])
+  @@index([stockCountId])
+  @@index([productId])
+}
+
+model PurchaseOrder {
+  id           String              @id @default(uuid())
+  tenantId     String?
+  tenant       Tenant?             @relation(fields: [tenantId], references: [id])
+  supplierId   String?
+  supplier     Supplier?           @relation(fields: [supplierId], references: [id])
+  userId       String?
+  user         User?               @relation(fields: [userId], references: [id])
+  status       PurchaseOrderStatus @default(DRAFT)
+  expectedDate DateTime?
+  notes        String?
+  totalAmount  Float               @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  items     PurchaseOrderItem[]
+  purchases Purchase[]
+
+  @@index([tenantId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([userId])
+}
+
+model PurchaseOrderItem {
+  id                  String        @id @default(uuid())
+  purchaseOrderId     String
+  purchaseOrder       PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId           String
+  product             Product       @relation(fields: [productId], references: [id])
+  quantityOrdered     Int?
+  quantityKgOrdered   Float?
+  unitCost            Float
+  subtotal            Float
+  productNameSnapshot String?
+  createdAt           DateTime      @default(now())
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  entity    String
+  entityId  String
+  action    String
+  changes   Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?          @relation(fields: [tenantId], references: [id])
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([tenantId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model LoyaltyAccount {
+  id            String               @id @default(uuid())
+  clientId      String               @unique
+  client        Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  points        Int                  @default(0)
+  totalEarned   Int                  @default(0)
+  totalRedeemed Int                  @default(0)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  transactions LoyaltyTransaction[]
+
+  @@index([clientId])
+}
+
+model LoyaltyTransaction {
+  id               String         @id @default(uuid())
+  loyaltyAccountId String
+  loyaltyAccount   LoyaltyAccount @relation(fields: [loyaltyAccountId], references: [id], onDelete: Cascade)
+  type             LoyaltyTxType
+  points           Int
+  reference        String?
+  description      String?
+  createdAt        DateTime       @default(now())
+
+  @@index([loyaltyAccountId])
+  @@index([type])
+}
+
+model PriceList {
+  id          String          @id @default(uuid())
+  tenantId    String?
+  tenant      Tenant?         @relation(fields: [tenantId], references: [id])
+  name        String
+  description String?
+  isDefault   Boolean         @default(false)
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  items   PriceListItem[]
+  clients Client[]
+
+  @@index([tenantId])
+  @@index([isActive])
+}
+
+model PriceListItem {
+  id          String    @id @default(uuid())
+  priceListId String
+  priceList   PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  price       Float
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([priceListId, productId])
+  @@index([priceListId])
+  @@index([productId])
+}
+
+// ═══════════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════════
+
+enum Role {
+  ADMIN
+  EMPLEADO
+  CLIENTE
+  CONTADOR
+}
+
+enum ArcaEnvironment {
+  HOMOLOGACION
+  PRODUCCION
+}
+
+enum ArcaConfigStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  INCOMPLETE
+  CERT_EXPIRED
+}
+
+enum CategoryClient {
+  Price
+  Mayorista
+}
+
+enum ProductType {
+  SIMPLE
+  COMPUESTO
+}
+
+enum SaleUnit {
+  UNIT
+  KG
+}
+
+enum MovementType {
+  TRANSFER
+  INGRESS
+  ADJUSTMENT
+  SALE
+  SALE_CANCEL
+}
+
+enum Location {
+  LOCAL
+  DEPOSITO
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum InvoiceStatus {
+  NONE
+  PENDING_AFIP
+  INVOICED
+  ERROR
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+  QR
+  DEBITO
+  CREDITO
+  QR_NACION
+  QR_MERCADOPAGO
+  TARJETA_DEBITO
+  TARJETA_CREDITO
+  CUENTA_CORRIENTE
+}
+
+enum ReceiptType {
+  TICKET
+  FACTURA
+}
+
+enum FinanceType {
+  INGRESO
+  EGRESO
+}
+
+enum SaleStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum PurchaseStatus {
+  COMPLETED
+  CANCELLED
+}
+
+enum AccountMovementType {
+  DEBT
+  PAYMENT
+  ADJUSTMENT_POSITIVE
+  ADJUSTMENT_NEGATIVE
+  CREDIT_NOTE
+}
+
+enum CategoryFinance {
+  VENTA
+  COBRANZA
+  CompraMercaderia
+  AlquilerL1
+  AlquilerF1
+  Alarma
+  Sueldos
+  MateriaPrima
+  Impuestos
+  VEP
+  Contadora
+  Arca
+  Eenvios
+  Publicidad
+  Otro
+}
+
+enum RemitoMode {
+  DIGITAL_FULL
+  PREPRINTED_FORM
+}
+
+enum RemitoStatus {
+  DRAFT
+  ISSUED
+  DELIVERED
+  CANCELLED
+}
+
+enum ArcaAuditAction {
+  CREATE_CONFIG
+  UPDATE_CONFIG
+  UPLOAD_CERTIFICATE
+  DELETE_CERTIFICATE
+  TEST_WSAA
+  TEST_WSFE_DUMMY
+  UPSERT_POINT_OF_SALE
+  DELETE_POINT_OF_SALE
+  UPSERT_REMITO_CAI
+  DELETE_REMITO_CAI
+}
+
+enum BusinessLocationType {
+  BRANCH
+  WAREHOUSE
+  STORE
+}
+
+enum DeliveryMethod {
+  PICKUP
+  LOCAL_DELIVERY
+  TRANSPORT
+}
+
+enum DeliveryStatus {
+  NONE
+  PENDING
+  PREPARING
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum SaleItemPriceType {
+  PRICE
+  WHOLESALE_PRICE
+  MANUAL
+}
+
+// new enums
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  OPENING
+  SALE_CASH
+  PAYMENT_RECEIVED
+  EXPENSE
+  WITHDRAWAL
+  DEPOSIT
+  ADJUSTMENT
+}
+
+enum GoalMetric {
+  REVENUE
+  GROSS_PROFIT
+  UNITS_SOLD
+  SALES_COUNT
+}
+
+enum PromotionType {
+  PRODUCT_DISCOUNT
+  CATEGORY_DISCOUNT
+  CART_DISCOUNT
+}
+
+enum StockCountStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+enum LoyaltyTxType {
+  EARN
+  REDEEM
+  ADJUSTMENT
+  EXPIRE
+}
+
+enum NotificationType {
+  LOW_STOCK
+  DEBT_ALERT
+  GOAL_REACHED
+  PROMOTION_EXPIRING
+  CASH_SESSION_OPEN
+  SYSTEM
+}

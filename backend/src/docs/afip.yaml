@@ -1,0 +1,186 @@
+tags:
+  - name: AFIP
+    description: >
+      Endpoints de facturacion electronica ARCA/AFIP.
+      Todos requieren autenticacion y rol ADMIN o CONTADOR.
+
+paths:
+  /afip/token:
+    get:
+      tags: [AFIP]
+      summary: Genera y retorna el token WSAA activo
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Token WSAA generado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  data:
+                    type: object
+        401:
+          description: No autenticado
+        403:
+          description: Rol insuficiente (requiere ADMIN o CONTADOR)
+        500:
+          description: Error al generar token AFIP
+
+  /afip/prueba:
+    get:
+      tags: [AFIP]
+      summary: Healthcheck de conexion con AFIP (dummy)
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: AFIP accesible
+        401:
+          description: No autenticado
+        403:
+          description: Rol insuficiente
+
+  /afip/facturar:
+    post:
+      tags: [AFIP]
+      summary: Emite una Factura C electronica para una venta
+      description: >
+        Emite Factura C (tipo 11) contra WSFE. Solo admite
+        comprobante tipo 11 — cualquier otro valor enviado en el body
+        es ignorado por seguridad. Genera PDF y lo sube a Cloudinary.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [saleId]
+              properties:
+                saleId:
+                  type: string
+                  description: ID de la venta a facturar
+                cuit:
+                  type: string
+                  description: CUIT del cliente (opcional, se toma de la venta)
+                nombreCliente:
+                  type: string
+                productos:
+                  type: array
+                  description: Override de productos (opcional, se toman de la venta)
+                  items:
+                    type: object
+                    properties:
+                      descripcion:
+                        type: string
+                      cantidad:
+                        type: number
+                      precioUnitario:
+                        type: number
+                      subtotal:
+                        type: number
+                metodoPago:
+                  type: string
+                  description: Override de metodo de pago (opcional)
+      responses:
+        200:
+          description: Factura emitida y PDF generado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  cae:
+                    type: string
+                  caeFechaVencimiento:
+                    type: string
+                  nroComprobante:
+                    type: integer
+                  pdfUrl:
+                    type: string
+        401:
+          description: No autenticado
+        403:
+          description: Rol insuficiente
+        422:
+          description: AFIP rechazo el comprobante (CAE no obtenido)
+        503:
+          description: AFIP no disponible
+        500:
+          description: Error interno al facturar
+
+  /afip/nota-credito:
+    post:
+      tags: [AFIP]
+      summary: Emite una Nota de Credito C para una factura existente
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [saleId]
+              properties:
+                saleId:
+                  type: string
+                  description: ID de la venta/factura a anular
+      responses:
+        200:
+          description: Nota de credito emitida
+        401:
+          description: No autenticado
+        403:
+          description: Rol insuficiente
+        404:
+          description: Factura original no encontrada
+        500:
+          description: Error al emitir nota de credito
+
+  /afip/pending-afip:
+    get:
+      tags: [AFIP]
+      summary: Lista ventas con facturacion AFIP pendiente o fallida
+      description: >
+        Retorna ventas en estado PENDING, RETRY o FAILED para
+        que el operador pueda reintentar la emision manual.
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de ventas pendientes de facturacion
+        401:
+          description: No autenticado
+        403:
+          description: Rol insuficiente
+
+  /afip/factura-by-sale/{saleId}:
+    get:
+      tags: [AFIP]
+      summary: Obtiene la factura AFIP de una venta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: saleId
+          required: true
+          schema:
+            type: string
+          description: ID de la venta
+      responses:
+        200:
+          description: Datos de la factura emitida
+        404:
+          description: No existe factura para esta venta
+        401:
+          description: No autenticado
+        403:
+          description: Rol insuficiente

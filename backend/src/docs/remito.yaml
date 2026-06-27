@@ -1,0 +1,112 @@
+tags:
+  - name: Remitos
+    description: Endpoints de remitos de entrega
+
+paths:
+  /remitos/from-sale/{saleId}:
+    post:
+      tags: [Remitos]
+      summary: Genera un remito a partir de una venta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: saleId
+          required: true
+          schema:
+            type: string
+      responses:
+        201:
+          description: Remito creado
+
+  /remitos:
+    get:
+      tags: [Remitos]
+      summary: Lista remitos
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de remitos
+
+  /remitos/{id}:
+    get:
+      tags: [Remitos]
+      summary: Obtiene un remito por id
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Remito
+        404:
+          description: No encontrado
+
+  /remitos/{id}/pdf:
+    get:
+      tags: [Remitos]
+      summary: Descarga el PDF del remito
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Archivo PDF
+
+  /remitos/{id}/regenerate-pdf:
+    post:
+      tags: [Remitos]
+      summary: Regenera el PDF del remito
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: PDF regenerado
+
+  /remitos/{id}/delivered:
+    patch:
+      tags: [Remitos]
+      summary: Marca el remito como entregado
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Remito actualizado
+
+  /remitos/{id}/cancel:
+    patch:
+      tags: [Remitos]
+      summary: Cancela un remito
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Remito cancelado

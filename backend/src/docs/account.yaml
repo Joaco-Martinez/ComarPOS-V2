@@ -1,0 +1,90 @@
+tags:
+  - name: Accounts
+    description: Endpoints de cuenta corriente de clientes
+
+paths:
+  /accounts/movements:
+    get:
+      tags: [Accounts]
+      summary: Lista movimientos de cuenta corriente
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de movimientos
+
+  /accounts/debtors:
+    get:
+      tags: [Accounts]
+      summary: Lista clientes con deuda en cuenta corriente
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Lista de deudores
+
+  /accounts/{clientId}:
+    get:
+      tags: [Accounts]
+      summary: Estado de cuenta corriente de un cliente
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Estado de cuenta
+        404:
+          description: Cliente no encontrado
+
+  /accounts/{clientId}/payment:
+    post:
+      tags: [Accounts]
+      summary: Registra un pago contra la deuda del cliente
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
+      responses:
+        201:
+          description: Pago registrado
+
+  /accounts/{clientId}/movements:
+    post:
+      tags: [Accounts]
+      summary: Crea un movimiento manual de cuenta corriente
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
+      responses:
+        201:
+          description: Movimiento creado
+
+  /accounts/movements/{id}:
+    patch:
+      tags: [Accounts]
+      summary: Edita un movimiento de cuenta corriente
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Movimiento actualizado
