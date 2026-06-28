@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
+import NotificationsBell from './NotificationsBell';
 import { useToast } from '@/hooks/useToast';
-import { Menu, Bell, Sun, Moon } from 'lucide-react';
+import { Menu, Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 
 interface AppLayoutProps {
@@ -124,9 +125,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
             >
               {theme === 'dark' ? <Sun size={15} style={{ color: 'var(--text3)' }} /> : <Moon size={15} style={{ color: 'var(--text3)' }} />}
             </button>
-            <button className="btn btn-ghost btn-sm" style={{ padding: 7 }}>
-              <Bell size={15} style={{ color: 'var(--text3)' }} />
-            </button>
+            <NotificationsBell />
           </div>
         </header>
 
