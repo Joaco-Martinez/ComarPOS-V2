@@ -210,7 +210,6 @@ export async function regenerarNotaCreditoPDFService(
       };
     }),
 
-    logoPath: path.resolve("./assets/logo-vj.png"),
   };
 
   const result = await generarFacturaPDF(pdfData, uploadToCloudinary);

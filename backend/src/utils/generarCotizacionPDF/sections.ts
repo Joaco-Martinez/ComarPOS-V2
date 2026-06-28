@@ -20,12 +20,25 @@ export function drawPageBackground(doc: PDFKit.PDFDocument) {
   doc.rect(0, 0, PAGE.width, PAGE.height).fill(C.white);
 }
 
-export function drawLogo(doc: PDFKit.PDFDocument, x: number, y: number) {
-  const logoPath = findLogoPath();
-
+export async function drawLogo(doc: PDFKit.PDFDocument, x: number, y: number, logoUrl?: string | null) {
   doc.save();
   doc.circle(x + 31, y + 31, 31).fill("#000000");
   doc.restore();
+
+  const remoteLogo = await getImageBuffer(logoUrl);
+
+  if (remoteLogo) {
+    try {
+      doc.image(remoteLogo, x, y, {
+        cover: [62, 62],
+        align: "center",
+        valign: "center",
+      });
+      return;
+    } catch {}
+  }
+
+  const logoPath = findLogoPath();
 
   if (logoPath) {
     try {
@@ -48,13 +61,13 @@ export function drawLogo(doc: PDFKit.PDFDocument, x: number, y: number) {
     });
 }
 
-export function drawHeader(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale) {
+export async function drawHeader(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale) {
   drawPageBackground(doc);
 
   const x = PAGE.marginX;
   const y = PAGE.top;
 
-  drawLogo(doc, x, y);
+  await drawLogo(doc, x, y, sale.logoUrl);
 
   doc
     .fillColor(C.black)

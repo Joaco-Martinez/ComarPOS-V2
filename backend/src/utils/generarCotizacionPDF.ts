@@ -43,7 +43,7 @@ export async function generarCotizacionPDF(
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
-      drawHeader(doc, sale);
+      await drawHeader(doc, sale);
       drawInfo(doc, sale);
 
       let y = drawTableHeader(doc, 292);

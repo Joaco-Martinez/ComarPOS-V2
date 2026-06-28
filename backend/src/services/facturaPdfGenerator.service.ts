@@ -15,10 +15,11 @@ import path from "path";
 import fs from "fs";
 import PDFDocument from "pdfkit";
 import { FacturaPDFData } from "./facturaPdfGenerator/types";
-import { ensureDir, uploadPDFtoCloudinary, generarQRPNGDesdeURL, getDefaultLogoPath } from "./facturaPdfGenerator/io";
+import { ensureDir, uploadPDFtoCloudinary, generarQRPNGDesdeURL, getDefaultLogoPath, resolveTenantLogoPath } from "./facturaPdfGenerator/io";
 import { renderPageHeader, renderClienteSection } from "./facturaPdfGenerator/sections.header";
 import { renderProductsTable } from "./facturaPdfGenerator/sections.table";
 import { renderTotals, renderFiscalSection, renderFooter } from "./facturaPdfGenerator/sections.totals";
+import { currentTenantId } from "../context/tenantContext";
 
 export type { Product, TipoCliente, FacturaPDFData } from "./facturaPdfGenerator/types";
 
@@ -41,7 +42,8 @@ export async function generarFacturaPDF(
     `qr-${data.factura.puntoVenta}-${data.factura.numero}.png`
   );
 
-  const logoPath = getDefaultLogoPath(basePath, data.logoPath);
+  const tenantLogoPath = data.logoPath ? undefined : await resolveTenantLogoPath(currentTenantId());
+  const logoPath = getDefaultLogoPath(basePath, data.logoPath || tenantLogoPath);
 
   try {
     let qrDisponible = false;
@@ -92,6 +94,10 @@ export async function generarFacturaPDF(
       fs.unlinkSync(qrPath);
     }
 
+    if (tenantLogoPath && fs.existsSync(tenantLogoPath)) {
+      fs.unlinkSync(tenantLogoPath);
+    }
+
     if (!uploadToCloudinary) {
       return { filePath };
     }
@@ -108,6 +114,10 @@ export async function generarFacturaPDF(
   } catch (error) {
     if (fs.existsSync(qrPath)) {
       fs.unlinkSync(qrPath);
+    }
+
+    if (tenantLogoPath && fs.existsSync(tenantLogoPath)) {
+      fs.unlinkSync(tenantLogoPath);
     }
 
     throw error;

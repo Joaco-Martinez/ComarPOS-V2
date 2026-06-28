@@ -14,6 +14,8 @@ export type CotizacionPDFSale = {
   stockLocation?: string | null;
   createdAt: Date;
   quotationExpiresAt?: Date | null;
+  tenantId?: string | null;
+  logoUrl?: string | null;
 
   user?: {
     name?: string | null;

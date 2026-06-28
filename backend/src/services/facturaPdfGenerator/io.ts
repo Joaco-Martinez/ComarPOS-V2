@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import cloudinary from "cloudinary";
 import QRCode from "qrcode";
+import prisma from "../../prisma";
 
 cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -40,6 +41,41 @@ export async function generarQRPNGDesdeURL(url: string, outputPath: string) {
     margin: 1,
     errorCorrectionLevel: "M",
   });
+}
+
+/**
+ * Descarga el logo del tenant (Cloudinary) a un archivo temporal para que
+ * pdfkit pueda dibujarlo via doc.image() (que requiere path/buffer local, no URL).
+ * Devuelve undefined si el tenant no tiene logo o falla la descarga, en cuyo
+ * caso el caller cae al logo estatico por defecto (sin cambio de comportamiento).
+ */
+export async function resolveTenantLogoPath(
+  tenantId?: string | null
+): Promise<string | undefined> {
+  if (!tenantId) return undefined;
+
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { logoUrl: true },
+    });
+
+    if (!tenant?.logoUrl) return undefined;
+
+    const response = await fetch(tenant.logoUrl);
+    if (!response.ok) return undefined;
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const ext = path.extname(new URL(tenant.logoUrl).pathname) || ".png";
+    const outDir = path.join(process.cwd(), "tmp");
+    ensureDir(outDir);
+
+    const outPath = path.join(outDir, `tenant-logo-${tenantId}${ext}`);
+    fs.writeFileSync(outPath, buffer);
+    return outPath;
+  } catch {
+    return undefined;
+  }
 }
 
 export function getDefaultLogoPath(basePath: string, custom?: string) {

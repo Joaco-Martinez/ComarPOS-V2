@@ -127,7 +127,14 @@ export async function generarCotizacion(saleId: string) {
     });
   }
 
-  const pdfBuffer = await generarCotizacionPDF(sale);
+  const tenant = sale.tenantId
+    ? await prisma.tenant.findUnique({
+        where: { id: sale.tenantId },
+        select: { logoUrl: true },
+      })
+    : null;
+
+  const pdfBuffer = await generarCotizacionPDF({ ...sale, logoUrl: tenant?.logoUrl ?? null });
 
   return {
     filename: `cotizacion-${sale.id}.pdf`,

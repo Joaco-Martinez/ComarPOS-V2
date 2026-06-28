@@ -32,6 +32,7 @@ function sanitizeUser(user: any) {
     isActive: user.isActive,
     mustChangePassword: user.mustChangePassword ?? false,
     client: user.client ?? null,
+    tenantId: user.tenantId ?? null,
   };
 }
 

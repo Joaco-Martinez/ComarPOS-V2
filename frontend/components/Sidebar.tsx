@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/auth';
 import {
   ShoppingCart, Receipt, Package, FolderTree, Users, BarChart2, AlertTriangle,
   Wallet, FileText, RotateCcw, LayoutDashboard, ShoppingBag, Truck, TrendingUp,
-  CreditCard, PieChart, Tag, Star, UserCog, MapPin, ShieldCheck,
+  CreditCard, PieChart, Tag, Star, UserCog, MapPin, ShieldCheck, Building2,
   PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight,
 } from 'lucide-react';
 
@@ -37,6 +37,7 @@ const ADMIN_NAV = [
   { href: '/usuarios',                         icon: UserCog,         label: 'Usuarios',            color: '#EF4444' },
   { href: '/configuracion/business-locations', icon: MapPin,          label: 'Sucursales',          color: '#00B4DB' },
   { href: '/configuracion/arca',               icon: ShieldCheck,     label: 'ARCA / AFIP',         color: '#22C55E' },
+  { href: '/configuracion/empresa',            icon: Building2,       label: 'Empresa',             color: '#F39C12' },
 ];
 
 const STORAGE_KEY = 'comarpos-sidebar-collapsed';

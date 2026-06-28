@@ -27,6 +27,7 @@ export interface User {
   name: string;
   role: Role;
   isActive?: boolean;
+  tenantId?: string | null;
   client?: Client | null;
   createdAt?: string;
   updatedAt?: string;

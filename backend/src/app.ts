@@ -45,6 +45,7 @@ import loyaltyRoutes from "./routes/loyalty.routes";
 import priceListRoutes from "./routes/priceList.routes";
 import returnRoutes from "./routes/return.routes";
 import exportRoutes from "./routes/export.routes";
+import tenantLogoRoutes from "./routes/tenantLogo.routes";
 dotenv.config();
 
 const app = express();
@@ -180,6 +181,7 @@ app.use("/loyalty", loyaltyRoutes);
 app.use("/price-lists", priceListRoutes);
 app.use("/returns", returnRoutes);
 app.use("/exports", exportRoutes);
+app.use("/uploads", tenantLogoRoutes);
 
 // 🔹 Swagger
 swaggerDocs(app);
