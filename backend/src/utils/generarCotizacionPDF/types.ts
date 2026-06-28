@@ -37,6 +37,7 @@ export type CotizacionPDFSale = {
     quantityKg?: number | null;
     price: number;
     subtotal: number;
+    ivaRate?: number | null;
     productNameSnapshot?: string | null;
     productSkuSnapshot?: string | null;
     product?: {
@@ -44,6 +45,7 @@ export type CotizacionPDFSale = {
       sku?: string | null;
       imageUrl?: string | null;
       saleUnit?: string | null;
+      ivaRate?: number | null;
     } | null;
   }[];
 };

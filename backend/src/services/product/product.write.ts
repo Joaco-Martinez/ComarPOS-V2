@@ -101,6 +101,7 @@ export async function create(data: CreateProductInput) {
       minStockKg: toNumberOrNull(data.minStockKg),
       minStockDepositoKg: toNumberOrNull(data.minStockDepositoKg),
       purchasePrice: toNumberOrZero(data.purchasePrice),
+      ivaRate: data.ivaRate !== undefined ? toNumberOrZero(data.ivaRate) : 21,
       imageUrl,
       imageId,
     };
@@ -286,6 +287,11 @@ export async function update(id: string, data: Partial<Product> & any) {
   setIfDefined(
     "purchasePrice",
     data.purchasePrice !== undefined ? Number(data.purchasePrice) : undefined
+  );
+
+  setIfDefined(
+    "ivaRate",
+    data.ivaRate !== undefined ? Number(data.ivaRate) : undefined
   );
 
   setIfDefined(

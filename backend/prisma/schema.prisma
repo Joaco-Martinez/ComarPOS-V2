@@ -198,6 +198,7 @@ model Product {
   stockDepositoKg     Float              @default(0)
   minStockKg          Float?             @default(0)
   purchasePrice       Float              @default(0)
+  ivaRate             Float              @default(21)
   isService           Boolean            @default(false)
   minStockDeposito    Int?
   minStockDepositoKg  Float?
@@ -566,6 +567,7 @@ model SaleItem {
   subtotal              Float             @default(0)
   productNameSnapshot   String?
   productSkuSnapshot    String?
+  ivaRate               Float             @default(21)
   createdAt             DateTime          @default(now())
   profit                Float             @default(0)
   purchasePriceSnapshot Float             @default(0)

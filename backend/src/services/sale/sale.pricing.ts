@@ -371,6 +371,7 @@ async function resolveSaleItems(
       priceType: itemPriceType,
       subtotal,
       purchasePriceSnapshot,
+      ivaRate: (product as any).ivaRate ?? 21,
       costTotal,
       profit: 0,
       components,
@@ -397,6 +398,7 @@ function saleItemToResolved(item: any): ResolvedSaleItem {
     priceType: item.priceType ?? SaleItemPriceType.PRICE,
     subtotal: item.subtotal ?? round2(item.price * qtyForCost),
     purchasePriceSnapshot: item.purchasePriceSnapshot ?? 0,
+    ivaRate: item.ivaRate ?? item.product?.ivaRate ?? 21,
     costTotal: round2((item.purchasePriceSnapshot ?? 0) * qtyForCost),
     profit: item.profit ?? 0,
     components:
@@ -417,6 +419,7 @@ function buildSaleItemCreateData(item: ResolvedSaleItem) {
     priceType: item.priceType,
     subtotal: item.subtotal,
     purchasePriceSnapshot: item.purchasePriceSnapshot,
+    ivaRate: item.ivaRate ?? 21,
     profit: item.profit,
     productNameSnapshot: item.productName,
     productSkuSnapshot: item.productSku,

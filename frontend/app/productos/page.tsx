@@ -13,6 +13,7 @@ const emptyForm = {
   name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '',
   saleUnit: 'UNIT', isService: 'false',
   price: '', clientPrice: '', wholesalePrice: '', purchasePrice: '',
+  ivaRate: '21',
   pricePerKg: '', clientPricePerKg: '', wholesalePricePerKg: '',
   stockLocal: '0', stockDeposito: '0', minStock: '0',
   stockLocalKg: '0', stockDepositoKg: '0', minStockKg: '0',
@@ -69,6 +70,7 @@ export default function ProductosPage() {
       isService: String(p.isService ?? false),
       price: String(p.price), clientPrice: String(p.clientPrice), wholesalePrice: String(p.wholesalePrice),
       purchasePrice: String(p.purchasePrice ?? ''),
+      ivaRate: String((p as any).ivaRate ?? 21),
       pricePerKg: String(p.pricePerKg ?? ''), clientPricePerKg: String(p.clientPricePerKg ?? ''), wholesalePricePerKg: String(p.wholesalePricePerKg ?? ''),
       stockLocal: String(p.stockLocal), stockDeposito: String(p.stockDeposito), minStock: String(p.minStock ?? 0),
       stockLocalKg: String(p.stockLocalKg ?? 0), stockDepositoKg: String(p.stockDepositoKg ?? 0), minStockKg: String(p.minStockKg ?? 0),
@@ -311,9 +313,20 @@ export default function ProductosPage() {
                   ))}
                 </div>
               )}
-              <div className="form-group" style={{ marginBottom: 0, maxWidth: 200 }}>
-                <label className="form-label">Costo de compra</label>
-                <input type="number" min="0" step="any" value={form.purchasePrice} onChange={f('purchasePrice')} placeholder="0" />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Costo de compra</label>
+                  <input type="number" min="0" step="any" value={form.purchasePrice} onChange={f('purchasePrice')} placeholder="0" />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Tasa IVA</label>
+                  <select value={form.ivaRate} onChange={f('ivaRate')}>
+                    <option value="0">0% — Exento</option>
+                    <option value="10.5">10.5% — Reducida</option>
+                    <option value="21">21% — General</option>
+                    <option value="27">27%</option>
+                  </select>
+                </div>
               </div>
 
               {/* Stock */}

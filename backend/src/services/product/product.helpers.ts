@@ -73,6 +73,7 @@ export type CreateProductInput = {
   wholesalePrice?: number | string;
   clientPrice?: number | string;
   purchasePrice?: number | string;
+  ivaRate?: number | string;
   isService?: boolean | string;
 
   categoryId?: string;

@@ -371,12 +371,36 @@ export function drawTotals(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, y: 
       align: "right",
     });
 
+  // IVA breakdown grouped by rate
+  const ivaByRate: Record<number, number> = {};
+  for (const item of sale.items) {
+    const rate = item.ivaRate ?? (item.product as any)?.ivaRate ?? 21;
+    const neto = (item.subtotal || 0) / (1 + rate / 100);
+    const iva = (item.subtotal || 0) - neto;
+    ivaByRate[rate] = (ivaByRate[rate] ?? 0) + iva;
+  }
+  const ivaEntries = Object.entries(ivaByRate).filter(([, v]) => v > 0.01);
+  let ivaOffsetY = 0;
+  for (const [rateStr, ivaAmt] of ivaEntries) {
+    doc
+      .fillColor(C.muted)
+      .font("Helvetica")
+      .fontSize(10.5)
+      .text(`IVA ${rateStr}%`, boxX, boxY + 22 + ivaOffsetY, { width: 100, align: "left" });
+    doc
+      .fillColor(C.black)
+      .font("Helvetica-Bold")
+      .fontSize(11)
+      .text(money(ivaAmt), boxX + 120, boxY + 22 + ivaOffsetY, { width: 120, align: "right" });
+    ivaOffsetY += 20;
+  }
+
   const hasDiscount =
     sale.discountValue !== null &&
     sale.discountValue !== undefined &&
     Number(sale.discountValue) > 0;
 
-  let totalBoxY = boxY + 26;
+  let totalBoxY = boxY + 26 + ivaOffsetY;
 
   if (hasDiscount) {
     const discountAmount = Number(sale.subtotal || 0) - Number(sale.total || 0);

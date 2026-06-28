@@ -86,6 +86,7 @@ export type ResolvedSaleItem = {
   price: number;
   subtotal: number;
   purchasePriceSnapshot: number;
+  ivaRate: number;
   costTotal: number;
   profit: number;
 

@@ -125,6 +125,7 @@ export const productController = {
           wholesalePrice: req.body.wholesalePrice,
           clientPrice: req.body.clientPrice,
           purchasePrice: req.body.purchasePrice,
+          ivaRate: req.body.ivaRate,
 
           saleUnit: req.body.saleUnit,
 
@@ -206,6 +207,10 @@ export const productController = {
 
       if (body.purchasePrice !== undefined) {
         cleanBody.purchasePrice = toNumberOrUndefined(body.purchasePrice);
+      }
+
+      if (body.ivaRate !== undefined) {
+        cleanBody.ivaRate = toNumberOrUndefined(body.ivaRate);
       }
 
       if (body.pricePerKg !== undefined) {

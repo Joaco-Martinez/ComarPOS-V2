@@ -500,22 +500,45 @@ export default function PosPage() {
             </div>
 
             {/* Summary */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)' }}>
-                <span>Subtotal</span>
-                <span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(subtotal)}</span>
-              </div>
-              {discountAmount > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--warn)' }}>
-                  <span>Descuento</span>
-                  <span style={{ fontFamily: 'var(--mono)' }}>−{fmtMoney(discountAmount)}</span>
+            {(() => {
+              const ivaByRate: Record<number, number> = {};
+              let netoTotal = 0;
+              cart.forEach((item) => {
+                const price = item.manualPrice ?? productPrice(item.product, item.priceType);
+                const qty = item.product.saleUnit === 'KG' ? num(item.quantityKg) : item.quantity;
+                const itemSubtotal = price * qty;
+                const rate = num((item.product as any).ivaRate ?? 21);
+                const neto = itemSubtotal / (1 + rate / 100);
+                const iva = itemSubtotal - neto;
+                netoTotal += neto;
+                ivaByRate[rate] = (ivaByRate[rate] ?? 0) + iva;
+              });
+              const ivaEntries = Object.entries(ivaByRate).filter(([, v]) => v > 0.01);
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)' }}>
+                    <span>Neto</span>
+                    <span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(netoTotal)}</span>
+                  </div>
+                  {ivaEntries.map(([rate, ivaAmt]) => (
+                    <div key={rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)' }}>
+                      <span>IVA {rate}%</span>
+                      <span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(ivaAmt)}</span>
+                    </div>
+                  ))}
+                  {discountAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--warn)' }}>
+                      <span>Descuento</span>
+                      <span style={{ fontFamily: 'var(--mono)' }}>−{fmtMoney(discountAmount)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, color: 'var(--text)', paddingTop: 4, borderTop: '1px solid var(--border)' }}>
+                    <span>Total</span>
+                    <span style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>{fmtMoney(total)}</span>
+                  </div>
                 </div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, color: 'var(--text)', paddingTop: 4, borderTop: '1px solid var(--border)' }}>
-                <span>Total</span>
-                <span style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>{fmtMoney(total)}</span>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Payments */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
