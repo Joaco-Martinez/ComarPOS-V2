@@ -1,0 +1,75 @@
+You are an expert full-stack developer. Your task is to perform a complete audit and improvement of the ComarPOS-V2 project. Work autonomously — do NOT ask for confirmation or clarification. Make all decisions based on existing code patterns and best practices.
+
+## PHASE 1 — FULL PROJECT ANALYSIS
+1. Read and map the entire project structure (frontend + backend)
+2. Identify all backend API endpoints (routes, methods, params, responses)
+3. Identify all frontend pages, components and API calls currently in use
+4. Build a complete gap analysis: which endpoints exist in the backend but are NOT used by the frontend
+
+## PHASE 2 — IMPLEMENT MISSING FRONTEND ENDPOINTS
+For every backend endpoint NOT currently used by the frontend:
+- Create or update the corresponding frontend page/component/service
+- Follow the existing code patterns, naming conventions and folder structure
+- Add proper error handling, loading states and success feedback
+- Ensure all data flows correctly end-to-end
+
+## PHASE 3 — FULL RESPONSIVE REDESIGN
+- Audit /example_frontend and extract its exact design system (colors, typography, spacing, breakpoints, component patterns)
+- Apply that same design system consistently across ALL pages and components
+- Every page must be fully responsive: mobile (320px+), tablet (768px+), desktop (1024px+)
+- Fix any layout issues, overflow problems, or broken mobile views
+- Ensure navigation works correctly on all screen sizes
+
+## PHASE 4 — FIX SSR AND HYDRATION ERRORS
+- Find and fix all Server-Side Rendering (SSR) errors
+- Fix all React hydration mismatches
+- Ensure no "window is not defined", "document is not defined" or similar SSR-incompatible code runs on server
+- Wrap client-only code in proper guards (useEffect, dynamic imports with ssr:false, typeof window checks)
+- Fix any "useLayoutEffect" warnings in SSR context
+
+## PHASE 5 — LOGO/IMAGE UPLOAD FEATURE (new feature — full stack)
+Implement a complete logo/image upload system for businesses:
+
+Backend:
+- Create POST /api/uploads/logo endpoint that accepts multipart/form-data
+- Store images in /uploads/logos/ directory (or cloud storage if already configured)
+- Save file path/URL to the business/company record in the database
+- Create GET /api/uploads/logo/:businessId endpoint to retrieve the logo URL
+- Add DELETE /api/uploads/logo/:businessId for logo removal
+- Add proper file validation: only images (jpg, png, webp, svg), max 5MB
+- Return proper error messages for invalid files
+
+Frontend:
+- Add logo upload UI in business/company settings page
+- Show current logo with preview
+- Upload button with drag-and-drop support
+- Progress indicator during upload
+- Crop/resize UI if an image cropping library is already in the project (otherwise skip)
+
+Documents integration:
+- Inject the business logo into ALL document templates: quotations (cotizaciones), invoices (facturas), delivery notes (remitos), and any other business documents
+- Logo should appear in the document header, top-left or top-center
+- If no logo is set, show a placeholder or the business name as text
+- Ensure logo renders correctly in both screen view and print/PDF view
+
+## PHASE 6 — QUALITY PASS
+- Remove all console.log, console.error debug statements left in production code
+- Fix any TypeScript errors (if TS is used)
+- Ensure all forms have proper validation
+- Verify all CRUD operations work end-to-end
+- Check that authentication/authorization is correctly applied to all new endpoints
+
+## CONSTRAINTS
+- Do NOT change the database schema destructively — only ADD columns or tables, never drop existing ones
+- Do NOT change existing API contracts that are already working
+- Do NOT remove any existing functionality
+- Follow the exact same tech stack already in use — do not introduce new frameworks or major dependencies
+- Commit frequently with descriptive messages: "feat: implement missing [endpoint] frontend", "fix: SSR hydration error in [component]", etc.
+
+## OUTPUT
+When complete, output a markdown summary with:
+- List of endpoints implemented in frontend (previously missing)
+- List of SSR/hydration errors fixed
+- List of pages made responsive
+- Confirmation that logo upload feature is working end-to-end
+- Any blockers or issues encountered that need human review
