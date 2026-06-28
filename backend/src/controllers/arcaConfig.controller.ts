@@ -172,9 +172,6 @@ async test(req: Request, res: Response) {
       ? getParamAsString(req.params.id, "id")
       : undefined;
 
-    console.log("🧪 Probando conexión ARCA...");
-    console.log("🆔 Config ID:", id);
-
     if (!id) {
       return res.status(400).json({
         ok: false,
@@ -182,18 +179,9 @@ async test(req: Request, res: Response) {
       });
     }
 
-    const activatedConfig = await arcaConfigService.activate(id);
-
-    console.log("✅ Configuración activada antes del test:", {
-      id,
-      activatedConfig,
-    });
+    await arcaConfigService.activate(id);
 
     const token = await generarTokenAFIP();
-
-    console.log("✅ Token ARCA generado correctamente:", {
-      expiration: token.expiration,
-    });
 
     return res.json({
       ok: true,

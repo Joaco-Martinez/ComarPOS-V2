@@ -229,8 +229,5 @@ export async function printCashClose(body: CashClosePrintBody) {
     },
   });
 
-  // console.log("=== TICKET DE CIERRE DE CAJA (DESDE FINANCE) ===");
-  // console.log(ticket);
-
   return { ok: true, start, end, totalAmount, totalCount, byMethod };
 }

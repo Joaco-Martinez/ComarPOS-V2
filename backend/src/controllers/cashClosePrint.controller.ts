@@ -2,11 +2,8 @@ import { Request, Response } from "express";
 import { printCashClose } from "../services/cashClosePrint.service";
 
 export async function printCashCloseController(req: Request, res: Response) {
-  console.log("Iniciando impresión de cierre de caja...");
-  
-    try {
+  try {
     const result = await printCashClose(req.body);
-    console.log("PRINT BODY:", req.body);
     return res.status(200).json({
       message: "Cierre enviado a impresión",
       ...result,

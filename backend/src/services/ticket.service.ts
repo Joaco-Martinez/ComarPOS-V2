@@ -311,9 +311,6 @@ async function enviarTicketAlPOSLocal(payload: any) {
 
   const url = `${POS_LOCAL_URL.replace(/\/$/, "")}/print/ticket`;
 
-  console.log("🖨️ Enviando ticket no fiscal al POS local:", url);
-  console.log("📦 Payload ticket no fiscal:", JSON.stringify(payload, null, 2));
-
   const response = await axios.post(url, payload, {
     timeout: 60000,
     headers: {
