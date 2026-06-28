@@ -10,6 +10,7 @@ import {
   Wallet, FileText, RotateCcw, LayoutDashboard, ShoppingBag, Truck, TrendingUp,
   CreditCard, PieChart, Tag, Star, UserCog, MapPin, ShieldCheck, Building2,
   PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight,
+  ClipboardList, ClipboardCheck, Target, RefreshCw, DollarSign, List, Shield, FileCheck2,
 } from 'lucide-react';
 
 const NAV = [
@@ -21,6 +22,7 @@ const NAV = [
   { href: '/stock',        icon: BarChart2,       label: 'Stock',              color: '#6474BB' },
   { href: '/alertas',      icon: AlertTriangle,   label: 'Alertas',            color: '#EF4444' },
   { href: '/caja',         icon: Wallet,          label: 'Caja',               color: '#22C55E' },
+  { href: '/remitos',      icon: FileCheck2,      label: 'Remitos',            color: '#00B4DB' },
   { href: '/facturacion',  icon: FileText,        label: 'AFIP / Facturas',    color: '#00B4DB' },
   { href: '/devoluciones', icon: RotateCcw,       label: 'Devoluciones',       color: '#F39C12' },
 ];
@@ -28,13 +30,20 @@ const NAV = [
 const ADMIN_NAV = [
   { href: '/dashboard',                        icon: LayoutDashboard, label: 'Dashboard',           color: '#22C55E' },
   { href: '/compras',                          icon: ShoppingBag,     label: 'Compras',             color: '#22C55E' },
+  { href: '/ordenes-compra',                   icon: ClipboardList,   label: 'Órdenes de Compra',   color: '#6474BB' },
   { href: '/proveedores',                      icon: Truck,           label: 'Proveedores',         color: '#00B4DB' },
+  { href: '/conteo-stock',                     icon: ClipboardCheck,  label: 'Conteo de Stock',     color: '#6474BB' },
+  { href: '/listas-precios',                   icon: List,            label: 'Listas de Precios',   color: '#22C55E' },
   { href: '/finanzas',                         icon: TrendingUp,      label: 'Finanzas',            color: '#22C55E' },
+  { href: '/gastos-recurrentes',               icon: RefreshCw,       label: 'Gastos Recurrentes',  color: '#F39C12' },
+  { href: '/tipo-cambio',                      icon: DollarSign,      label: 'Tipo de Cambio',      color: '#22C55E' },
   { href: '/cuentas-corrientes',               icon: CreditCard,      label: 'Cuentas Corrientes',  color: '#F39C12' },
   { href: '/reportes',                         icon: PieChart,        label: 'Reportes',            color: '#6474BB' },
+  { href: '/objetivos-ventas',                 icon: Target,          label: 'Objetivos de Ventas', color: '#22C55E' },
   { href: '/promociones',                      icon: Tag,             label: 'Promociones',         color: '#00B4DB' },
   { href: '/fidelidad',                        icon: Star,            label: 'Fidelidad',           color: '#F39C12' },
   { href: '/usuarios',                         icon: UserCog,         label: 'Usuarios',            color: '#EF4444' },
+  { href: '/auditoria',                        icon: Shield,          label: 'Auditoría',           color: '#EF4444' },
   { href: '/configuracion/business-locations', icon: MapPin,          label: 'Sucursales',          color: '#00B4DB' },
   { href: '/configuracion/arca',               icon: ShieldCheck,     label: 'ARCA / AFIP',         color: '#22C55E' },
   { href: '/configuracion/empresa',            icon: Building2,       label: 'Empresa',             color: '#F39C12' },
