@@ -1,0 +1,210 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import AppLayout from '@/components/AppLayout';
+import api from '@/lib/api';
+import type { FinanceEntry } from '@/types';
+import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
+import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
+import { TrendingUp, Plus, X, Search, Trash2 } from 'lucide-react';
+
+const CATEGORIES: { value: string; label: string }[] = [
+  { value: 'VENTA',            label: 'Venta' },
+  { value: 'COBRANZA',         label: 'Cobranza' },
+  { value: 'CompraMercaderia', label: 'Compra mercadería' },
+  { value: 'AlquilerL1',       label: 'Alquiler local 1' },
+  { value: 'AlquilerF1',       label: 'Alquiler frío 1' },
+  { value: 'Alarma',           label: 'Alarma' },
+  { value: 'Sueldos',          label: 'Sueldos' },
+  { value: 'MateriaPrima',     label: 'Materia prima' },
+  { value: 'Impuestos',        label: 'Impuestos' },
+  { value: 'VEP',              label: 'VEP' },
+  { value: 'Contadora',        label: 'Contadora' },
+  { value: 'Arca',             label: 'ARCA' },
+  { value: 'Eenvios',          label: 'E-envíos' },
+  { value: 'Publicidad',       label: 'Publicidad' },
+  { value: 'Otro',             label: 'Otro' },
+];
+const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.value, c.label]));
+
+export default function FinanzasPage() {
+  const [entries, setEntries] = useState<FinanceEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [from, setFrom] = useState(firstDayOfMonthAR());
+  const [to, setTo] = useState(todayInputAR());
+  const [typeFilter, setTypeFilter] = useState('');
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState({ type: 'INGRESO' as 'INGRESO' | 'EGRESO', amount: '', category: 'VENTA', description: '', paymentMethod: 'EFECTIVO', date: todayInputAR() });
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/finance', { params: { from, to, type: typeFilter || undefined, limit: 200 } });
+      setEntries(normalizeArray<FinanceEntry>(data));
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, [from, to, typeFilter]);
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+
+  const save = async () => {
+    if (!form.amount || !form.category) return;
+    setSaving(true);
+    try {
+      await api.post('/finance', { ...form, amount: Number(form.amount) });
+      showToast(`${form.type === 'INGRESO' ? 'Ingreso' : 'Egreso'} registrado`);
+      setModal(false);
+      setForm({ type: 'INGRESO', amount: '', category: 'VENTA', description: '', paymentMethod: 'EFECTIVO', date: todayInputAR() });
+      load();
+    } catch (err: any) {
+      showToast(err?.response?.data?.message ?? 'Error al guardar');
+    } finally { setSaving(false); }
+  };
+
+  const del = async (id: string) => {
+    try {
+      await api.delete(`/finance/${id}`);
+      showToast('Eliminado');
+      load();
+    } catch { showToast('Error al eliminar'); }
+  };
+
+  const ingresos = entries.filter((e) => e.type === 'INGRESO').reduce((a, e) => a + num(e.amount), 0);
+  const egresos = entries.filter((e) => e.type === 'EGRESO').reduce((a, e) => a + num(e.amount), 0);
+  const balance = ingresos - egresos;
+
+  return (
+    <AppLayout
+      title="Finanzas"
+      subtitle="Ingresos y egresos del negocio"
+      actions={
+        <button onClick={() => setModal(true)} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+          <Plus size={13} /> Registrar movimiento
+        </button>
+      }
+    >
+      {toast && (
+        <div style={{ position: 'fixed', top: 70, right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
+      )}
+
+      {/* Summary cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: 12, marginBottom: 20 }}>
+        {[
+          { label: 'Ingresos', value: fmtMoney(ingresos), color: 'var(--success)' },
+          { label: 'Egresos', value: fmtMoney(egresos), color: 'var(--danger)' },
+          { label: 'Balance neto', value: fmtMoney(balance), color: balance >= 0 ? 'var(--success)' : 'var(--danger)' },
+        ].map((s) => (
+          <div key={s.label} className="card" style={{ padding: '14px 16px' }}>
+            <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>{s.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--mono)', color: s.color, marginTop: 5 }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150, fontSize: 13 }} />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150, fontSize: 13 }} />
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13, width: 150 }}>
+          <option value="">Todos</option>
+          <option value="INGRESO">Ingresos</option>
+          <option value="EGRESO">Egresos</option>
+        </select>
+        <button onClick={() => { setFrom(firstDayOfMonthAR()); setTo(todayInputAR()); }} className="btn btn-secondary btn-sm">Este mes</button>
+      </div>
+
+      <div className="card">
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>
+        ) : entries.length === 0 ? (
+          <div className="empty-state"><TrendingUp size={32} /><p>Sin movimientos en el período</p></div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Método</th><th style={{ textAlign: 'right' }}>Monto</th><th></th></tr>
+              </thead>
+              <tbody>
+                {entries.map((e) => (
+                  <tr key={e.id}>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{fmtDate(e.date)}</td>
+                    <td><span className={`badge ${e.type === 'INGRESO' ? 'badge-green' : 'badge-red'}`}>{e.type}</span></td>
+                    <td style={{ fontSize: 12 }}>{CATEGORY_LABEL[e.category] ?? e.category}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text3)' }}>{e.description ?? '—'}</td>
+                    <td style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>{e.paymentMethod ?? '—'}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, color: e.type === 'INGRESO' ? 'var(--success)' : 'var(--danger)', fontSize: 13 }}>
+                      {e.type === 'INGRESO' ? '+' : '−'}{fmtMoney(e.amount)}
+                    </td>
+                    <td>
+                      <button onClick={() => del(e.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {modal && (
+        <div className="modal-overlay" onClick={() => setModal(false)}>
+          <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800 }}>Registrar movimiento</span>
+              <button onClick={() => setModal(false)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="form-row">
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Tipo</label>
+                  <select value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value as any }))}>
+                    <option value="INGRESO">Ingreso</option>
+                    <option value="EGRESO">Egreso</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Categoría</label>
+                  <select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}>
+                    {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Monto *</label>
+                  <input type="number" min="0" step="any" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0" autoFocus />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Fecha</label>
+                  <input type="date" value={form.date} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))} />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Método de pago</label>
+                  <select value={form.paymentMethod} onChange={(e) => setForm((p) => ({ ...p, paymentMethod: e.target.value }))}>
+                    {['EFECTIVO','TRANSFERENCIA','TARJETA','QR'].map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Descripción</label>
+                  <input value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} placeholder="Opcional" />
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setModal(false)} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={save} disabled={saving || !form.amount} className="btn btn-primary btn-sm">
+                {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </AppLayout>
+  );
+}

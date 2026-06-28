@@ -8,6 +8,7 @@
     "start:cron": "node dist/cron/index.js",
     "reset": "ts-node src/reset.ts",
     "seed": "ts-node src/seed.ts",
+    "seed:full": "ts-node src/seed-full.ts",
     "tenant:create": "ts-node src/scripts/createTenant.ts",
     "afip:renew": "ts-node src/cron/afipRenovador.ts",
     "expire:quotations": "ts-node src/jobs/expirePendingQuotations.ts",
