@@ -25,7 +25,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: async () => {
     await api.post('/auth/logout').catch(() => {});
     set({ user: null });
-    window.location.href = '/login';
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
   },
   me: async () => {
     try {
