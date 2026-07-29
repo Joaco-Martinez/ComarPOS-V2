@@ -53,6 +53,7 @@ function formatDateAR(value?: Date | string | null) {
   if (Number.isNaN(date.getTime())) return "";
 
   return new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

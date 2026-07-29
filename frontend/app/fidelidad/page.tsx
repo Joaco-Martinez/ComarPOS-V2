@@ -6,7 +6,8 @@ import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import type { Client, LoyaltyTransaction } from '@/types';
 import { clientName, fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { Star, Search, Gift, Plus, X } from 'lucide-react';
+import { formatDateAR } from '@/lib/dateAR';
+import { Star, Search, Gift, Plus, X, ArrowLeft } from 'lucide-react';
 
 const typeBadge: Record<string, string> = { EARN: 'badge-green', REDEEM: 'badge-cyan', EXPIRE: 'badge-red', ADJUSTMENT: 'badge-amber' };
 const typeLabel: Record<string, string> = { EARN: 'Ganado', REDEEM: 'Canjeado', EXPIRE: 'Expirado', ADJUSTMENT: 'Ajuste' };
@@ -51,10 +52,10 @@ export default function FidelidadPage() {
     setSaving(true);
     try {
       if (modal === 'redeem') {
-        await api.post(`/loyalty/${selectedClient.id}/redeem`, { points: Number(form.points), description: form.description || undefined });
+        await api.post(`/loyalty/${selectedClient.id}/redeem`, { points: Number(form.points) });
         showToast('Puntos canjeados');
       } else {
-        await api.post(`/loyalty/${selectedClient.id}/adjust`, { points: Number(form.points), description: form.description || 'Ajuste manual' });
+        await api.post(`/loyalty/${selectedClient.id}/adjust`, { points: Number(form.points), reason: form.description || 'Ajuste manual' });
         showToast('Puntos ajustados');
       }
       setModal(null);
@@ -91,9 +92,9 @@ export default function FidelidadPage() {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 200px)' }}>
+      <div className="grid-responsive fidelidad-split" style={{ ['--gtc' as any]: '280px 1fr', gap: 16 }}>
         {/* Client list */}
-        <div style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className={selectedClient ? 'hidden md:flex' : 'flex'} style={{ flexDirection: 'column', gap: 8, minHeight: 0 }}>
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente..." style={{ paddingLeft: 30, fontSize: 13 }} />
@@ -109,8 +110,8 @@ export default function FidelidadPage() {
                   key={c.id}
                   onClick={() => selectClient(c)}
                   style={{
-                    background: selectedClient?.id === c.id ? 'rgba(37,99,235,0.12)' : 'var(--surface)',
-                    border: `1px solid ${selectedClient?.id === c.id ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
+                    background: selectedClient?.id === c.id ? 'rgba(13,89,231,0.12)' : 'var(--surface)',
+                    border: `1px solid ${selectedClient?.id === c.id ? 'rgba(13,89,231,0.3)' : 'var(--border)'}`,
                     borderRadius: 7, padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
                   }}
                 >
@@ -130,7 +131,7 @@ export default function FidelidadPage() {
         </div>
 
         {/* Detail panel */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
           {!selectedClient ? (
             <div className="card empty-state" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Star size={36} />
@@ -139,13 +140,18 @@ export default function FidelidadPage() {
           ) : (
             <>
               <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button onClick={() => setSelectedClient(null)} className="btn btn-ghost btn-xs md:hidden" style={{ padding: 4 }}>
+                    <ArrowLeft size={16} />
+                  </button>
+                  <div>
                   <div style={{ fontWeight: 800, fontSize: 15 }}>{clientName(selectedClient)}</div>
                   <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
                     Puntos disponibles: <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: 'var(--accent2)' }}>
                       {clientPoints(selectedClient).toLocaleString('es-AR')} pts
                     </span>
                     {' · '}Categoría: <span className={`badge badge-xs ${selectedClient.category === 'Mayorista' ? 'badge-cyan' : 'badge-gray'}`}>{selectedClient.category}</span>
+                  </div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -170,7 +176,7 @@ export default function FidelidadPage() {
                         <tbody>
                           {transactions.map((t) => (
                             <tr key={t.id}>
-                              <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{new Date(t.createdAt).toLocaleDateString('es-AR')}</td>
+                              <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{formatDateAR(t.createdAt)}</td>
                               <td><span className={`badge ${typeBadge[t.type] ?? 'badge-gray'}`}>{typeLabel[t.type] ?? t.type}</span></td>
                               <td style={{ fontSize: 12, color: 'var(--text3)' }}>{t.description ?? '—'}</td>
                               <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: t.type === 'EARN' || (t.type === 'ADJUSTMENT' && t.points > 0) ? 'var(--success)' : 'var(--danger)' }}>

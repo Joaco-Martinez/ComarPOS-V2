@@ -3,10 +3,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import SkuScannerModal from '@/components/SkuScannerModal';
 import api from '@/lib/api';
 import type { Product, ProductCategory, StockMovement } from '@/types';
 import { categoryName, fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { BarChart2, Search, ArrowRightLeft, Plus, X, AlertTriangle, RefreshCcw, History } from 'lucide-react';
+import { BarChart2, Search, ArrowRightLeft, Plus, X, AlertTriangle, RefreshCcw, History, ScanBarcode } from 'lucide-react';
 
 const MOVEMENT_LABELS: Record<string, string> = {
   TRANSFER: 'Transferencia', INGRESS: 'Ingreso', ADJUSTMENT: 'Ajuste',
@@ -22,9 +23,10 @@ export default function StockPage() {
   const [catFilter, setCatFilter] = useState('');
   const [tab, setTab] = useState<'stock' | 'movements'>('stock');
   const [moveModal, setMoveModal] = useState<Product | null>(null);
-  const [moveForm, setMoveForm] = useState({ type: 'TRANSFER', from: 'LOCAL', to: 'DEPOSITO', quantity: '', reason: '' });
+  const [moveForm, setMoveForm] = useState({ type: 'TRANSFER' as 'TRANSFER' | 'INGRESS', from: 'LOCAL', to: 'DEPOSITO', quantity: '', reason: '' });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -56,16 +58,36 @@ export default function StockPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
+  const handleScannedSku = (rawSku: string) => {
+    const sku = rawSku.trim().toLowerCase();
+    const found = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
+    if (!found) {
+      showToast(`No encontré ningún producto con SKU: ${rawSku}`);
+      return;
+    }
+    setScannerOpen(false);
+    setMoveModal(found);
+    setMoveForm({ type: 'TRANSFER', from: 'LOCAL', to: 'DEPOSITO', quantity: '', reason: '' });
+  };
+
   const submitMovement = async () => {
     if (!moveModal) return;
     setSaving(true);
     try {
-      const qty = moveModal.saleUnit === 'UNIT' ? Number(moveForm.quantity) : undefined;
-      const qtyKg = moveModal.saleUnit === 'KG' ? Number(moveForm.quantity) : undefined;
+      const isKg = moveModal.saleUnit === 'KG';
+      const reason = moveForm.reason || undefined;
       if (moveForm.type === 'TRANSFER') {
-        await api.post('/products/transfer', { productId: moveModal.id, from: moveForm.from, to: moveForm.to, quantity: qty, quantityKg: qtyKg, reason: moveForm.reason || undefined });
+        if (isKg) {
+          await api.post(`/products/${moveModal.id}/transfer-kg`, { from: moveForm.from, quantityKg: Number(moveForm.quantity), reason });
+        } else {
+          await api.post('/products/transfer', { productId: moveModal.id, from: moveForm.from, quantity: Number(moveForm.quantity), reason });
+        }
       } else {
-        await api.post('/products/add-stock', { productId: moveModal.id, type: moveForm.type, quantity: qty, quantityKg: qtyKg, reason: moveForm.reason || undefined });
+        if (isKg) {
+          await api.post(`/products/${moveModal.id}/add-stock-kg`, { to: moveForm.to, quantityKg: Number(moveForm.quantity), reason });
+        } else {
+          await api.post('/products/add-stock', { productId: moveModal.id, to: moveForm.to, quantity: Number(moveForm.quantity), reason });
+        }
       }
       showToast('Movimiento registrado');
       setMoveModal(null);
@@ -118,6 +140,9 @@ export default function StockPage() {
               <option value="">Todas las categorías</option>
               {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+            <button onClick={() => setScannerOpen(true)} className="btn btn-secondary btn-sm" style={{ gap: 6 }} title="Escanear SKU con la cámara">
+              <ScanBarcode size={13} /> Escanear
+            </button>
           </div>
 
           <div className="card">
@@ -174,10 +199,11 @@ export default function StockPage() {
                           <td>
                             <button
                               onClick={() => { setMoveModal(p); setMoveForm({ type: 'TRANSFER', from: 'LOCAL', to: 'DEPOSITO', quantity: '', reason: '' }); }}
-                              className="btn btn-ghost btn-xs"
-                              style={{ gap: 4 }}
+                              className="btn btn-ghost"
+                              title="Transferir stock"
+                              style={{ gap: 4, padding: 10 }}
                             >
-                              <ArrowRightLeft size={12} />
+                              <ArrowRightLeft size={20} />
                             </button>
                           </td>
                         </tr>
@@ -199,7 +225,7 @@ export default function StockPage() {
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Desde</th><th>Hacia</th><th>Cantidad</th><th>Motivo</th></tr>
+                  <tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Desde</th><th>Hacia</th><th>Cantidad</th><th>Usuario</th><th>Motivo</th></tr>
                 </thead>
                 <tbody>
                   {movements.map((m) => (
@@ -212,6 +238,7 @@ export default function StockPage() {
                       <td style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>
                         {m.quantityKg != null ? `${m.quantityKg}kg` : m.quantity ?? '—'}
                       </td>
+                      <td style={{ fontSize: 12, color: 'var(--text2)' }}>{m.user?.name ?? '—'}</td>
                       <td style={{ fontSize: 12, color: 'var(--text3)' }}>{m.reason ?? '—'}</td>
                     </tr>
                   ))}
@@ -221,6 +248,13 @@ export default function StockPage() {
           )}
         </div>
       )}
+
+      <SkuScannerModal
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onDetected={handleScannedSku}
+        hint="Cuando lo detecte, abre el movimiento de stock para ese producto."
+      />
 
       {/* Movement modal */}
       {moveModal && (
@@ -236,13 +270,12 @@ export default function StockPage() {
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Tipo</label>
-                <select value={moveForm.type} onChange={(e) => setMoveForm((p) => ({ ...p, type: e.target.value }))}>
+                <select value={moveForm.type} onChange={(e) => setMoveForm((p) => ({ ...p, type: e.target.value as 'TRANSFER' | 'INGRESS' }))}>
                   <option value="TRANSFER">Transferencia</option>
                   <option value="INGRESS">Ingreso</option>
-                  <option value="ADJUSTMENT">Ajuste</option>
                 </select>
               </div>
-              {moveForm.type === 'TRANSFER' && (
+              {moveForm.type === 'TRANSFER' ? (
                 <div className="form-row">
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Desde</label>
@@ -258,6 +291,14 @@ export default function StockPage() {
                       <option value="DEPOSITO">Depósito</option>
                     </select>
                   </div>
+                </div>
+              ) : (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Hacia</label>
+                  <select value={moveForm.to} onChange={(e) => setMoveForm((p) => ({ ...p, to: e.target.value }))}>
+                    <option value="LOCAL">Local</option>
+                    <option value="DEPOSITO">Depósito</option>
+                  </select>
                 </div>
               )}
               <div className="form-group" style={{ marginBottom: 0 }}>

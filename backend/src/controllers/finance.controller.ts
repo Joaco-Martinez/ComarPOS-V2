@@ -71,7 +71,8 @@ export const financeController = {
         body.date = parseDateInputAR(body.date);
       }
 
-      res.status(201).json(await financeService.create(body));
+      const userId = (req as any).user?.id;
+      res.status(201).json(await financeService.create(body, userId));
     } catch (err) {
       next(err);
     }

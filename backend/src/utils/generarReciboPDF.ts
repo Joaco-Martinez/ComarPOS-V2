@@ -64,7 +64,7 @@ export async function generarTicketPedidoPDF({
       const now = new Date();
       doc.font("Helvetica").fontSize(8)
         .text(
-          `${now.toLocaleDateString("es-AR")} ${now.toLocaleTimeString("es-AR").slice(0, 5)}`,
+          `${now.toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })} ${now.toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" }).slice(0, 5)}`,
           { align: "center" }
         );
       doc.moveDown(1.2);

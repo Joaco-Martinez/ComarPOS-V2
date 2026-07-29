@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { exportService } from "../services/export.service";
 import { SaleStatus } from "@prisma/client";
+import { todayInputAR } from "../utils/dateAR";
 
 function wrap(fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) {
   return (req: Request, res: Response, next: NextFunction) => fn(req, res, next).catch(next);
@@ -25,13 +26,13 @@ export const exportController = {
     const status = req.query.status as SaleStatus | undefined;
 
     const buffer = await exportService.exportSales({ fromDate, toDate, status });
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayInputAR();
     sendExcel(res, buffer, `ventas_${date}.xlsx`);
   }),
 
   inventory: wrap(async (_req, res) => {
     const buffer = await exportService.exportInventory();
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayInputAR();
     sendExcel(res, buffer, `inventario_${date}.xlsx`);
   }),
 
@@ -40,7 +41,7 @@ export const exportController = {
     const toDate = parseDate(req.query.toDate);
 
     const buffer = await exportService.exportPurchases({ fromDate, toDate });
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayInputAR();
     sendExcel(res, buffer, `compras_${date}.xlsx`);
   }),
 
@@ -49,7 +50,7 @@ export const exportController = {
     const toDate = parseDate(req.query.toDate);
 
     const buffer = await exportService.exportFinance({ fromDate, toDate });
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayInputAR();
     sendExcel(res, buffer, `finanzas_${date}.xlsx`);
   }),
 };

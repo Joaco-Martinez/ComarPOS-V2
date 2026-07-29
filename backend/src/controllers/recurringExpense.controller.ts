@@ -16,5 +16,5 @@ export const recurringExpenseController = {
 
   remove: wrap(async (req) => recurringExpenseService.remove(req.params.id as string)),
 
-  processDue: wrap(async () => recurringExpenseService.processDueNow()),
+  processDue: wrap(async () => recurringExpenseService.processDueForCurrentTenant()),
 };

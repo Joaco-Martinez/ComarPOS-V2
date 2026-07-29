@@ -9,6 +9,7 @@ import { generateInvoicePDF } from "../../utils/pdfGenerator";
 import { GetSalesParams, DEFAULT_QUOTATION_HOURS } from "./sale.types";
 import { round2 } from "./sale.pricing";
 import { tenantScope } from "../../utils/tenantScope";
+import { optionalRangeAR } from "../../utils/dateAR";
 
 
 function addHours(date: Date, hours: number) {
@@ -43,7 +44,7 @@ function buildSaleInclude() {
         },
       },
     },
-    user: true,
+    user: { select: { id: true, name: true, email: true, role: true } },
     client: true,
     invoiceAfip: {
       include: {
@@ -72,7 +73,7 @@ function queueSalePdfGeneration(saleId: string) {
                 },
               },
             },
-            user: true,
+            user: { select: { id: true, name: true, email: true, role: true } },
             client: true,
           },
         });
@@ -133,6 +134,14 @@ function buildSalesWhere(params: GetSalesParams = {}, includeStatus = true) {
 
   if (status) {
     where.status = status;
+  }
+
+  const { start, end } = optionalRangeAR(params.from, params.to);
+  if (start || end) {
+    where.createdAt = {
+      ...(start ? { gte: start } : {}),
+      ...(end ? { lte: end } : {}),
+    };
   }
 
   if (search) {

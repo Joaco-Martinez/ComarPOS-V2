@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { exchangeRateService } from "../services/exchangeRate.service";
+import { startOfDayAR, endOfDayAR } from "../utils/dateAR";
 
 function wrap(fn: (req: Request, res: Response) => Promise<any>) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -24,12 +25,14 @@ export const exchangeRateController = {
     const toStr = q(req, "to");
     return exchangeRateService.getHistory(
       q(req, "currency"),
-      fromStr ? new Date(fromStr) : undefined,
-      toStr ? new Date(toStr) : undefined
+      fromStr ? startOfDayAR(fromStr) : undefined,
+      toStr ? endOfDayAR(toStr) : undefined
     );
   }),
 
   addRate: wrap(async (req) => exchangeRateService.addRate(req.body)),
+
+  remove: wrap(async (req) => exchangeRateService.remove(req.params.id as string)),
 
   convert: wrap(async (req) => {
     const amountStr = q(req, "amount");

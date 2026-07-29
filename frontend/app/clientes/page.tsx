@@ -144,7 +144,8 @@ export default function ClientesPage() {
         ) : filtered.length === 0 ? (
           <div className="empty-state"><Users size={32} /><p>Sin clientes</p></div>
         ) : (
-          <div className="table-wrap">
+          <>
+          <div className="table-wrap desktop-only-table">
             <table>
               <thead>
                 <tr>
@@ -185,6 +186,37 @@ export default function ClientesPage() {
               </tbody>
             </table>
           </div>
+
+          <div className="mobile-card-list" style={{ padding: 10 }}>
+            {filtered.map((c) => (
+              <div className="mobile-card" key={c.id}>
+                <div className="mobile-card-head">
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{c.nombre} {c.apellido}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>DNI {c.dni}{c.addressCity ? ` · ${c.addressCity}` : ''}</div>
+                  </div>
+                  <span className={`badge ${catBadge(c.category)}`}>{c.category}</span>
+                </div>
+                {(c.telefono || c.gmail) && (
+                  <div className="mobile-card-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                    {c.telefono && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Phone size={10} />{c.telefono}</span>}
+                    {c.gmail && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Mail size={10} />{c.gmail}</span>}
+                  </div>
+                )}
+                <div className="mobile-card-row">
+                  <span>Saldo Cta. Cte.</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: c.currentBalance < 0 ? 'var(--danger)' : c.currentBalance > 0 ? 'var(--warn)' : 'var(--text2)' }}>
+                    {fmtMoney(c.currentBalance)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                  <button onClick={() => { setSelected(c); setModal('detail'); }} className="btn btn-secondary btn-xs" style={{ flex: 1, gap: 4 }}><Eye size={12} /> Ver</button>
+                  <button onClick={() => openEdit(c)} className="btn btn-secondary btn-xs" style={{ flex: 1, gap: 4 }}><Edit2 size={12} /> Editar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </div>
 
@@ -287,7 +319,7 @@ export default function ClientesPage() {
               <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="grid-responsive" style={{ gap: 10 }}>
                 {[
                   ['Categoría', selected.category],
                   ['Teléfono', selected.telefono ?? '—'],

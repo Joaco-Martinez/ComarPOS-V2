@@ -149,6 +149,8 @@ export const saleController = {
         limit,
         status: req.query.status as any,
         search: req.query.search as string | undefined,
+        from: req.query.from as string | undefined,
+        to: req.query.to as string | undefined,
       });
       res.json(safeJson(sales));
     } catch (err) {

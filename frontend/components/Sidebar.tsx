@@ -10,42 +10,41 @@ import {
   Wallet, FileText, RotateCcw, LayoutDashboard, ShoppingBag, Truck, TrendingUp,
   CreditCard, PieChart, Tag, Star, UserCog, MapPin, ShieldCheck, Building2,
   PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight,
-  ClipboardList, ClipboardCheck, Target, RefreshCw, DollarSign, List, Shield, FileCheck2,
+  ClipboardList, ClipboardCheck, Target, RefreshCw, DollarSign, Shield, FileCheck2,
 } from 'lucide-react';
 
 const NAV = [
-  { href: '/pos',          icon: ShoppingCart,   label: 'POS — Ventas',       color: '#2563EB' },
-  { href: '/ventas',       icon: Receipt,         label: 'Historial Ventas',   color: '#2563EB' },
-  { href: '/productos',    icon: Package,         label: 'Productos',          color: '#22C55E' },
+  { href: '/pos',          icon: ShoppingCart,   label: 'POS — Ventas',       color: '#0D59E7' },
+  { href: '/ventas',       icon: Receipt,         label: 'Historial Ventas',   color: '#0D59E7' },
+  { href: '/productos',    icon: Package,         label: 'Productos',          color: '#18C15E' },
   { href: '/categorias',   icon: FolderTree,      label: 'Categorías',         color: '#F39C12' },
   { href: '/clientes',     icon: Users,           label: 'Clientes',           color: '#00B4DB' },
   { href: '/stock',        icon: BarChart2,       label: 'Stock',              color: '#6474BB' },
   { href: '/alertas',      icon: AlertTriangle,   label: 'Alertas',            color: '#EF4444' },
-  { href: '/caja',         icon: Wallet,          label: 'Caja',               color: '#22C55E' },
+  { href: '/caja',         icon: Wallet,          label: 'Caja',               color: '#18C15E' },
   { href: '/remitos',      icon: FileCheck2,      label: 'Remitos',            color: '#00B4DB' },
   { href: '/facturacion',  icon: FileText,        label: 'AFIP / Facturas',    color: '#00B4DB' },
   { href: '/devoluciones', icon: RotateCcw,       label: 'Devoluciones',       color: '#F39C12' },
 ];
 
 const ADMIN_NAV = [
-  { href: '/dashboard',                        icon: LayoutDashboard, label: 'Dashboard',           color: '#22C55E' },
-  { href: '/compras',                          icon: ShoppingBag,     label: 'Compras',             color: '#22C55E' },
+  { href: '/dashboard',                        icon: LayoutDashboard, label: 'Dashboard',           color: '#18C15E' },
+  { href: '/compras',                          icon: ShoppingBag,     label: 'Compras',             color: '#18C15E' },
   { href: '/ordenes-compra',                   icon: ClipboardList,   label: 'Órdenes de Compra',   color: '#6474BB' },
   { href: '/proveedores',                      icon: Truck,           label: 'Proveedores',         color: '#00B4DB' },
   { href: '/conteo-stock',                     icon: ClipboardCheck,  label: 'Conteo de Stock',     color: '#6474BB' },
-  { href: '/listas-precios',                   icon: List,            label: 'Listas de Precios',   color: '#22C55E' },
-  { href: '/finanzas',                         icon: TrendingUp,      label: 'Finanzas',            color: '#22C55E' },
+  { href: '/finanzas',                         icon: TrendingUp,      label: 'Finanzas',            color: '#18C15E' },
   { href: '/gastos-recurrentes',               icon: RefreshCw,       label: 'Gastos Recurrentes',  color: '#F39C12' },
-  { href: '/tipo-cambio',                      icon: DollarSign,      label: 'Tipo de Cambio',      color: '#22C55E' },
+  { href: '/tipo-cambio',                      icon: DollarSign,      label: 'Tipo de Cambio',      color: '#18C15E' },
   { href: '/cuentas-corrientes',               icon: CreditCard,      label: 'Cuentas Corrientes',  color: '#F39C12' },
   { href: '/reportes',                         icon: PieChart,        label: 'Reportes',            color: '#6474BB' },
-  { href: '/objetivos-ventas',                 icon: Target,          label: 'Objetivos de Ventas', color: '#22C55E' },
+  { href: '/objetivos-ventas',                 icon: Target,          label: 'Objetivos de Ventas', color: '#18C15E' },
   { href: '/promociones',                      icon: Tag,             label: 'Promociones',         color: '#00B4DB' },
   { href: '/fidelidad',                        icon: Star,            label: 'Fidelidad',           color: '#F39C12' },
   { href: '/usuarios',                         icon: UserCog,         label: 'Usuarios',            color: '#EF4444' },
   { href: '/auditoria',                        icon: Shield,          label: 'Auditoría',           color: '#EF4444' },
   { href: '/configuracion/business-locations', icon: MapPin,          label: 'Sucursales',          color: '#00B4DB' },
-  { href: '/configuracion/arca',               icon: ShieldCheck,     label: 'ARCA / AFIP',         color: '#22C55E' },
+  { href: '/configuracion/arca',               icon: ShieldCheck,     label: 'ARCA / AFIP',         color: '#18C15E' },
   { href: '/configuracion/empresa',            icon: Building2,       label: 'Empresa',             color: '#F39C12' },
 ];
 
@@ -106,14 +105,14 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           fontSize: 13,
           fontWeight: 600,
           color: active ? 'var(--text)' : 'var(--text2)',
-          background: active ? 'rgba(37,99,235,0.14)' : 'transparent',
-          border: `1px solid ${active ? 'rgba(37,99,235,0.25)' : 'transparent'}`,
+          background: active ? 'rgba(13,89,231,0.14)' : 'transparent',
+          border: `1px solid ${active ? 'rgba(13,89,231,0.25)' : 'transparent'}`,
           transition: 'all 0.12s',
           marginBottom: 1,
           justifyContent: collapsed ? 'center' : 'flex-start',
           position: 'relative',
         }}
-        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(37,99,235,0.07)'; }}
+        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(13,89,231,0.07)'; }}
         onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
       >
         {active && !collapsed && (
@@ -150,12 +149,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         borderBottom: '1px solid var(--border)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 10 }}>
-          {/* ComarPOS Logo SVG */}
-          <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
-            <circle cx="18" cy="20" r="14" stroke="#2563EB" strokeWidth="3.5" strokeLinecap="round"
-              strokeDasharray="60 88" strokeDashoffset="-10" />
-            <rect x="25" y="27" width="9" height="9" rx="2" fill="#22C55E" />
-          </svg>
+          {/* ComarPOS isologo */}
+          <img src="/brand/isologo.png" alt="ComarPOS" width={64} height={64} style={{ objectFit: 'contain', flexShrink: 0 }} />
 
           {!collapsed && (
             <div>
@@ -221,7 +216,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             style={{
               width: 30, height: 30, borderRadius: '50%',
               background: 'var(--accent-dim)',
-              border: '1px solid rgba(37,99,235,0.4)',
+              border: '1px solid rgba(13,89,231,0.4)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 12, fontWeight: 700, color: 'var(--accent)', flexShrink: 0,
             }}

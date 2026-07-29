@@ -8,13 +8,12 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mon
 export const metadata: Metadata = {
   title: { default: 'ComarPOS', template: '%s | ComarPOS' },
   description: 'Sistema ERP y POS — todo lo que tu negocio necesita, en un solo lugar.',
-  icons: { icon: '/favicon.ico' },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#0D1B2A',
+  themeColor: '#001125',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

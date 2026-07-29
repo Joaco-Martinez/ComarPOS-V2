@@ -48,7 +48,7 @@ export const clientController = {
 
   async getAll(req: Request, res: Response, next: NextFunction) {
     try {
-      const clients = await clientService.getClients();
+      const clients = await clientService.getClients({ includeLoyalty: req.query.includeLoyalty === "true" });
 
       res.json({
         ok: true,

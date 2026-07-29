@@ -24,8 +24,43 @@ function getRole(req: NextRequest): string | null {
   return payload.role ?? null;
 }
 
+function hasPlatformSession(req: NextRequest): boolean {
+  const token = req.cookies.get('platform_token')?.value;
+  if (!token) return false;
+  const payload = decodeJwt(token);
+  if (!payload) return false;
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp && payload.exp < now) return false;
+  return true;
+}
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Panel de plataforma: sesion completamente separada (cookie platform_token),
+  // no debe entrar en la logica isStaff de negocio de mas abajo.
+  if (pathname.startsWith('/platform-admin')) {
+    const isPlatformLogged = hasPlatformSession(req);
+    const isPlatformLogin = pathname === '/platform-admin/login';
+
+    if (isPlatformLogin) {
+      if (isPlatformLogged) {
+        const url = req.nextUrl.clone();
+        url.pathname = '/platform-admin';
+        return NextResponse.redirect(url);
+      }
+      return NextResponse.next();
+    }
+
+    if (!isPlatformLogged) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/platform-admin/login';
+      return NextResponse.redirect(url);
+    }
+
+    return NextResponse.next();
+  }
+
   const role = getRole(req);
   const isLogged = Boolean(role);
   const isStaff = role === 'ADMIN' || role === 'EMPLEADO';

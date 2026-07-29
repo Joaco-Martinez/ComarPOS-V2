@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { promotionService } from "../services/promotion.service";
 import { logAudit } from "../utils/auditLogger";
+import { parseDateInputAR } from "../utils/dateAR";
 
 function wrap(fn: (req: Request, res: Response) => Promise<any>) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -21,13 +22,23 @@ export const promotionController = {
 
   create: wrap(async (req) => {
     const { startsAt, endsAt, ...rest } = req.body;
-    const p = await promotionService.create({ ...rest, startsAt: new Date(startsAt as string), endsAt: new Date(endsAt as string) });
+    const p = await promotionService.create({
+      ...rest,
+      startsAt: parseDateInputAR(startsAt) as Date,
+      endsAt: parseDateInputAR(endsAt) as Date,
+    });
     logAudit(req, "CREATE", "Promotion", p.id, { name: p.name });
     return p;
   }),
 
   update: wrap(async (req) => {
-    const p = await promotionService.update(req.params.id as string, req.body);
+    const { startsAt, endsAt, ...rest } = req.body;
+    const data = {
+      ...rest,
+      ...(startsAt !== undefined ? { startsAt: parseDateInputAR(startsAt) } : {}),
+      ...(endsAt !== undefined ? { endsAt: parseDateInputAR(endsAt) } : {}),
+    };
+    const p = await promotionService.update(req.params.id as string, data);
     logAudit(req, "UPDATE", "Promotion", req.params.id as string, req.body);
     return p;
   }),
@@ -35,6 +46,12 @@ export const promotionController = {
   deactivate: wrap(async (req) => {
     const p = await promotionService.deactivate(req.params.id as string);
     logAudit(req, "DEACTIVATE", "Promotion", req.params.id as string);
+    return p;
+  }),
+
+  remove: wrap(async (req) => {
+    const p = await promotionService.remove(req.params.id as string);
+    logAudit(req, "DELETE", "Promotion", req.params.id as string);
     return p;
   }),
 

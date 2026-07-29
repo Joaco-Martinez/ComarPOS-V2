@@ -203,3 +203,8 @@ export function afipDateAR(date: Date | string = new Date()) {
   const { year, month, day } = getArgentinaDateParts(date);
   return `${year}${month}${day}`;
 }
+
+export function todayInputAR() {
+  const { year, month, day } = getArgentinaDateParts(new Date());
+  return `${year}-${month}-${day}`;
+}

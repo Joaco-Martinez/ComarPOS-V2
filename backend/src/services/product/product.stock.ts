@@ -8,7 +8,7 @@ import alertService from "../alert.service";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
 
-export async function transferStock(productId: string, from: Location, quantity: number, userId: string) {
+export async function transferStock(productId: string, from: Location, quantity: number, userId: string, reason?: string | null) {
   if (!userId) throw new Error("Falta userId en la operación de transferencia");
 
   const qty = Number(quantity);
@@ -62,6 +62,7 @@ export async function transferStock(productId: string, from: Location, quantity:
         from,
         to,
         quantity: qty,
+        reason: reason ?? null,
         tenantId: currentTenantId(),
         productId,
         userId,
@@ -76,7 +77,7 @@ export async function transferStock(productId: string, from: Location, quantity:
   return updated;
 }
 
-export async function transferStockKg(productId: string, from: Location, quantityKg: number, userId: string) {
+export async function transferStockKg(productId: string, from: Location, quantityKg: number, userId: string, reason?: string | null) {
   if (!userId) throw new Error("Falta userId en la operación de transferencia");
 
   const product = await prisma.product.findFirst({
@@ -130,6 +131,7 @@ export async function transferStockKg(productId: string, from: Location, quantit
         from,
         to,
         quantityKg: qty,
+        reason: reason ?? null,
         tenantId: currentTenantId(),
         productId,
         userId,
@@ -144,7 +146,7 @@ export async function transferStockKg(productId: string, from: Location, quantit
   return updated;
 }
 
-export async function addStockKg(productId: string, to: Location, quantityKg: number, userId: string) {
+export async function addStockKg(productId: string, to: Location, quantityKg: number, userId: string, reason?: string | null) {
   if (!userId) throw new Error("Falta userId en la operación de ingreso");
 
   const product = await prisma.product.findFirst({
@@ -184,6 +186,7 @@ export async function addStockKg(productId: string, to: Location, quantityKg: nu
         from: null,
         to,
         quantityKg: qty,
+        reason: reason ?? null,
         tenantId: currentTenantId(),
       },
     });
@@ -196,7 +199,7 @@ export async function addStockKg(productId: string, to: Location, quantityKg: nu
   return updated;
 }
 
-export async function addStock(productId: string, to: Location, quantity: number, userId: string) {
+export async function addStock(productId: string, to: Location, quantity: number, userId: string, reason?: string | null) {
   if (!userId) throw new Error("Falta userId en la operación de ingreso");
 
   const qty = Number(quantity);
@@ -236,6 +239,7 @@ export async function addStock(productId: string, to: Location, quantity: number
         from: null,
         to,
         quantity: qty,
+        reason: reason ?? null,
         tenantId: currentTenantId(),
       },
     });

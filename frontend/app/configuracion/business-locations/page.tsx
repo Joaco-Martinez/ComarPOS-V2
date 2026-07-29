@@ -10,7 +10,7 @@ import { Building2, Plus, X, Edit2, Trash2, MapPin } from 'lucide-react';
 
 const typeLabel: Record<BusinessLocationType, string> = { BRANCH: 'Sucursal', WAREHOUSE: 'Depósito', STORE: 'Local' };
 const typeColor: Record<BusinessLocationType, string> = { BRANCH: 'badge-blue', WAREHOUSE: 'badge-cyan', STORE: 'badge-green' };
-const accentColor: Record<BusinessLocationType, string> = { BRANCH: 'rgba(37,99,235,0.12)', WAREHOUSE: 'rgba(0,180,219,0.12)', STORE: 'rgba(34,197,94,0.12)' };
+const accentColor: Record<BusinessLocationType, string> = { BRANCH: 'rgba(13,89,231,0.12)', WAREHOUSE: 'rgba(0,180,219,0.12)', STORE: 'rgba(24,193,94,0.12)' };
 const accentIcon: Record<BusinessLocationType, string> = { BRANCH: 'var(--accent)', WAREHOUSE: 'var(--accent2)', STORE: 'var(--success)' };
 
 const empty = { name: '', type: 'BRANCH' as BusinessLocationType, addressStreet: '', addressNumber: '', addressCity: '', addressProvince: '', isDefault: false, isActive: true };

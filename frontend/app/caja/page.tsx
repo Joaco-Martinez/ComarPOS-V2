@@ -6,16 +6,23 @@ import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import type { CashSession } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { Wallet, Plus, X, Eye, Lock, Unlock } from 'lucide-react';
+import { Wallet, Plus, X, Eye, Lock, Unlock, ArrowDownCircle, ArrowUpCircle, Banknote } from 'lucide-react';
+
+const MOVEMENT_TYPES = [
+  { type: 'EXPENSE', label: 'Gasto', sub: 'Sale de la caja (ej: compra menor, viáticos)', icon: ArrowUpCircle },
+  { type: 'WITHDRAWAL', label: 'Retiro', sub: 'Retiro de efectivo de la caja', icon: ArrowUpCircle },
+  { type: 'DEPOSIT', label: 'Depósito', sub: 'Ingreso manual de efectivo a la caja', icon: ArrowDownCircle },
+];
 
 export default function CajaPage() {
   const [sessions, setSessions] = useState<CashSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<'open' | 'close' | 'detail' | null>(null);
+  const [modal, setModal] = useState<'open' | 'close' | 'detail' | 'movement' | null>(null);
   const [selected, setSelected] = useState<CashSession | null>(null);
   const [sessionSummary, setSessionSummary] = useState<any>(null);
   const [openForm, setOpenForm] = useState({ openingAmount: '', notes: '' });
   const [closeForm, setCloseForm] = useState({ closingAmount: '', notes: '' });
+  const [movementForm, setMovementForm] = useState({ type: 'EXPENSE', amount: '', description: '' });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
 
@@ -34,7 +41,7 @@ export default function CajaPage() {
   const openSession = async () => {
     setSaving(true);
     try {
-      await api.post('/cash-sessions/open', { openingAmount: Number(openForm.openingAmount), notes: openForm.notes || undefined });
+      await api.post('/cash-sessions/open', { openingBalance: Number(openForm.openingAmount), notes: openForm.notes || undefined });
       showToast('Caja abierta');
       setModal(null);
       setOpenForm({ openingAmount: '', notes: '' });
@@ -48,12 +55,32 @@ export default function CajaPage() {
     if (!selected) return;
     setSaving(true);
     try {
-      await api.post(`/cash-sessions/${selected.id}/close`, { closingAmount: Number(closeForm.closingAmount), notes: closeForm.notes || undefined });
+      await api.post(`/cash-sessions/${selected.id}/close`, { actualBalance: Number(closeForm.closingAmount), closeNotes: closeForm.notes || undefined });
       showToast('Caja cerrada');
       setModal(null);
       load();
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? 'Error al cerrar caja');
+    } finally { setSaving(false); }
+  };
+
+  const addMovement = async () => {
+    if (!openSession_) return;
+    const amount = Number(movementForm.amount);
+    if (!amount || amount <= 0) { showToast('Ingresá un monto válido'); return; }
+    setSaving(true);
+    try {
+      await api.post(`/cash-sessions/${openSession_.id}/movement`, {
+        type: movementForm.type,
+        amount,
+        description: movementForm.description || undefined,
+      });
+      showToast('Movimiento registrado');
+      setModal(null);
+      setMovementForm({ type: 'EXPENSE', amount: '', description: '' });
+      load();
+    } catch (err: any) {
+      showToast(err?.response?.data?.message ?? 'Error al registrar el movimiento');
     } finally { setSaving(false); }
   };
 
@@ -69,9 +96,14 @@ export default function CajaPage() {
             <Unlock size={13} /> Abrir caja
           </button>
         ) : (
-          <button onClick={() => { setSelected(openSession_); setCloseForm({ closingAmount: '', notes: '' }); setModal('close'); }} className="btn btn-danger btn-sm" style={{ gap: 6 }}>
-            <Lock size={13} /> Cerrar caja
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => { setMovementForm({ type: 'EXPENSE', amount: '', description: '' }); setModal('movement'); }} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+              <Banknote size={13} /> Registrar movimiento
+            </button>
+            <button onClick={() => { setSelected(openSession_); setCloseForm({ closingAmount: '', notes: '' }); setModal('close'); }} className="btn btn-danger btn-sm" style={{ gap: 6 }}>
+              <Lock size={13} /> Cerrar caja
+            </button>
+          </div>
         )
       }
     >
@@ -80,12 +112,12 @@ export default function CajaPage() {
       )}
 
       {openSession_ && (
-        <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ background: 'rgba(24,193,94,0.08)', border: '1px solid rgba(24,193,94,0.25)', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
           <Wallet size={18} style={{ color: 'var(--success)' }} />
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--success)' }}>Caja abierta</div>
             <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-              Apertura: {fmtMoney(openSession_.openingAmount)} · Abierta el {fmtDate(openSession_.openedAt)}
+              Apertura: {fmtMoney(openSession_.openingBalance)} · Abierta el {fmtDate(openSession_.openedAt)}
             </div>
           </div>
         </div>
@@ -107,9 +139,9 @@ export default function CajaPage() {
                   <tr key={s.id}>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{fmtDate(s.openedAt)}</td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{s.closedAt ? fmtDate(s.closedAt) : '—'}</td>
-                    <td style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{fmtMoney(s.openingAmount)}</td>
-                    <td style={{ fontFamily: 'var(--mono)', color: s.closingAmount != null ? 'var(--text)' : 'var(--text3)' }}>
-                      {s.closingAmount != null ? fmtMoney(s.closingAmount) : '—'}
+                    <td style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{fmtMoney(s.openingBalance)}</td>
+                    <td style={{ fontFamily: 'var(--mono)', color: s.actualBalance != null ? 'var(--text)' : 'var(--text3)' }}>
+                      {s.actualBalance != null ? fmtMoney(s.actualBalance) : '—'}
                     </td>
                     <td style={{ fontSize: 12 }}>{s.user?.name ?? '—'}</td>
                     <td>
@@ -178,7 +210,7 @@ export default function CajaPage() {
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><div className="spinner" /></div>
               ) : (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="grid-responsive" style={{ gap: 10 }}>
                     {[
                       ['Apertura', fmtMoney(sessionSummary.breakdown?.openingBalance)],
                       ['Ventas efectivo', fmtMoney(sessionSummary.breakdown?.cashSales)],
@@ -231,7 +263,7 @@ export default function CajaPage() {
               <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Monto apertura: <strong style={{ color: 'var(--text)', fontFamily: 'var(--mono)' }}>{fmtMoney(selected.openingAmount)}</strong></div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Monto apertura: <strong style={{ color: 'var(--text)', fontFamily: 'var(--mono)' }}>{fmtMoney(selected.openingBalance)}</strong></div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Monto de cierre</label>
                 <input type="number" min="0" step="any" value={closeForm.closingAmount} onChange={(e) => setCloseForm((p) => ({ ...p, closingAmount: e.target.value }))} placeholder="0" autoFocus />
@@ -245,6 +277,54 @@ export default function CajaPage() {
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
               <button onClick={closeSession} disabled={saving} className="btn btn-danger btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Cerrar caja'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal === 'movement' && openSession_ && (
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800 }}>Registrar movimiento de caja</span>
+              <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {MOVEMENT_TYPES.map((mt) => (
+                  <button
+                    key={mt.type}
+                    onClick={() => setMovementForm((p) => ({ ...p, type: mt.type }))}
+                    className="btn"
+                    style={{
+                      justifyContent: 'flex-start', gap: 10, padding: '10px 12px', textAlign: 'left', height: 'auto',
+                      background: movementForm.type === mt.type ? 'var(--accent-dim)' : 'var(--surface2)',
+                      border: `1px solid ${movementForm.type === mt.type ? 'var(--accent)' : 'var(--border)'}`,
+                      color: 'var(--text)',
+                    }}
+                  >
+                    <mt.icon size={16} style={{ color: movementForm.type === mt.type ? 'var(--accent)' : 'var(--text3)', flexShrink: 0 }} />
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <b style={{ fontSize: 13 }}>{mt.label}</b>
+                      <span style={{ fontSize: 11, color: 'var(--text3)' }}>{mt.sub}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Monto</label>
+                <input type="number" min="0" step="any" value={movementForm.amount} onChange={(e) => setMovementForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0" autoFocus />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Descripción</label>
+                <input value={movementForm.description} onChange={(e) => setMovementForm((p) => ({ ...p, description: e.target.value }))} placeholder="Opcional" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={addMovement} disabled={saving} className="btn btn-primary btn-sm">
+                {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Registrar'}
               </button>
             </div>
           </div>

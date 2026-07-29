@@ -160,7 +160,7 @@ export default function AuditoriaPage() {
                     <tr
                       key={log.id}
                       style={{ borderBottom: expanded === log.id ? 'none' : '1px solid var(--border)', cursor: 'pointer' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(37,99,235,0.04)')}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(13,89,231,0.04)')}
                       onMouseLeave={(e) => { if (expanded !== log.id) e.currentTarget.style.background = ''; }}
                       onClick={() => setExpanded(expanded === log.id ? null : log.id)}
                     >
@@ -200,7 +200,7 @@ export default function AuditoriaPage() {
                     {expanded === log.id && (
                       <tr key={`${log.id}-detail`} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td colSpan={7} style={{ padding: '0 14px 14px' }}>
-                          <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                          <div className="grid-responsive" style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: 14, gap: 16 }}>
                             <div>
                               <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
                                 Antes

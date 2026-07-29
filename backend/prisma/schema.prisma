@@ -8,15 +8,29 @@ datasource db {
 }
 
 // === Multi-tenant (doc seccion 6) ===
+enum TenantSubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+}
+
 model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  isActive  Boolean  @default(true)
-  logoUrl   String?
-  logoId    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String                    @id @default(uuid())
+  name               String
+  slug               String                    @unique
+  isActive           Boolean                   @default(true)
+  logoUrl            String?
+  logoId             String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  // billing manual (super-admin de plataforma)
+  subscriptionStatus TenantSubscriptionStatus  @default(ACTIVE)
+  paidUntil          DateTime?
+  suspendedAt        DateTime?
+  notes              String?
+
+  paymentLogs        TenantPaymentLog[]
 
   users             User[]
   clients           Client[]
@@ -44,6 +58,37 @@ model Tenant {
   auditLogs         AuditLog[]
   notifications     Notification[]
   priceLists        PriceList[]
+  loyaltyAccounts   LoyaltyAccount[]
+  returns           Return[]
+}
+
+// === Platform admin (super-admin de SaaS, fuera de cualquier tenant) ===
+model PlatformAdmin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  paymentLogs  TenantPaymentLog[]
+}
+
+model TenantPaymentLog {
+  id              String                    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant                    @relation(fields: [tenantId], references: [id])
+  platformAdminId String?
+  platformAdmin   PlatformAdmin?            @relation(fields: [platformAdminId], references: [id])
+  previousStatus  TenantSubscriptionStatus
+  newStatus       TenantSubscriptionStatus
+  note            String?
+  paidUntil       DateTime?
+  createdAt       DateTime                  @default(now())
+
+  @@index([tenantId])
+  @@index([platformAdminId])
 }
 
 model User {
@@ -72,6 +117,7 @@ model User {
   purchaseOrders       PurchaseOrder[]
   notifications        Notification[]
   auditLogs            AuditLog[]
+  returns              Return[]
 
   @@unique([tenantId, email])
   @@index([role])
@@ -114,6 +160,7 @@ model Client {
   remitos           Remito[]
   sales             Sale[]
   loyaltyAccount    LoyaltyAccount?
+  returns           Return[]
 
   @@unique([tenantId, dni])
   @@unique([tenantId, gmail])
@@ -216,6 +263,7 @@ model Product {
   stockCountItems     StockCountItem[]
   purchaseOrderItems  PurchaseOrderItem[]
   priceListItems      PriceListItem[]
+  returnItems         ReturnItem[]
 
   @@unique([tenantId, sku])
   @@index([sku])
@@ -529,6 +577,9 @@ model Sale {
   transportCuit           String?
   transportName           String?
   deliveryPricePerKm      Float?
+  // devoluciones (doc: Sale con status=CANCELLED se usa como devolucion,
+  // no hay modelo Return dedicado - este campo guarda el motivo/notas)
+  returnReason            String?
   // promotion
   promotionId             String?
   promotionDiscount       Float?
@@ -542,6 +593,7 @@ model Sale {
   user                    User?             @relation(fields: [userId], references: [id])
   items                   SaleItem[]
   payments                SalePayment[]
+  returns                 Return[]
 
   @@index([quotationExpiresAt])
   @@index([clientId])
@@ -554,6 +606,49 @@ model Sale {
   @@index([invoiceStatus, nextRetryAt])
   @@index([tenantId])
   @@index([promotionId])
+}
+
+// Devolucion de una venta ya completada: modelo propio (antes se reutilizaba
+// Sale con status=CANCELLED sin registro dedicado, ver doc de auditoria).
+// La venta sigue cancelandose (revierte stock/deuda via sale.lifecycle), esto
+// ademas guarda el detalle propio de la devolucion (motivo, items, reembolso).
+model Return {
+  id           String         @id @default(uuid())
+  tenantId     String?
+  tenant       Tenant?        @relation(fields: [tenantId], references: [id])
+  saleId       String
+  sale         Sale           @relation(fields: [saleId], references: [id])
+  clientId     String?
+  client       Client?        @relation(fields: [clientId], references: [id])
+  userId       String?
+  user         User?          @relation(fields: [userId], references: [id])
+  total        Float
+  reason       String?
+  refundMethod PaymentMethod?
+  createdAt    DateTime       @default(now())
+
+  items ReturnItem[]
+
+  @@index([tenantId])
+  @@index([saleId])
+  @@index([clientId])
+  @@index([createdAt])
+}
+
+model ReturnItem {
+  id         String   @id @default(uuid())
+  returnId   String
+  return     Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Int
+  quantityKg Float?
+  unitPrice  Float
+  subtotal   Float
+  createdAt  DateTime @default(now())
+
+  @@index([returnId])
+  @@index([productId])
 }
 
 model SaleItem {
@@ -1030,6 +1125,8 @@ model Notification {
 
 model LoyaltyAccount {
   id            String               @id @default(uuid())
+  tenantId      String?
+  tenant        Tenant?              @relation(fields: [tenantId], references: [id])
   clientId      String               @unique
   client        Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
   points        Int                  @default(0)
@@ -1041,6 +1138,7 @@ model LoyaltyAccount {
   transactions LoyaltyTransaction[]
 
   @@index([clientId])
+  @@index([tenantId])
 }
 
 model LoyaltyTransaction {

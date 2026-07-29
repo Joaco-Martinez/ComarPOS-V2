@@ -127,7 +127,7 @@ export default function NotificationsBell() {
                     onClick={() => !n.isRead && markRead(n.id)}
                     style={{
                       display: 'flex', gap: 10, width: '100%', textAlign: 'left', padding: '10px 14px',
-                      borderBottom: '1px solid var(--border)', background: n.isRead ? 'transparent' : 'rgba(37,99,235,0.06)',
+                      borderBottom: '1px solid var(--border)', background: n.isRead ? 'transparent' : 'rgba(13,89,231,0.06)',
                       cursor: n.isRead ? 'default' : 'pointer', border: 'none', borderBottomWidth: 1,
                     }}
                   >

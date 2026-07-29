@@ -22,6 +22,7 @@ export function dateText(date?: Date | string | null) {
   if (Number.isNaN(parsed.getTime())) return "-";
 
   return new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
     day: "2-digit",
     month: "long",
     year: "numeric",

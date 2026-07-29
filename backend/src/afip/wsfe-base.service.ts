@@ -206,7 +206,7 @@ function parseCaeVto(vto: string | null) {
   if (value.length !== 8) return null;
 
   return new Date(
-    `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
+    `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T12:00:00.000-03:00`
   );
 }
 

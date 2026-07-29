@@ -53,11 +53,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', color: 'var(--text)' }}>
         <div style={{ textAlign: 'center' }}>
-          <svg width="44" height="44" viewBox="0 0 40 40" fill="none" style={{ margin: '0 auto 16px', display: 'block' }}>
-            <circle cx="18" cy="20" r="14" stroke="#2563EB" strokeWidth="3.5" strokeLinecap="round"
-              strokeDasharray="60 88" strokeDashoffset="-10" />
-            <rect x="25" y="27" width="9" height="9" rx="2" fill="#22C55E" />
-          </svg>
+          <img src="/brand/isologo.png" alt="ComarPOS" width={88} height={88} style={{ margin: '0 auto 16px', display: 'block', objectFit: 'contain' }} />
           <div className="spinner" style={{ margin: '0 auto' }} />
         </div>
       </div>
@@ -83,13 +79,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
         `}</style>
 
         {/* Topbar */}
-        <header style={{
-          position: 'sticky', top: 0, zIndex: 30,
-          background: 'var(--bg)', backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid var(--border)',
-          padding: '0 20px', height: 56,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-        }}>
+        <header className="app-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <button
               className="md:hidden btn btn-ghost btn-sm"
@@ -115,7 +105,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div className="app-header-actions">
             {actions}
             <button
               className="btn btn-ghost btn-sm"
@@ -131,7 +121,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
 
         {/* Page content */}
         <main
-          className="animate-fade"
+          className="animate-fade-opacity"
           style={{ flex: 1, padding: '22px 20px', maxWidth: 1440, width: '100%', margin: '0 auto' }}
         >
           {children}

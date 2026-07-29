@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { purchaseOrderService } from "../services/purchaseOrder.service";
 import { PurchaseOrderStatus } from "@prisma/client";
+import { parseDateInputAR } from "../utils/dateAR";
 
 function wrap(fn: (req: Request, res: Response) => Promise<any>) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -24,7 +25,11 @@ export const purchaseOrderController = {
   }),
 
   create: wrap(async (req) =>
-    purchaseOrderService.create({ ...req.body, userId: userId(req) })
+    purchaseOrderService.create({
+      ...req.body,
+      userId: userId(req),
+      expectedDate: parseDateInputAR(req.body.expectedDate),
+    })
   ),
 
   updateStatus: wrap(async (req) =>

@@ -3,14 +3,31 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import SkuScannerModal from '@/components/SkuScannerModal';
 import api from '@/lib/api';
-import type { CartItem, Client, DiscountType, PaymentMethod, Product, ProductCategory, ReceiptType, SalePayment } from '@/types';
+import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, Product, ProductCategory, SalePayment } from '@/types';
 import { categoryName, clientName, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
 import {
   AlertTriangle, Check, Minus, Package, Plus, RefreshCcw,
   ScanBarcode, Search, ShoppingCart, Trash2, X, User, Percent,
-  DollarSign, CreditCard, Banknote, Smartphone,
+  DollarSign, CreditCard, Banknote, Smartphone, Truck, MapPin, Warehouse,
 } from 'lucide-react';
+
+const DELIVERY_SKU = 'ENVIO-FLETE2';
+const PAGE_SIZE = 60;
+
+type StockLocation = 'LOCAL' | 'DEPOSITO';
+type QuickPriceType = 'price' | 'wholesalePrice';
+
+type DeliveryMethod = 'PICKUP' | 'LOCAL_DELIVERY';
+
+type DeliveryCalc = {
+  distanceKm: number;
+  deliveryCost: number;
+  pricePerKm: number;
+  destinationAddress: string;
+  deliveryProduct: Product;
+};
 
 type PaymentMode = PaymentMethod;
 
@@ -23,7 +40,7 @@ const ALL_METHODS: { method: PaymentMode; label: string; icon: React.ReactNode }
   { method: 'CUENTA_CORRIENTE', label: 'Cta. Cte.',  icon: <CreditCard size={14} /> },
 ];
 
-type KgModal = { product: Product; qty: string } | null;
+type KgModal = { product: Product; qty: string; priceType: QuickPriceType } | null;
 type ConfirmState = { title: string; message: string; onConfirm: () => void } | null;
 
 export default function PosPage() {
@@ -35,31 +52,57 @@ export default function PosPage() {
 
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<string>('');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [stockLocation, setStockLocation] = useState<StockLocation>('LOCAL');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientSearch, setClientSearch] = useState('');
   const [showClientPicker, setShowClientPicker] = useState(false);
-  const [receiptType, setReceiptType] = useState<ReceiptType>('TICKET');
   const [discountType, setDiscountType] = useState<DiscountType>('PERCENTAGE');
   const [discountValue, setDiscountValue] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'single' | 'multi'>('single');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
   const [payments, setPayments] = useState<SalePayment[]>([{ method: 'EFECTIVO', amount: 0 }]);
   const [kgModal, setKgModal] = useState<KgModal>(null);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [successMsg, setSuccessMsg] = useState('');
+  const [showMobileCart, setShowMobileCart] = useState(false);
+
+  const [skuScannerOpen, setSkuScannerOpen] = useState(false);
+  const [scannerLoading, setScannerLoading] = useState(false);
+  const [scannerError, setScannerError] = useState('');
+  const scannerInstanceRef = useRef<any>(null);
+  const scannerHandledRef = useRef(false);
+
+  const [businessLocations, setBusinessLocations] = useState<BusinessLocation[]>([]);
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('PICKUP');
+  const [deliveryLocationId, setDeliveryLocationId] = useState('');
+  const [deliveryCalc, setDeliveryCalc] = useState<DeliveryCalc | null>(null);
+  const [calculatingDelivery, setCalculatingDelivery] = useState(false);
+  const [deliveryError, setDeliveryError] = useState('');
 
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [pr, cr, clr] = await Promise.all([
-          api.get('/products', { params: { isActive: true, limit: 500 } }),
-          api.get('/categories'),
-          api.get('/clients', { params: { limit: 200 } }),
+        const [pr, cr, clr, blr] = await Promise.all([
+          api.get('/products', { params: { isActive: true, limit: 500 } }).catch(() => null),
+          api.get('/categories').catch(() => null),
+          api.get('/clients', { params: { limit: 200 } }).catch(() => null),
+          api.get('/business-locations').catch(() => null),
         ]);
-        setProducts(normalizeArray<Product>(pr.data));
-        setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
-        setClients(normalizeArray<Client>(clr.data));
+        if (pr) setProducts(normalizeArray<Product>(pr.data));
+        if (cr) setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
+        if (clr) setClients(normalizeArray<Client>(clr.data));
+        if (!pr || !cr || !clr) {
+          alert('Algunos datos no se pudieron cargar (productos, categorías o clientes). Actualizá la página para reintentar.');
+        }
+        if (blr) {
+          const locations = normalizeArray<BusinessLocation>(blr.data).filter((l) => l.isActive);
+          setBusinessLocations(locations);
+          setDeliveryLocationId(locations.find((l) => l.isDefault)?.id ?? locations[0]?.id ?? '');
+        }
       } finally {
         setLoading(false);
       }
@@ -77,6 +120,13 @@ export default function PosPage() {
     return p;
   }, [products, catFilter, search]);
 
+  // Reset pagination whenever the visible set changes, so "Ver más" always starts from the top.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search, catFilter, stockLocation]);
+
+  const visibleProducts = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+
   const filteredClients = useMemo(() => {
     const q = clientSearch.trim().toLowerCase();
     if (!q) return clients.slice(0, 8);
@@ -87,16 +137,14 @@ export default function PosPage() {
     ).slice(0, 8);
   }, [clients, clientSearch]);
 
-  const priceType = useMemo<CartItem['priceType']>(() => {
-    if (!selectedClient) return 'price';
-    if (selectedClient.category === 'Mayorista') return 'wholesalePrice';
-    if (selectedClient.category === 'Cliente') return 'clientPrice';
-    return 'price';
-  }, [selectedClient]);
+  const productStock = (p: Product) => {
+    if (p.saleUnit === 'KG') return num(stockLocation === 'DEPOSITO' ? p.stockDepositoKg : p.stockLocalKg);
+    return num(stockLocation === 'DEPOSITO' ? p.stockDeposito : p.stockLocal);
+  };
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, priceType: QuickPriceType) => {
     if (product.saleUnit === 'KG') {
-      setKgModal({ product, qty: '' });
+      setKgModal({ product, qty: '', priceType });
       return;
     }
     setCart((prev) => {
@@ -110,21 +158,134 @@ export default function PosPage() {
     });
   };
 
+  const setCartItemPriceType = (idx: number, priceType: QuickPriceType) => {
+    setCart((prev) => prev.map((item, i) => i === idx ? { ...item, priceType } : item));
+  };
+
   const confirmKgAdd = () => {
     if (!kgModal) return;
     const qty = parseFloat(kgModal.qty);
     if (!qty || qty <= 0) { setKgModal(null); return; }
     setCart((prev) => {
-      const idx = prev.findIndex((i) => i.product.id === kgModal.product.id);
+      const idx = prev.findIndex((i) => i.product.id === kgModal.product.id && i.priceType === kgModal.priceType);
       if (idx >= 0) {
         const next = [...prev];
         next[idx] = { ...next[idx], quantityKg: num(next[idx].quantityKg) + qty };
         return next;
       }
-      return [...prev, { product: kgModal.product, quantity: 1, quantityKg: qty, priceType }];
+      return [...prev, { product: kgModal.product, quantity: 1, quantityKg: qty, priceType: kgModal.priceType }];
     });
     setKgModal(null);
   };
+
+  const stopSkuScanner = async () => {
+    const scanner = scannerInstanceRef.current;
+    scannerHandledRef.current = false;
+    if (!scanner) return;
+    try {
+      const state = scanner.getState?.();
+      if (state === 2) await scanner.stop();
+    } catch {
+      // ignore - puede tirar error si ya se detuvo
+    }
+    try {
+      await scanner.clear?.();
+    } catch {
+      // html5-qrcode puede tirar error si el contenedor ya fue desmontado
+    }
+    scannerInstanceRef.current = null;
+  };
+
+  const closeSkuScanner = async () => {
+    await stopSkuScanner();
+    setScannerError('');
+    setScannerLoading(false);
+    setSkuScannerOpen(false);
+  };
+
+  const openSkuScanner = () => {
+    setScannerError('');
+    setScannerLoading(true);
+    scannerHandledRef.current = false;
+    setSkuScannerOpen(true);
+  };
+
+  const handleScannedSku = async (rawSku: string) => {
+    const sku = rawSku.trim();
+    if (!sku || scannerHandledRef.current) return;
+    scannerHandledRef.current = true;
+
+    const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
+
+    if (!product) {
+      scannerHandledRef.current = false;
+      setScannerError(`No encontré ningún producto con SKU: ${sku}`);
+      return;
+    }
+    if (product.isService || product.sku === DELIVERY_SKU) {
+      scannerHandledRef.current = false;
+      setScannerError('Ese SKU pertenece a un servicio/envío y no se agrega desde el scanner.');
+      return;
+    }
+
+    addToCart(product, 'price');
+    await closeSkuScanner();
+  };
+
+  useEffect(() => {
+    if (!skuScannerOpen) return;
+    let cancelled = false;
+
+    const startScanner = async () => {
+      setScannerLoading(true);
+      setScannerError('');
+      try {
+        if (typeof window === 'undefined') return;
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (cancelled) return;
+
+        const scanner = new Html5Qrcode(SKU_SCANNER_ELEMENT_ID);
+        scannerInstanceRef.current = scanner;
+
+        await scanner.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+              const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
+              return {
+                width: Math.max(220, Math.min(size, 340)),
+                height: Math.max(120, Math.min(Math.floor(size * 0.55), 220)),
+              };
+            },
+            aspectRatio: 1.777,
+          },
+          async (decodedText: string) => { await handleScannedSku(decodedText); },
+          () => { /* lectura fallida, seguimos intentando */ },
+        );
+
+        if (!cancelled) setScannerLoading(false);
+      } catch (e: any) {
+        console.error(e);
+        if (!cancelled) {
+          setScannerLoading(false);
+          setScannerError(
+            e?.message?.includes('Permission')
+              ? 'No se pudo acceder a la cámara. Revisá los permisos del navegador.'
+              : 'No se pudo iniciar la cámara. Probá con HTTPS, otro navegador o buscá el SKU manualmente.'
+          );
+        }
+      }
+    };
+
+    const timeoutId = window.setTimeout(startScanner, 120);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      void stopSkuScanner();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skuScannerOpen]);
 
   const updateQty = (idx: number, delta: number) => {
     setCart((prev) => {
@@ -136,7 +297,50 @@ export default function PosPage() {
     });
   };
 
-  const removeFromCart = (idx: number) => setCart((prev) => prev.filter((_, i) => i !== idx));
+  const removeFromCart = (idx: number) => {
+    setCart((prev) => {
+      if (prev[idx]?.product.sku === DELIVERY_SKU) setDeliveryCalc(null);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  const calculateDelivery = async () => {
+    if (!selectedClient || !deliveryLocationId) return;
+    setCalculatingDelivery(true);
+    setDeliveryError('');
+    try {
+      const { data } = await api.post('/delivery/calculate', {
+        businessLocationId: deliveryLocationId,
+        clientId: selectedClient.id,
+      });
+      const calc: DeliveryCalc = {
+        distanceKm: data.distanceKm,
+        deliveryCost: data.deliveryCost,
+        pricePerKm: data.pricePerKm,
+        destinationAddress: data.destinationAddress,
+        deliveryProduct: data.deliveryProduct,
+      };
+      setDeliveryCalc(calc);
+      setCart((prev) => {
+        const withoutDelivery = prev.filter((i) => i.product.sku !== DELIVERY_SKU);
+        return [...withoutDelivery, { product: calc.deliveryProduct, quantity: 1, manualPrice: calc.deliveryCost, priceType: 'price' }];
+      });
+    } catch (err: any) {
+      setDeliveryError(err?.response?.data?.message ?? 'No se pudo calcular el envío');
+      setDeliveryCalc(null);
+    } finally {
+      setCalculatingDelivery(false);
+    }
+  };
+
+  const setDeliveryMethodAndSync = (method: DeliveryMethod) => {
+    setDeliveryMethod(method);
+    if (method === 'PICKUP') {
+      setDeliveryCalc(null);
+      setDeliveryError('');
+      setCart((prev) => prev.filter((i) => i.product.sku !== DELIVERY_SKU));
+    }
+  };
 
   const subtotal = cart.reduce((acc, item) => {
     const price = item.manualPrice ?? productPrice(item.product, item.priceType);
@@ -153,8 +357,14 @@ export default function PosPage() {
 
   const total = Math.max(0, subtotal - discountAmount);
 
-  const totalPaid = payments.reduce((a, p) => a + num(p.amount), 0);
-  const change = Math.max(0, totalPaid - total);
+  // Modo simple (default): un solo método, se asume que cubre el total exacto
+  // (o queda todo como deuda si es cuenta corriente) - no hace falta tipear
+  // un monto, igual que en Grupo VJ. Modo múltiple: mismo comportamiento de
+  // siempre, con montos por método y vuelto si se pasan.
+  const totalPaid = paymentMode === 'single'
+    ? (paymentMethod === 'CUENTA_CORRIENTE' ? 0 : total)
+    : payments.reduce((a, p) => a + num(p.amount), 0);
+  const change = paymentMode === 'multi' ? Math.max(0, totalPaid - total) : 0;
 
   const addPaymentMethod = () => {
     setPayments((p) => [...p, { method: 'EFECTIVO', amount: 0 }]);
@@ -179,16 +389,30 @@ export default function PosPage() {
     setClientSearch('');
     setDiscountValue('');
     setDiscountType('PERCENTAGE');
+    setPaymentMode('single');
+    setPaymentMethod('EFECTIVO');
     setPayments([{ method: 'EFECTIVO', amount: 0 }]);
-    setReceiptType('TICKET');
     setSearch('');
+    setDeliveryMethod('PICKUP');
+    setDeliveryCalc(null);
+    setDeliveryError('');
     searchRef.current?.focus();
   };
 
-  const submitSale = async () => {
+  const submitSale = async (status: 'COMPLETED' | 'PENDING') => {
     if (cart.length === 0) return;
-    if (totalPaid < total) {
-      alert(`Faltan $${fmtMoney(total - totalPaid)} para cubrir el total.`);
+    if (status === 'COMPLETED') {
+      if (paymentMode === 'single' && paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient) {
+        alert('Para vender en cuenta corriente tenés que elegir un cliente.');
+        return;
+      }
+      if (paymentMode === 'multi' && totalPaid < total && !selectedClient) {
+        alert('Para dejar un saldo parcial en cuenta corriente tenés que elegir un cliente.');
+        return;
+      }
+    }
+    if (deliveryMethod === 'LOCAL_DELIVERY' && !deliveryCalc) {
+      alert('Calculá el costo de envío antes de confirmar la venta.');
       return;
     }
     setSubmitting(true);
@@ -202,15 +426,27 @@ export default function PosPage() {
 
       const body: Record<string, any> = {
         items,
-        receiptType,
-        paymentMethod: payments[0].method,
-        payments: payments.map((p) => ({ method: p.method, amount: num(p.amount) })),
+        receiptType: 'TICKET',
+        status,
+        stockLocation,
+        paymentMethod: paymentMode === 'single' ? paymentMethod : payments[0].method,
+        ...(paymentMode === 'multi' && {
+          payments: payments.filter((p) => num(p.amount) > 0).map((p) => ({ method: p.method, amount: num(p.amount) })),
+        }),
         ...(selectedClient && { clientId: selectedClient.id }),
         ...(discountValue && { discountType, discountValue: num(discountValue) }),
+        ...(deliveryMethod === 'LOCAL_DELIVERY' && deliveryCalc && {
+          deliveryMethod: 'LOCAL_DELIVERY',
+          businessLocationId: deliveryLocationId,
+          deliveryCost: deliveryCalc.deliveryCost,
+          deliveryDistanceKm: deliveryCalc.distanceKm,
+          deliveryPricePerKm: deliveryCalc.pricePerKm,
+          deliveryAddressSnapshot: deliveryCalc.destinationAddress,
+        }),
       };
 
       await api.post('/sales', body);
-      setSuccessMsg(`Venta registrada — ${fmtMoney(total)}`);
+      setSuccessMsg(status === 'PENDING' ? `Venta guardada como pendiente — ${fmtMoney(total)}` : `Venta registrada — ${fmtMoney(total)}`);
       resetPOS();
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err: any) {
@@ -235,7 +471,7 @@ export default function PosPage() {
       {successMsg && (
         <div style={{
           position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 200,
-          background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.4)',
+          background: 'rgba(24,193,94,0.15)', border: '1px solid rgba(24,193,94,0.4)',
           color: 'var(--success)', borderRadius: 8, padding: '10px 22px',
           fontSize: 14, fontWeight: 600, animation: 'fadeIn 0.3s ease',
           display: 'flex', alignItems: 'center', gap: 8,
@@ -244,10 +480,10 @@ export default function PosPage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 100px)', overflow: 'hidden' }}>
+      <div className="pos-layout">
 
         {/* ─── Left: Product grid ─── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+        <div className="pos-products">
           {/* Search */}
           <div style={{ position: 'relative' }}>
             <Search size={15} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
@@ -256,14 +492,39 @@ export default function PosPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar producto por nombre o SKU..."
-              style={{ paddingLeft: 34, paddingRight: 36 }}
+              style={{ paddingLeft: 34, paddingRight: search ? 62 : 36 }}
               autoFocus
             />
             {search && (
-              <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 2 }}>
+              <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 2 }}>
                 <X size={14} />
               </button>
             )}
+            <button
+              onClick={openSkuScanner}
+              title="Escanear SKU con la cámara"
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 2, display: 'flex' }}
+            >
+              <ScanBarcode size={16} />
+            </button>
+          </div>
+
+          {/* Stock location */}
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            <button
+              onClick={() => setStockLocation('LOCAL')}
+              className={`btn btn-xs ${stockLocation === 'LOCAL' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ flex: 1, gap: 5 }}
+            >
+              <Warehouse size={11} /> Stock: Local
+            </button>
+            <button
+              onClick={() => setStockLocation('DEPOSITO')}
+              className={`btn btn-xs ${stockLocation === 'DEPOSITO' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ flex: 1, gap: 5 }}
+            >
+              <Warehouse size={11} /> Stock: Depósito
+            </button>
           </div>
 
           {/* Categories */}
@@ -287,69 +548,99 @@ export default function PosPage() {
           </div>
 
           {/* Product grid */}
-          <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 8, alignContent: 'start' }}>
+          <div className="pos-products-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8, alignContent: 'start' }}>
             {filtered.length === 0 ? (
               <div className="empty-state" style={{ gridColumn: '1/-1' }}>
                 <Package size={32} />
                 <p>Sin resultados</p>
               </div>
             ) : (
-              filtered.map((p) => {
-                const stock = p.saleUnit === 'KG' ? num(p.stockLocalKg) : num(p.stockLocal);
-                const price = productPrice(p, priceType);
-                const lowStock = stock <= num(p.saleUnit === 'KG' ? p.minStockKg : p.minStock) && num(p.saleUnit === 'KG' ? p.minStockKg : p.minStock) > 0;
+              visibleProducts.map((p) => {
+                const stock = productStock(p);
+                const minStock = num(p.saleUnit === 'KG' ? p.minStockKg : p.minStock);
+                const lowStock = stock <= minStock && minStock > 0;
                 const noStock = p.saleUnit !== 'KG' && stock <= 0 && !p.isService;
+                const retailPrice = productPrice(p, 'price');
+                const wholesalePrice = productPrice(p, 'wholesalePrice');
 
                 return (
-                  <button
+                  <div
                     key={p.id}
-                    onClick={() => !noStock && addToCart(p)}
-                    disabled={noStock}
                     style={{
                       background: 'var(--surface)',
                       border: `1px solid ${noStock ? 'var(--border)' : lowStock ? 'rgba(243,156,18,0.3)' : 'var(--border)'}`,
                       borderRadius: 8, padding: '10px 10px 8px',
-                      textAlign: 'left', cursor: noStock ? 'not-allowed' : 'pointer',
-                      opacity: noStock ? 0.4 : 1,
-                      transition: 'all 0.12s',
+                      opacity: noStock ? 0.5 : 1,
                     }}
-                    onMouseEnter={(e) => { if (!noStock) e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = 'var(--surface2)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = lowStock ? 'rgba(243,156,18,0.3)' : 'var(--border)'; e.currentTarget.style.background = 'var(--surface)'; }}
                   >
                     {p.imageUrl ? (
-                      <img src={p.imageUrl} alt={p.name} style={{ width: '100%', height: 72, objectFit: 'cover', borderRadius: 5, marginBottom: 6 }} />
+                      <img src={p.imageUrl} alt={p.name} loading="lazy" style={{ width: '100%', height: 64, objectFit: 'cover', borderRadius: 5, marginBottom: 6 }} />
                     ) : (
-                      <div style={{ width: '100%', height: 52, borderRadius: 5, background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                        <Package size={20} style={{ color: 'var(--text3)', opacity: 0.4 }} />
+                      <div style={{ width: '100%', height: 44, borderRadius: 5, background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                        <Package size={18} style={{ color: 'var(--text3)', opacity: 0.4 }} />
                       </div>
                     )}
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3, marginBottom: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3, marginBottom: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: 30 }}>
                       {p.name}
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>
-                      {fmtMoney(price)}{p.saleUnit === 'KG' ? '/kg' : ''}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <span style={{ fontSize: 10, color: lowStock ? 'var(--warn)' : 'var(--text3)', fontFamily: 'var(--mono)' }}>
                         {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
-                        Stock: {p.saleUnit === 'KG' ? `${stock}kg` : stock}
+                        {noStock ? 'Sin stock' : `Stock: ${p.saleUnit === 'KG' ? `${stock}kg` : stock}`}
                       </span>
                       <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
                         {categoryName(p).slice(0, 8)}
                       </span>
                     </div>
-                  </button>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                      <button
+                        onClick={() => addToCart(p, 'price')}
+                        disabled={noStock}
+                        className="btn btn-secondary"
+                        style={{ flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
+                        title="Agregar con precio minorista"
+                      >
+                        <span style={{ fontSize: 9, color: 'var(--text3)' }}>Minorista</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--text)' }}>
+                          {fmtMoney(retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => addToCart(p, 'wholesalePrice')}
+                        disabled={noStock}
+                        className="btn btn-cyan"
+                        style={{ flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
+                        title="Agregar con precio mayorista"
+                      >
+                        <span style={{ fontSize: 9, opacity: 0.8 }}>Mayorista</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--mono)' }}>
+                          {fmtMoney(wholesalePrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
                 );
               })
             )}
           </div>
+          {visibleProducts.length < filtered.length && (
+            <button
+              onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+              className="btn btn-secondary btn-sm"
+              style={{ flexShrink: 0, alignSelf: 'center' }}
+            >
+              Ver más productos · {filtered.length - visibleProducts.length} restantes
+            </button>
+          )}
         </div>
 
         {/* ─── Right: Cart ─── */}
-        <div style={{
-          width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 0,
-          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden',
-        }}>
+        <div
+          className={`pos-cart-wrap ${showMobileCart ? 'open' : ''}`}
+          onClick={() => setShowMobileCart(false)}
+        >
+        <div className="pos-cart" onClick={(e) => e.stopPropagation()}>
+          <div className="pos-cart-handle" />
           {/* Cart header */}
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -359,15 +650,24 @@ export default function PosPage() {
                 <span className="badge badge-blue" style={{ fontSize: 10 }}>{cart.length}</span>
               )}
             </div>
-            {cart.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {cart.length > 0 && (
+                <button
+                  onClick={() => setConfirm({ title: 'Limpiar carrito', message: '¿Vaciar el carrito?', onConfirm: resetPOS })}
+                  className="btn btn-ghost btn-xs"
+                  style={{ color: 'var(--danger)', gap: 4 }}
+                >
+                  <Trash2 size={12} /> Limpiar
+                </button>
+              )}
               <button
-                onClick={() => setConfirm({ title: 'Limpiar carrito', message: '¿Vaciar el carrito?', onConfirm: resetPOS })}
-                className="btn btn-ghost btn-xs"
-                style={{ color: 'var(--danger)', gap: 4 }}
+                onClick={() => setShowMobileCart(false)}
+                className="btn btn-ghost btn-xs md:hidden"
+                style={{ padding: 4 }}
               >
-                <Trash2 size={12} /> Limpiar
+                <X size={16} />
               </button>
-            )}
+            </div>
           </div>
 
           {/* Client picker */}
@@ -423,6 +723,53 @@ export default function PosPage() {
             )}
           </div>
 
+          {/* Delivery */}
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                onClick={() => setDeliveryMethodAndSync('PICKUP')}
+                className={`btn btn-xs ${deliveryMethod === 'PICKUP' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1, gap: 4 }}
+              >
+                <Package size={11} /> Retiro en local
+              </button>
+              <button
+                onClick={() => setDeliveryMethodAndSync('LOCAL_DELIVERY')}
+                className={`btn btn-xs ${deliveryMethod === 'LOCAL_DELIVERY' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1, gap: 4 }}
+                disabled={businessLocations.length === 0}
+              >
+                <Truck size={11} /> Envío a domicilio
+              </button>
+            </div>
+            {deliveryMethod === 'LOCAL_DELIVERY' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <select
+                  value={deliveryLocationId}
+                  onChange={(e) => { setDeliveryLocationId(e.target.value); setDeliveryCalc(null); }}
+                  style={{ fontSize: 11, padding: '4px 6px' }}
+                >
+                  {businessLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+                {!selectedClient ? (
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>Elegí un cliente con dirección cargada para calcular el envío.</div>
+                ) : (
+                  <button onClick={calculateDelivery} disabled={calculatingDelivery} className="btn btn-secondary btn-xs" style={{ gap: 5 }}>
+                    {calculatingDelivery ? <span className="spinner" style={{ width: 11, height: 11 }} /> : <MapPin size={11} />}
+                    {deliveryCalc ? 'Recalcular envío' : 'Calcular envío'}
+                  </button>
+                )}
+                {deliveryError && <div style={{ fontSize: 11, color: 'var(--danger)' }}>{deliveryError}</div>}
+                {deliveryCalc && (
+                  <div style={{ fontSize: 11, color: 'var(--text2)', background: 'var(--surface2)', borderRadius: 5, padding: '5px 8px' }}>
+                    {deliveryCalc.distanceKm.toFixed(1)} km · <strong style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(deliveryCalc.deliveryCost)}</strong>
+                    <div style={{ color: 'var(--text3)', marginTop: 2 }}>{deliveryCalc.destinationAddress}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Cart items */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
             {cart.length === 0 ? (
@@ -445,6 +792,24 @@ export default function PosPage() {
                         {' = '}
                         <span style={{ color: 'var(--text2)', fontWeight: 600 }}>{fmtMoney(price * qty)}</span>
                       </div>
+                      {item.manualPrice == null && (
+                        <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
+                          <button
+                            onClick={() => setCartItemPriceType(idx, 'price')}
+                            className={`btn btn-xs ${item.priceType === 'price' ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{ padding: '1px 6px', fontSize: 9 }}
+                          >
+                            Minorista
+                          </button>
+                          <button
+                            onClick={() => setCartItemPriceType(idx, 'wholesalePrice')}
+                            className={`btn btn-xs ${item.priceType === 'wholesalePrice' ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{ padding: '1px 6px', fontSize: 9 }}
+                          >
+                            Mayorista
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {item.product.saleUnit !== 'KG' ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -466,20 +831,6 @@ export default function PosPage() {
 
           {/* Totals + controls */}
           <div style={{ borderTop: '1px solid var(--border)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* Receipt type */}
-            <div style={{ display: 'flex', gap: 4 }}>
-              {(['TICKET', 'FACTURA'] as ReceiptType[]).map((rt) => (
-                <button
-                  key={rt}
-                  onClick={() => setReceiptType(rt)}
-                  className={`btn btn-xs ${receiptType === rt ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ flex: 1 }}
-                >
-                  {rt}
-                </button>
-              ))}
-            </div>
-
             {/* Discount */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <button
@@ -542,57 +893,132 @@ export default function PosPage() {
 
             {/* Payments */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {payments.map((pay, idx) => (
-                <div key={idx} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => setPaymentMode('single')}
+                  className={`btn btn-xs ${paymentMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: 1 }}
+                >
+                  Un método
+                </button>
+                <button
+                  onClick={() => setPaymentMode('multi')}
+                  className={`btn btn-xs ${paymentMode === 'multi' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: 1 }}
+                >
+                  Múltiples / parcial
+                </button>
+              </div>
+
+              {paymentMode === 'single' ? (
+                <>
                   <select
-                    value={pay.method}
-                    onChange={(e) => updatePayment(idx, 'method', e.target.value)}
-                    style={{ fontSize: 11, padding: '4px 6px', flex: 1 }}
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                    style={{ fontSize: 12, padding: '6px 8px' }}
                   >
                     {ALL_METHODS.map((m) => (
                       <option key={m.method} value={m.method}>{m.label}</option>
                     ))}
                   </select>
-                  <input
-                    type="number" min="0" step="any"
-                    value={pay.amount || ''}
-                    onChange={(e) => updatePayment(idx, 'amount', Number(e.target.value))}
-                    placeholder={idx === 0 ? fmtMoney(total).replace('$', '') : '0'}
-                    style={{ fontSize: 12, padding: '4px 8px', width: 80, flexShrink: 0 }}
-                  />
-                  {payments.length > 1 && (
-                    <button onClick={() => removePayment(idx)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', padding: 3 }}>
-                      <X size={11} />
-                    </button>
+                  {paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient && (
+                    <div style={{ fontSize: 11, color: 'var(--warn)' }}>Elegí un cliente para vender en cuenta corriente.</div>
                   )}
-                </div>
-              ))}
-              <button onClick={addPaymentMethod} className="btn btn-ghost btn-xs" style={{ justifyContent: 'flex-start', color: 'var(--text3)', fontSize: 11 }}>
-                <Plus size={11} /> Agregar método de pago
-              </button>
-              {change > 0 && (
-                <div style={{ fontSize: 12, color: 'var(--success)', fontFamily: 'var(--mono)', textAlign: 'right' }}>
-                  Vuelto: {fmtMoney(change)}
-                </div>
+                </>
+              ) : (
+                <>
+                  {payments.map((pay, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                      <select
+                        value={pay.method}
+                        onChange={(e) => updatePayment(idx, 'method', e.target.value)}
+                        style={{ fontSize: 11, padding: '4px 6px', flex: 1 }}
+                      >
+                        {ALL_METHODS.map((m) => (
+                          <option key={m.method} value={m.method}>{m.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number" min="0" step="any"
+                        value={pay.amount || ''}
+                        onChange={(e) => updatePayment(idx, 'amount', Number(e.target.value))}
+                        placeholder={idx === 0 ? fmtMoney(total).replace('$', '') : '0'}
+                        style={{ fontSize: 12, padding: '4px 8px', width: 80, flexShrink: 0 }}
+                      />
+                      {payments.length > 1 && (
+                        <button onClick={() => removePayment(idx)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', padding: 3 }}>
+                          <X size={11} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={addPaymentMethod} className="btn btn-ghost btn-xs" style={{ justifyContent: 'flex-start', color: 'var(--text3)', fontSize: 11 }}>
+                    <Plus size={11} /> Agregar método de pago
+                  </button>
+                  {totalPaid < total && (
+                    <div style={{ fontSize: 11, color: 'var(--warn)' }}>
+                      {selectedClient ? `Faltan ${fmtMoney(total - totalPaid)} — quedan como saldo en cuenta corriente.` : `Faltan ${fmtMoney(total - totalPaid)}. Elegí un cliente para dejarlo en cuenta corriente.`}
+                    </div>
+                  )}
+                  {change > 0 && (
+                    <div style={{ fontSize: 12, color: 'var(--success)', fontFamily: 'var(--mono)', textAlign: 'right' }}>
+                      Vuelto: {fmtMoney(change)}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
             {/* Submit */}
-            <button
-              onClick={submitSale}
-              disabled={cart.length === 0 || submitting || totalPaid < total}
-              className="btn btn-primary"
-              style={{ width: '100%', fontSize: 14, padding: '11px 16px' }}
-            >
-              {submitting ? (
-                <span className="spinner" style={{ width: 16, height: 16 }} />
-              ) : (
-                <><Check size={15} /> Confirmar venta {total > 0 ? `— ${fmtMoney(total)}` : ''}</>
-              )}
-            </button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={() => submitSale('PENDING')}
+                disabled={cart.length === 0 || submitting || (deliveryMethod === 'LOCAL_DELIVERY' && !deliveryCalc)}
+                className="btn btn-secondary"
+                title="Guarda la venta sin confirmarla — queda pendiente para completarla después desde Historial de Ventas"
+                style={{ fontSize: 13, padding: '11px 12px', flexShrink: 0 }}
+              >
+                Guardar pendiente
+              </button>
+              <button
+                onClick={() => submitSale('COMPLETED')}
+                disabled={
+                  cart.length === 0 || submitting ||
+                  (paymentMode === 'single' && paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient) ||
+                  (paymentMode === 'multi' && totalPaid < total && !selectedClient) ||
+                  (deliveryMethod === 'LOCAL_DELIVERY' && !deliveryCalc)
+                }
+                className="btn btn-primary"
+                style={{ flex: 1, fontSize: 14, padding: '11px 16px' }}
+              >
+                {submitting ? (
+                  <span className="spinner" style={{ width: 16, height: 16 }} />
+                ) : (
+                  <><Check size={15} /> Confirmar venta {total > 0 ? `— ${fmtMoney(total)}` : ''}</>
+                )}
+              </button>
+            </div>
           </div>
         </div>
+        </div>
       </div>
+
+      {/* Mobile cart bar — siempre visible, fija abajo, por encima de todo */}
+      {!showMobileCart && (
+        <button className="pos-mobile-bar" onClick={() => setShowMobileCart(true)}>
+          <span className="pos-mobile-bar-left">
+            <ShoppingCart size={18} />
+            <span>
+              <b>Carrito</b>
+              <small>{cart.length === 0 ? 'Tocar para abrir' : `${cart.length} ${cart.length === 1 ? 'item' : 'items'}`}</small>
+            </span>
+          </span>
+          <span className="pos-mobile-bar-right">
+            <b>{fmtMoney(total)}</b>
+            <small>{cart.length > 0 ? 'Finalizar' : ' '}</small>
+          </span>
+        </button>
+      )}
 
       {/* KG Modal */}
       {kgModal && (
@@ -618,6 +1044,47 @@ export default function PosPage() {
             <div className="modal-footer">
               <button onClick={() => setKgModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
               <button onClick={confirmKgAdd} className="btn btn-primary btn-sm">Agregar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scanner Modal */}
+      {skuScannerOpen && (
+        <div className="modal-overlay" onClick={closeSkuScanner}>
+          <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 700 }}>Escanear producto</span>
+              <button onClick={closeSkuScanner} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 12, color: 'var(--text2)' }}>
+                <ScanBarcode size={18} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }} />
+                <div>
+                  <b style={{ display: 'block', color: 'var(--text)' }}>Apuntá al código de barras o QR</b>
+                  Cuando lo detecte, agrega el producto directo al carrito.
+                </div>
+              </div>
+              <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#000', minHeight: 220 }}>
+                <div id={SKU_SCANNER_ELEMENT_ID} style={{ width: '100%' }} />
+                {scannerLoading && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#fff' }}>
+                    <span className="spinner" />
+                    <p style={{ fontSize: 12 }}>Iniciando cámara...</p>
+                  </div>
+                )}
+              </div>
+              {scannerError ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--danger)' }}>
+                  <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>{scannerError}</span>
+                </div>
+              ) : (
+                <p style={{ fontSize: 11, color: 'var(--text3)' }}>Tip: acercá el código, evitá reflejos y usá buena luz.</p>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button onClick={closeSkuScanner} className="btn btn-secondary btn-sm">Cancelar</button>
             </div>
           </div>
         </div>

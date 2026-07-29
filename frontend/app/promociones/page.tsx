@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
-import type { Promotion, PromotionType } from '@/types';
+import type { Product, ProductCategory, Promotion, PromotionType } from '@/types';
 import { fmtMoney, normalizeArray } from '@/lib/helpers';
 import { todayInputAR } from '@/lib/dateAR';
 import { Tag, Plus, X, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
@@ -20,10 +20,13 @@ const discountLabel: Record<string, string> = { PERCENTAGE: 'Porcentaje (%)', FI
 const empty = {
   name: '', type: 'CART_DISCOUNT' as PromotionType, discountType: 'PERCENTAGE', discountValue: '',
   minAmount: '', startsAt: todayInputAR(), endsAt: '', description: '', isActive: true,
+  productIds: [] as string[], categoryIds: [] as string[],
 };
 
 export default function PromocionesPage() {
   const [promos, setPromos] = useState<Promotion[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<Promotion | null>(null);
@@ -35,8 +38,14 @@ export default function PromocionesPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/promotions', { params: { limit: 100 } });
-      setPromos(normalizeArray<Promotion>(data));
+      const [promoRes, prodRes, catRes] = await Promise.all([
+        api.get('/promotions', { params: { limit: 100 } }),
+        api.get('/products', { params: { limit: 500, isActive: true } }),
+        api.get('/categories'),
+      ]);
+      setPromos(normalizeArray<Promotion>(promoRes.data));
+      setProducts(normalizeArray<Product>(prodRes.data));
+      setCategories(normalizeArray<ProductCategory>(catRes.data).filter((c) => c.isActive));
     } finally { setLoading(false); }
   };
 
@@ -53,21 +62,40 @@ export default function PromocionesPage() {
       startsAt: p.startsAt?.slice(0, 10) ?? todayInputAR(),
       endsAt: p.endsAt?.slice(0, 10) ?? '',
       description: p.description ?? '', isActive: p.isActive ?? true,
+      productIds: p.productIds ?? [], categoryIds: p.categoryIds ?? [],
     });
     setModal(true);
   };
 
+  const toggleId = (list: 'productIds' | 'categoryIds', id: string) => {
+    setForm((p) => {
+      const set = new Set(p[list]);
+      if (set.has(id)) set.delete(id); else set.add(id);
+      return { ...p, [list]: Array.from(set) };
+    });
+  };
+
   const save = async () => {
     if (!form.name || !form.discountValue) return;
+    if (form.type === 'PRODUCT_DISCOUNT' && form.productIds.length === 0) {
+      showToast('Elegí al menos un producto');
+      return;
+    }
+    if (form.type === 'CATEGORY_DISCOUNT' && form.categoryIds.length === 0) {
+      showToast('Elegí al menos una categoría');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         name: form.name, type: form.type, discountType: form.discountType,
         discountValue: Number(form.discountValue),
         minAmount: form.minAmount ? Number(form.minAmount) : undefined,
-        startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : undefined,
-        endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : undefined,
+        startsAt: form.startsAt || undefined,
+        endsAt: form.endsAt || undefined,
         description: form.description || undefined, isActive: form.isActive,
+        productIds: form.type === 'PRODUCT_DISCOUNT' ? form.productIds : [],
+        categoryIds: form.type === 'CATEGORY_DISCOUNT' ? form.categoryIds : [],
       };
       if (editing) await api.put(`/promotions/${editing.id}`, payload);
       else await api.post('/promotions', payload);
@@ -203,6 +231,32 @@ export default function PromocionesPage() {
                   <input type="date" value={form.endsAt} onChange={(e) => f('endsAt', e.target.value)} />
                 </div>
               </div>
+              {form.type === 'PRODUCT_DISCOUNT' && (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Productos incluidos * ({form.productIds.length} seleccionados)</label>
+                  <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {products.map((prod) => (
+                      <label key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={form.productIds.includes(prod.id)} onChange={() => toggleId('productIds', prod.id)} style={{ width: 13, height: 13 }} />
+                        {prod.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {form.type === 'CATEGORY_DISCOUNT' && (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Categorías incluidas * ({form.categoryIds.length} seleccionadas)</label>
+                  <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {categories.map((cat) => (
+                      <label key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={form.categoryIds.includes(cat.id)} onChange={() => toggleId('categoryIds', cat.id)} style={{ width: 13, height: 13 }} />
+                        {cat.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Descripción</label>
                 <input value={form.description} onChange={(e) => f('description', e.target.value)} placeholder="Opcional" />

@@ -2,6 +2,9 @@ import "./config/timezone";
 import dotenv from "dotenv";
 dotenv.config();
 
+import { initSentry } from "./config/sentry";
+initSentry();
+
 const required = ["DATABASE_URL", "JWT_SECRET", "ARCA_CREDENTIALS_SECRET", "ARCA_CONFIG_SECRET"];
 for (const key of required) {
   if (!process.env[key]) {

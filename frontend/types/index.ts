@@ -1,4 +1,5 @@
 export type Role = 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
+export type TenantSubscriptionStatus = 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED';
 export type ProductType = 'SIMPLE' | 'COMPUESTO';
 export type SaleUnit = 'UNIT' | 'KG';
 export type ReceiptType = 'TICKET' | 'FACTURA';
@@ -127,7 +128,6 @@ export interface Client {
   currentBalance: number;
   creditLimit?: number | null;
   isAccountEnabled?: boolean;
-  priceListId?: string | null;
   loyaltyAccount?: { points: number; transactions?: LoyaltyTransaction[] } | null;
   createdAt?: string;
   updatedAt?: string;
@@ -175,6 +175,7 @@ export interface Sale {
   total: number;
   businessLocationId?: string | null;
   businessLocation?: BusinessLocation | null;
+  stockLocation?: 'LOCAL' | 'DEPOSITO';
   deliveryMethod?: DeliveryMethod;
   deliveryStatus?: DeliveryStatus;
   deliveryAddressSnapshot?: string | null;
@@ -273,8 +274,9 @@ export interface Purchase {
   supplier?: Supplier | null;
   purchaseOrderId?: string | null;
   date: string;
-  total: number;
-  notes?: string | null;
+  totalAmount: number;
+  description?: string | null;
+  to?: MovementLocation;
   items?: PurchaseItem[];
   createdAt: string;
   updatedAt: string;
@@ -313,11 +315,14 @@ export interface CashSession {
   businessLocationId?: string | null;
   businessLocation?: BusinessLocation | null;
   status: CashSessionStatus;
-  openingAmount: number;
-  closingAmount?: number | null;
+  openingBalance: number;
+  expectedBalance?: number;
+  actualBalance?: number | null;
+  difference?: number | null;
   openedAt: string;
   closedAt?: string | null;
   notes?: string | null;
+  closeNotes?: string | null;
   movements?: CashMovement[];
 }
 
@@ -339,8 +344,8 @@ export interface Promotion {
   discountType: DiscountType;
   discountValue: number;
   minAmount?: number | null;
-  productId?: string | null;
-  categoryId?: string | null;
+  productIds?: string[];
+  categoryIds?: string[];
   startsAt?: string | null;
   endsAt?: string | null;
   isActive: boolean;
@@ -369,31 +374,30 @@ export interface PurchaseOrderItem {
   unitCost?: number | null;
 }
 
-export interface PriceList {
+export interface ReturnItem {
   id: string;
-  name: string;
-  description?: string | null;
-  isDefault: boolean;
-  isActive: boolean;
-  multiplier?: number | null;
-  createdAt: string;
-  updatedAt: string;
+  returnId: string;
+  productId: string;
+  product?: { name: string; sku?: string | null } | null;
+  quantity: number;
+  quantityKg?: number | null;
+  unitPrice: number;
+  subtotal: number;
 }
 
 export interface Return {
   id: string;
-  saleId?: string | null;
+  saleId: string;
   sale?: Sale | null;
   clientId?: string | null;
-  client?: Client | null;
+  client?: { nombre: string; apellido: string } | null;
   userId?: string | null;
-  user?: User | null;
+  user?: { name: string } | null;
   total: number;
   reason?: string | null;
-  notes?: string | null;
+  refundMethod?: PaymentMethod | null;
   items?: ReturnItem[];
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface Notification {
@@ -407,13 +411,34 @@ export interface Notification {
   createdAt: string;
 }
 
-export interface ReturnItem {
+export interface PlatformAdmin {
   id: string;
-  returnId: string;
-  productId: string;
-  product?: Product;
-  quantity: number;
-  quantityKg?: number | null;
-  unitPrice: number;
-  subtotal: number;
+  email: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface TenantPaymentLog {
+  id: string;
+  tenantId: string;
+  platformAdminId?: string | null;
+  platformAdmin?: { id: string; name: string; email: string } | null;
+  previousStatus: TenantSubscriptionStatus;
+  newStatus: TenantSubscriptionStatus;
+  note?: string | null;
+  paidUntil?: string | null;
+  createdAt: string;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  subscriptionStatus: TenantSubscriptionStatus;
+  paidUntil?: string | null;
+  suspendedAt?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  paymentLogs?: TenantPaymentLog[];
 }

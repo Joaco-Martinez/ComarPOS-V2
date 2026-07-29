@@ -282,7 +282,7 @@ export async function emitirFacturaAFIP({
         cae,
         caeVto: vto
           ? new Date(
-              `${String(vto).slice(0, 4)}-${String(vto).slice(4, 6)}-${String(vto).slice(6, 8)}`
+              `${String(vto).slice(0, 4)}-${String(vto).slice(4, 6)}-${String(vto).slice(6, 8)}T12:00:00.000-03:00`
             )
           : null,
         total: importe,
@@ -325,7 +325,7 @@ export async function emitirFacturaAFIP({
           cae,
           caeVto: vto
             ? new Date(
-                `${String(vto).slice(0, 4)}-${String(vto).slice(4, 6)}-${String(vto).slice(6, 8)}`
+                `${String(vto).slice(0, 4)}-${String(vto).slice(4, 6)}-${String(vto).slice(6, 8)}T12:00:00.000-03:00`
               )
             : null,
           total: importe,
@@ -353,7 +353,7 @@ export async function emitirFacturaAFIP({
           cae,
           caeVto: vto
             ? new Date(
-                `${String(vto).slice(0, 4)}-${String(vto).slice(4, 6)}-${String(vto).slice(6, 8)}`
+                `${String(vto).slice(0, 4)}-${String(vto).slice(4, 6)}-${String(vto).slice(6, 8)}T12:00:00.000-03:00`
               )
             : null,
           total: importe,

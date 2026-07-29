@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import SkuScannerModal from '@/components/SkuScannerModal';
 import api from '@/lib/api';
 import { fmtDate, normalizeArray, num } from '@/lib/helpers';
-import { ClipboardCheck, BarChart2, Play, CheckCircle, XCircle, ArrowLeft, RefreshCcw } from 'lucide-react';
+import { ClipboardCheck, BarChart2, Play, CheckCircle, XCircle, ArrowLeft, RefreshCcw, ScanBarcode } from 'lucide-react';
 
 type CountStatus = 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
@@ -29,8 +30,25 @@ export default function ConteoStockPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [dirtyItems, setDirtyItems] = useState<Record<string, string>>({});
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+
+  const handleScannedSku = (rawSku: string) => {
+    const sku = rawSku.trim().toLowerCase();
+    const items: any[] = selected?.items ?? [];
+    const found = items.find((it) => it.product?.sku && String(it.product.sku).trim().toLowerCase() === sku);
+    if (!found) {
+      showToast(`No encontré ningún producto con SKU: ${rawSku}`);
+      return;
+    }
+    setScannerOpen(false);
+    const input = inputRefs.current[found.productId];
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input?.focus();
+    input?.select();
+  };
 
   const load = async () => {
     setLoading(true);
@@ -69,7 +87,7 @@ export default function ConteoStockPage() {
     if (!selected) return;
     setDirtyItems((d) => ({ ...d, [productId]: value }));
     try {
-      await api.put(`/stock-counts/${selected.id}/items/${productId}`, { countedQuantity: Number(value) });
+      await api.put(`/stock-counts/${selected.id}/items/${productId}`, { countedStock: Number(value) });
     } catch { showToast('Error al actualizar ítem'); }
   };
 
@@ -101,7 +119,7 @@ export default function ConteoStockPage() {
   };
 
   const totalDiff = (items: any[]) =>
-    items.reduce((a, it) => a + (num(it.countedQuantity) - num(it.systemQuantity)), 0);
+    items.reduce((a, it) => a + (num(it.countedStock) - num(it.systemStock)), 0);
 
   // Detail view
   if (loadingDetail) {
@@ -152,8 +170,18 @@ export default function ConteoStockPage() {
             <button className="btn btn-danger btn-sm" onClick={cancel} style={{ gap: 6 }}>
               <XCircle size={13} /> Cancelar
             </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setScannerOpen(true)} style={{ gap: 6 }}>
+              <ScanBarcode size={13} /> Escanear
+            </button>
           </div>
         )}
+
+        <SkuScannerModal
+          open={scannerOpen}
+          onClose={() => setScannerOpen(false)}
+          onDetected={handleScannedSku}
+          hint="Cuando lo detecte, salta directo a cargar la cantidad contada."
+        />
 
         {/* Items table */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -168,12 +196,12 @@ export default function ConteoStockPage() {
               </thead>
               <tbody>
                 {items.map((it: any) => {
-                  const counted = dirtyItems[it.productId] !== undefined ? Number(dirtyItems[it.productId]) : num(it.countedQuantity);
-                  const system = num(it.systemQuantity);
+                  const counted = dirtyItems[it.productId] !== undefined ? Number(dirtyItems[it.productId]) : num(it.countedStock);
+                  const system = num(it.systemStock);
                   const d = counted - system;
                   return (
                     <tr key={it.productId} style={{ borderBottom: '1px solid var(--border)' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(37,99,235,0.04)'; }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(13,89,231,0.04)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
                       <td style={{ padding: '8px 14px', color: 'var(--text)' }}>{it.product?.name ?? it.product?.nombre ?? it.productId}</td>
                       <td style={{ padding: '8px 14px', color: 'var(--text3)', fontFamily: 'var(--mono)', fontSize: 11 }}>{it.product?.sku ?? '—'}</td>
@@ -181,9 +209,10 @@ export default function ConteoStockPage() {
                       <td style={{ padding: '8px 14px' }}>
                         {selected.status === 'IN_PROGRESS' ? (
                           <input
+                            ref={(el) => { inputRefs.current[it.productId] = el; }}
                             type="number"
                             min={0}
-                            value={dirtyItems[it.productId] ?? (it.countedQuantity ?? '')}
+                            value={dirtyItems[it.productId] ?? (it.countedStock ?? '')}
                             placeholder={String(system)}
                             onChange={(e) => setDirtyItems((d) => ({ ...d, [it.productId]: e.target.value }))}
                             onBlur={(e) => updateItem(it.productId, e.target.value)}
@@ -254,7 +283,7 @@ export default function ConteoStockPage() {
                   const diff = totalDiff(items);
                   return (
                     <tr key={c.id} style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(37,99,235,0.04)'; }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(13,89,231,0.04)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                       onClick={() => openDetail(c)}>
                       <td style={{ padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)' }}>{c.id?.slice(-6).toUpperCase()}</td>

@@ -59,9 +59,20 @@ export function normalizeCuit(cuit?: string | null) {
   return String(cuit || "").replace(/\D/g, "");
 }
 
+const ISO_DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export function toNullableDate(value?: string | Date | null) {
   if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  // Fechas "solo fecha" (YYYY-MM-DD, ej. inputs <input type="date"> del
+  // frontend) se anclan a mediodía AR: new Date("YYYY-MM-DD") a secas se
+  // interpreta como medianoche UTC y muestra un día antes en hora argentina.
+  const raw = String(value).trim();
+  const date = ISO_DATE_ONLY_RE.test(raw)
+    ? new Date(`${raw}T12:00:00.000-03:00`)
+    : new Date(raw);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

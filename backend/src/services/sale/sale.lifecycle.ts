@@ -57,7 +57,7 @@ export async function updateStatus(id: string, status: SaleStatus) {
             },
           },
         },
-        user: true,
+        user: { select: { id: true, name: true, email: true, role: true } },
         client: true,
       },
     });
@@ -82,6 +82,7 @@ export async function updateStatus(id: string, status: SaleStatus) {
       quantity: item.quantity,
       quantityKg: item.quantityKg ?? null,
       price: item.price,
+      ivaRate: (item as any).ivaRate ?? item.product?.ivaRate ?? 21,
       priceType: (item as any).priceType ?? SaleItemPriceType.PRICE,
       subtotal: (item as any).subtotal ?? item.price * (item.quantityKg ?? item.quantity),
       purchasePriceSnapshot: (item as any).purchasePriceSnapshot ?? 0,
@@ -141,7 +142,7 @@ export async function updateStatus(id: string, status: SaleStatus) {
               },
             },
           },
-          user: true,
+          user: { select: { id: true, name: true, email: true, role: true } },
           client: true,
         },
       });

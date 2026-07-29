@@ -17,12 +17,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (
-      error.response?.status === 401 &&
-      typeof window !== 'undefined' &&
-      !window.location.pathname.includes('/login')
-    ) {
-      window.location.href = '/login';
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      const isPlatform = window.location.pathname.startsWith('/platform-admin');
+      const loginPath = isPlatform ? '/platform-admin/login' : '/login';
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = loginPath;
+      }
     }
     return Promise.reject(error);
   }

@@ -5,7 +5,7 @@ import { Sale, SaleItem, Product, User } from "@prisma/client";
 import axios from "axios";
 type SaleWithRelations = Sale & {
   items: (SaleItem & { product: Product })[];
-  user?: User | null;
+  user?: Pick<User, "id" | "name" | "email" | "role"> | null;
 };
 
 export async function generateInvoicePDF(sale: SaleWithRelations) {
@@ -98,7 +98,7 @@ doc.fontSize(12).fillColor("black").text(`Cambio: $0.00`, { align: "right" });
 
 doc.moveDown(3);
 doc.fontSize(11).fillColor("black").text("Gracias por su compra", { align: "center" });
-doc.fontSize(9).fillColor("gray").text(new Date(sale.createdAt).toLocaleString("es-AR"), { align: "center" });
+doc.fontSize(9).fillColor("gray").text(new Date(sale.createdAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" }), { align: "center" });
 
 doc.end();
   });

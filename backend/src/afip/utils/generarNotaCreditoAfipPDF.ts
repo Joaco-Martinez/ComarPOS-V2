@@ -80,8 +80,8 @@ export async function generarNotaCreditoAfipPDF({
           { align: "center" }
         )
         .text(
-          `${fechaEmision.toLocaleDateString("es-AR")} ${fechaEmision
-            .toLocaleTimeString("es-AR")
+          `${fechaEmision.toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })} ${fechaEmision
+            .toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
             .slice(0, 5)}`,
           { align: "center" }
         )

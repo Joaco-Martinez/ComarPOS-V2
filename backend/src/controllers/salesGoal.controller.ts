@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { salesGoalService } from "../services/salesGoal.service";
 import { logAudit } from "../utils/auditLogger";
+import { startOfDayAR, endOfDayAR } from "../utils/dateAR";
 
 function wrap(fn: (req: Request, res: Response) => Promise<any>) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -23,15 +24,21 @@ export const salesGoalController = {
     const { periodStart, periodEnd, ...rest } = req.body;
     const g = await salesGoalService.create({
       ...rest,
-      periodStart: new Date(periodStart as string),
-      periodEnd: new Date(periodEnd as string),
+      periodStart: startOfDayAR(periodStart as string),
+      periodEnd: endOfDayAR(periodEnd as string),
     });
     logAudit(req, "CREATE", "SalesGoal", g.id, { title: g.title, metric: g.metric });
     return g;
   }),
 
   update: wrap(async (req) => {
-    const g = await salesGoalService.update(req.params.id as string, req.body);
+    const { periodStart, periodEnd, ...rest } = req.body;
+    const data = {
+      ...rest,
+      ...(periodStart !== undefined ? { periodStart: startOfDayAR(periodStart) } : {}),
+      ...(periodEnd !== undefined ? { periodEnd: endOfDayAR(periodEnd) } : {}),
+    };
+    const g = await salesGoalService.update(req.params.id as string, data);
     logAudit(req, "UPDATE", "SalesGoal", req.params.id as string, req.body);
     return g;
   }),

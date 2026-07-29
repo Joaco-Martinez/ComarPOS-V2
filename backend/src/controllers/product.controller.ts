@@ -281,7 +281,7 @@ export const productController = {
 
   async transferStock(req: Request, res: Response, next: NextFunction) {
     try {
-      const { productId, from, quantity } = req.body;
+      const { productId, from, quantity, reason } = req.body;
       const userId = (req as any).user?.id;
 
       if (!userId) {
@@ -292,7 +292,8 @@ export const productController = {
         productId,
         from,
         Number(quantity),
-        userId
+        userId,
+        reason
       );
 
       res.json(updated);
@@ -303,7 +304,7 @@ export const productController = {
 
   async addStock(req: Request, res: Response, next: NextFunction) {
     try {
-      const { productId, to, quantity } = req.body;
+      const { productId, to, quantity, reason } = req.body;
       const userId = (req as any).user?.id;
 
       if (!userId) {
@@ -314,7 +315,8 @@ export const productController = {
         productId,
         to,
         Number(quantity),
-        userId
+        userId,
+        reason
       );
 
       res.json(updated);
@@ -326,7 +328,7 @@ export const productController = {
   async transferStockKg(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { from, quantityKg } = req.body;
+      const { from, quantityKg, reason } = req.body;
 
       const userId = (req as any).user?.id;
 
@@ -338,7 +340,8 @@ export const productController = {
         getParamAsString(id, "id"),
         from,
         Number(quantityKg),
-        userId
+        userId,
+        reason
       );
 
       res.json(updated);
@@ -350,7 +353,7 @@ export const productController = {
   async addStockKg(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { to, quantityKg } = req.body;
+      const { to, quantityKg, reason } = req.body;
 
       const userId = (req as any).user?.id;
 
@@ -362,7 +365,8 @@ export const productController = {
         getParamAsString(id, "id"),
         to,
         Number(quantityKg),
-        userId
+        userId,
+        reason
       );
 
       res.json(updated);

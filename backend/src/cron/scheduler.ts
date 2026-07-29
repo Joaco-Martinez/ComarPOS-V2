@@ -18,7 +18,7 @@ export function startScheduler() {
   // ── Gastos recurrentes ──────────────────────────────────────────────────────
   // Corre a las 06:00 AR todos los días
   cron.schedule(
-    "0 9 * * *", // 06:00 AR = 09:00 UTC
+    "0 6 * * *", // 06:00 AR (la opción timezone de abajo ya interpreta la expresión en hora AR)
     async () => {
       console.log("[cron] Procesando gastos recurrentes...");
       const results = await safeRun("recurringExpenses", () =>
@@ -34,7 +34,7 @@ export function startScheduler() {
   // ── Notificaciones de stock bajo ────────────────────────────────────────────
   // Corre a las 07:00 AR todos los días
   cron.schedule(
-    "0 10 * * *", // 07:00 AR = 10:00 UTC
+    "0 7 * * *", // 07:00 AR (la opción timezone de abajo ya interpreta la expresión en hora AR)
     async () => {
       console.log("[cron] Revisando stock bajo...");
       const tenants = await prisma.tenant.findMany({
@@ -53,7 +53,7 @@ export function startScheduler() {
   // ── Expiración de puntos de fidelización ────────────────────────────────────
   // Corre el día 1 de cada mes a las 03:00 AR
   cron.schedule(
-    "0 6 1 * *", // 03:00 AR = 06:00 UTC
+    "0 3 1 * *", // 03:00 AR (la opción timezone de abajo ya interpreta la expresión en hora AR)
     async () => {
       console.log("[cron] Expirando puntos de fidelización inactivos...");
       const tenants = await prisma.tenant.findMany({

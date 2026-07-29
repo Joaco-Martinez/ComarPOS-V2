@@ -170,7 +170,7 @@ export default function RemitosPage() {
                   <tr
                     key={r.id}
                     style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(37,99,235,0.04)'; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(13,89,231,0.04)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                     onClick={() => openDetail(r)}
                   >
@@ -241,8 +241,8 @@ export default function RemitosPage() {
 
       {/* Create from Sale Modal */}
       {modal === 'create' && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div className="card" style={{ width: '100%', maxWidth: 420, padding: 28 }}>
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal" style={{ maxWidth: 420, padding: 28 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>Crear remito desde venta</div>
               <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}><X size={15} /></button>
@@ -271,8 +271,8 @@ export default function RemitosPage() {
 
       {/* Detail Modal */}
       {modal === 'detail' && selected && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div className="card" style={{ width: '100%', maxWidth: 560, padding: 28, maxHeight: '80vh', overflowY: 'auto' }}>
+        <div className="modal-overlay" onClick={() => { setModal(null); setSelected(null); }}>
+          <div className="modal modal-lg" style={{ padding: 28 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>
                 Remito #{selected.numero ?? selected.id?.slice(0, 8)}
@@ -280,7 +280,7 @@ export default function RemitosPage() {
               <button className="btn btn-ghost btn-sm" onClick={() => { setModal(null); setSelected(null); }}><X size={15} /></button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+            <div className="grid-responsive" style={{ gap: 14, marginBottom: 20 }}>
               {[
                 { label: 'Estado', value: <span className={`badge ${STATUS_BADGE[selected.status] ?? ''}`}>{STATUS_LABEL[selected.status] ?? selected.status}</span> },
                 { label: 'Fecha', value: fmtDate(selected.createdAt ?? selected.date) },

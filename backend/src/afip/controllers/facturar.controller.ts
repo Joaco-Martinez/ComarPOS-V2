@@ -7,10 +7,14 @@ import {
   emitirFacturaCConsumidorFinal,
   emitirFacturaCACliente,
 } from "../wsfe-C.service";
+import { emitirFacturaA } from "../wsfe-A.service";
+import { emitirFacturaB } from "../wsfe-B.service";
+import { getAllowedCbteTipos, cbteTipoLabel, CBTE_TIPO_A, CBTE_TIPO_B, CBTE_TIPO_C } from "../ivaCondition";
 import { generarFacturaAfipPDF } from "../utils/generarFacturaAfipPDF";
 import { isAfipUnavailable } from "../utils/isAfipUnavailable";
 import prisma from "../../prisma";
 import { tenantScope } from "../../utils/tenantScope";
+import { arcaConfigService } from "../../services/arcaConfig.service";
 import {
   normalizarDocumento,
   detectarTipoDocumento,
@@ -29,9 +33,29 @@ export async function facturarController(req: Request, res: Response) {
 
   const { saleId, ...facturaData } = req.body;
 
-  // Seguridad backend: aunque el frontend mande A o B, este sistema solo emite Factura C.
-  facturaData.tipoComprobante = 11;
-  req.body.tipoComprobante = 11;
+  // El frontend historico mandaba "receiverDoc"; el resto del controller usa
+  // "nroDoc" - normalizamos aca para no perder el dato.
+  if (facturaData.nroDoc === undefined && facturaData.receiverDoc !== undefined) {
+    facturaData.nroDoc = facturaData.receiverDoc;
+  }
+
+  // Que tipo de comprobante puede emitir este tenant segun su condicion frente
+  // al IVA (ArcaConfig.ivaCondition): Responsable Inscripto -> A o B,
+  // Monotributo/Exento/sin config -> solo C. Si el frontend no pide un tipo
+  // puntual, se usa el primero permitido (compatibilidad con el flujo viejo).
+  const arcaConfig = await arcaConfigService.getConfig().catch(() => null);
+  const allowedTipos = getAllowedCbteTipos(arcaConfig?.ivaCondition);
+  const requestedTipo = Number(facturaData.tipoComprobante ?? allowedTipos[0]);
+
+  if (!allowedTipos.includes(requestedTipo)) {
+    return res.status(400).json({
+      ok: false,
+      error: `Tu condición frente al IVA no te permite emitir Factura ${cbteTipoLabel(requestedTipo)}. Tipos permitidos: ${allowedTipos.map(cbteTipoLabel).join(", ")}.`,
+    });
+  }
+
+  facturaData.tipoComprobante = requestedTipo;
+  req.body.tipoComprobante = requestedTipo;
 
   console.log("============================================================");
   console.log(`🟦 [${requestId}] INICIO POST /afip/facturar`);
@@ -182,62 +206,49 @@ export async function facturarController(req: Request, res: Response) {
       tipoComprobanteNumber: Number(facturaData.tipoComprobante),
     });
 
-    if (facturaData.tipoComprobante !== 11) {
-      console.warn(`⚠️ [${requestId}] Tipo de comprobante no soportado:`, facturaData.tipoComprobante);
+    if (requestedTipo === CBTE_TIPO_A) {
+      console.log(`🇦 [${requestId}] Entró a Factura A`);
 
-      return res.status(400).json({
-        ok: false,
-        error: "Tipo de comprobante no soportado. Este sistema solo permite Factura C.",
-      });
-    }
-
-    console.log(`🇨 [${requestId}] Entró a Factura C`);
-
-    const docLimpio = normalizarDocumento(facturaData.nroDoc);
-
-    const quiereConsumidorFinal =
-      Number(facturaData.tipoDoc) === 99 ||
-      docLimpio === "" ||
-      Number(docLimpio) === 0;
-
-    console.log(`🪪 [${requestId}] Documento Factura C:`, {
-      tipoDocOriginal: facturaData.tipoDoc,
-      nroDocOriginal: facturaData.nroDoc,
-      docLimpio,
-      quiereConsumidorFinal,
-    });
-
-    if (quiereConsumidorFinal) {
-      console.log(`👤 [${requestId}] Factura C consumidor final`);
-
-      console.log(`🚀 [${requestId}] Llamando emitirFacturaCConsumidorFinal...`, {
-        saleId,
-        cuit: facturaData.cuit,
-        importe: facturaData.importe,
-      });
-
-      factura = await emitirFacturaCConsumidorFinal({
-        saleId,
-        cuit: facturaData.cuit,
-        importe: facturaData.importe,
-      });
-
-      console.log(`✅ [${requestId}] emitirFacturaCConsumidorFinal respondió`);
-    } else {
       const docDetectado = detectarTipoDocumento(facturaData.nroDoc);
 
-      console.log(`🪪 [${requestId}] Documento detectado Factura C cliente:`, docDetectado);
-
-      if (!docDetectado) {
-        console.warn(`⚠️ [${requestId}] Factura C con cliente sin documento válido`);
+      if (!docDetectado || docDetectado.tipoDoc !== 80) {
+        console.warn(`⚠️ [${requestId}] Factura A sin CUIT válido del receptor`);
         return res.status(400).json({
           ok: false,
-          error:
-            "Para Factura C con cliente, el documento debe ser válido. Puede ser DNI, CUIT o CUIL.",
+          error: "Para Factura A el receptor debe tener un CUIT válido (es para Responsables Inscriptos).",
         });
       }
 
-      console.log(`🚀 [${requestId}] Llamando emitirFacturaCACliente...`, {
+      console.log(`🚀 [${requestId}] Llamando emitirFacturaA...`, {
+        saleId,
+        cuit: facturaData.cuit,
+        nroDoc: docDetectado.nroDoc,
+        importe: facturaData.importe,
+      });
+
+      factura = await emitirFacturaA({
+        saleId,
+        cuit: facturaData.cuit,
+        nroDoc: docDetectado.nroDoc,
+        importe: facturaData.importe,
+        condicionIVAReceptor: facturaData.condicionIVAReceptor,
+      });
+
+      console.log(`✅ [${requestId}] emitirFacturaA respondió`);
+    } else if (requestedTipo === CBTE_TIPO_B) {
+      console.log(`🇧 [${requestId}] Entró a Factura B`);
+
+      const docDetectado = detectarTipoDocumento(facturaData.nroDoc) ?? { tipoDoc: 99, nroDoc: 0 };
+
+      console.log(`🚀 [${requestId}] Llamando emitirFacturaB...`, {
+        saleId,
+        cuit: facturaData.cuit,
+        tipoDoc: docDetectado.tipoDoc,
+        nroDoc: docDetectado.nroDoc,
+        importe: facturaData.importe,
+      });
+
+      factura = await emitirFacturaB({
         saleId,
         cuit: facturaData.cuit,
         tipoDoc: docDetectado.tipoDoc,
@@ -246,16 +257,74 @@ export async function facturarController(req: Request, res: Response) {
         condicionIVAReceptor: facturaData.condicionIVAReceptor,
       });
 
-      factura = await emitirFacturaCACliente({
-        saleId,
-        cuit: facturaData.cuit,
-        tipoDoc: docDetectado.tipoDoc,
-        nroDoc: docDetectado.nroDoc,
-        importe: facturaData.importe,
-        condicionIVAReceptor: facturaData.condicionIVAReceptor,
+      console.log(`✅ [${requestId}] emitirFacturaB respondió`);
+    } else {
+      console.log(`🇨 [${requestId}] Entró a Factura C`);
+
+      const docLimpio = normalizarDocumento(facturaData.nroDoc);
+
+      const quiereConsumidorFinal =
+        Number(facturaData.tipoDoc) === 99 ||
+        docLimpio === "" ||
+        Number(docLimpio) === 0;
+
+      console.log(`🪪 [${requestId}] Documento Factura C:`, {
+        tipoDocOriginal: facturaData.tipoDoc,
+        nroDocOriginal: facturaData.nroDoc,
+        docLimpio,
+        quiereConsumidorFinal,
       });
 
-      console.log(`✅ [${requestId}] emitirFacturaCACliente respondió`);
+      if (quiereConsumidorFinal) {
+        console.log(`👤 [${requestId}] Factura C consumidor final`);
+
+        console.log(`🚀 [${requestId}] Llamando emitirFacturaCConsumidorFinal...`, {
+          saleId,
+          cuit: facturaData.cuit,
+          importe: facturaData.importe,
+        });
+
+        factura = await emitirFacturaCConsumidorFinal({
+          saleId,
+          cuit: facturaData.cuit,
+          importe: facturaData.importe,
+        });
+
+        console.log(`✅ [${requestId}] emitirFacturaCConsumidorFinal respondió`);
+      } else {
+        const docDetectado = detectarTipoDocumento(facturaData.nroDoc);
+
+        console.log(`🪪 [${requestId}] Documento detectado Factura C cliente:`, docDetectado);
+
+        if (!docDetectado) {
+          console.warn(`⚠️ [${requestId}] Factura C con cliente sin documento válido`);
+          return res.status(400).json({
+            ok: false,
+            error:
+              "Para Factura C con cliente, el documento debe ser válido. Puede ser DNI, CUIT o CUIL.",
+          });
+        }
+
+        console.log(`🚀 [${requestId}] Llamando emitirFacturaCACliente...`, {
+          saleId,
+          cuit: facturaData.cuit,
+          tipoDoc: docDetectado.tipoDoc,
+          nroDoc: docDetectado.nroDoc,
+          importe: facturaData.importe,
+          condicionIVAReceptor: facturaData.condicionIVAReceptor,
+        });
+
+        factura = await emitirFacturaCACliente({
+          saleId,
+          cuit: facturaData.cuit,
+          tipoDoc: docDetectado.tipoDoc,
+          nroDoc: docDetectado.nroDoc,
+          importe: facturaData.importe,
+          condicionIVAReceptor: facturaData.condicionIVAReceptor,
+        });
+
+        console.log(`✅ [${requestId}] emitirFacturaCACliente respondió`);
+      }
     }
 
     console.log(`📨 [${requestId}] Respuesta cruda de AFIP/factura:`, factura);

@@ -6,7 +6,8 @@ import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import prisma from "./prisma";
 import facturaPdfRoutes from "./routes/factura-pdf.routes";
-import { requestLogger, errorLogger } from "./middleware/logger"; 
+import { requestLogger, errorLogger } from "./middleware/logger";
+import { Sentry, sentryEnabled } from "./config/sentry";
 import { swaggerDocs } from "./config/swagger";
 import { authMiddleware, requireRole } from "./middleware/auth";
 import { tenantMiddleware } from "./middleware/tenant";
@@ -42,10 +43,10 @@ import purchaseOrderRoutes from "./routes/purchaseOrder.routes";
 import auditLogRoutes from "./routes/auditLog.routes";
 import notificationRoutes from "./routes/notification.routes";
 import loyaltyRoutes from "./routes/loyalty.routes";
-import priceListRoutes from "./routes/priceList.routes";
 import returnRoutes from "./routes/return.routes";
 import exportRoutes from "./routes/export.routes";
 import tenantLogoRoutes from "./routes/tenantLogo.routes";
+import platformAdminRoutes from "./routes/platformAdmin.routes";
 dotenv.config();
 
 const app = express();
@@ -178,13 +179,19 @@ app.use("/purchase-orders", purchaseOrderRoutes);
 app.use("/audit-logs", auditLogRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/loyalty", loyaltyRoutes);
-app.use("/price-lists", priceListRoutes);
 app.use("/returns", returnRoutes);
 app.use("/exports", exportRoutes);
 app.use("/uploads", tenantLogoRoutes);
+app.use("/platform-admin", platformAdminRoutes);
 
 // 🔹 Swagger
 swaggerDocs(app);
+
+// 🔹 Sentry (opt-in, ver src/config/sentry.ts): reporta el error a Sentry y
+// lo deja pasar a errorLogger para no cambiar el comportamiento existente.
+if (sentryEnabled) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 // 🔹 Logger de errores
 app.use(errorLogger);

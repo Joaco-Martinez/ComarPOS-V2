@@ -113,6 +113,34 @@ export const cashSessionService = {
     return movement;
   },
 
+  // Vincula un egreso (Finanzas/Compras) a la caja abierta del usuario que lo
+  // registro, pero solo si se pago en EFECTIVO - un gasto por transferencia
+  // (ej: alquiler) nunca debe descontarse del cajon fisico. Si el usuario no
+  // tiene una caja abierta, no hace nada (el gasto queda registrado igual en
+  // Finanzas/Compras, simplemente no impacta ninguna caja).
+  async maybeLinkExpense(params: {
+    userId?: string | null;
+    paymentMethod?: string | null;
+    amount: number;
+    description: string;
+    reference?: string;
+  }) {
+    if (params.paymentMethod !== "EFECTIVO" || !params.userId || !(params.amount > 0)) {
+      return null;
+    }
+
+    const session = await this.getOpenSession(params.userId);
+    if (!session) return null;
+
+    return this.addMovement({
+      sessionId: session.id,
+      type: CashMovementType.EXPENSE,
+      amount: params.amount,
+      description: params.description,
+      reference: params.reference,
+    });
+  },
+
   async getSessionSummary(sessionId: string) {
     const scope = tenantScope();
     const session = await prisma.cashSession.findFirst({

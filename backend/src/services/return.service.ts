@@ -3,7 +3,6 @@ import { SaleStatus, PaymentMethod } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { updateStatus } from "./sale/sale.lifecycle";
-import { financeService } from "./finance.service";
 import { round2 } from "./sale/sale.pricing";
 
 export const returnService = {
@@ -17,14 +16,8 @@ export const returnService = {
   ) {
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, ...tenantScope() },
-      select: {
-        id: true,
-        status: true,
-        total: true,
-        clientId: true,
-        isAccountSale: true,
-        accountDebtAmount: true,
-        tenantId: true,
+      include: {
+        items: true,
       },
     });
 
@@ -34,7 +27,35 @@ export const returnService = {
     }
 
     // Cancel restores stock + reverses account debt automatically
-    const cancelled = await updateStatus(saleId, SaleStatus.CANCELLED);
+    await updateStatus(saleId, SaleStatus.CANCELLED);
+
+    // Registro propio de la devolucion (motivo + snapshot de items), en vez
+    // de reutilizar Sale como si fuera el registro de devolucion.
+    const returnRecord = await prisma.return.create({
+      data: {
+        saleId,
+        clientId: sale.clientId,
+        userId,
+        total: sale.total,
+        reason: options?.notes ?? null,
+        refundMethod: options?.refundMethod ?? null,
+        tenantId: currentTenantId(),
+        items: {
+          create: sale.items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            quantityKg: item.quantityKg,
+            unitPrice: item.price,
+            subtotal: item.subtotal,
+          })),
+        },
+      },
+      include: {
+        items: { include: { product: { select: { name: true, sku: true } } } },
+        client: { select: { nombre: true, apellido: true } },
+        user: { select: { name: true } },
+      },
+    });
 
     // Register cash outflow in Finance if a physical refund method was specified
     if (options?.refundMethod && options.refundMethod !== PaymentMethod.CUENTA_CORRIENTE) {
@@ -57,38 +78,35 @@ export const returnService = {
       }
     }
 
-    return cancelled;
+    return returnRecord;
   },
 
-  async getReturnedSales(params?: { fromDate?: Date; toDate?: Date; page?: number; limit?: number }) {
+  async getReturns(params?: { fromDate?: Date; toDate?: Date; page?: number; limit?: number }) {
     const page = params?.page ?? 1;
     const limit = params?.limit ?? 50;
     const skip = (page - 1) * limit;
 
-    const where: any = {
-      status: SaleStatus.CANCELLED,
-      ...tenantScope(),
-    };
+    const where: any = { ...tenantScope() };
 
     if (params?.fromDate || params?.toDate) {
-      where.updatedAt = {};
-      if (params.fromDate) where.updatedAt.gte = params.fromDate;
-      if (params.toDate) where.updatedAt.lte = params.toDate;
+      where.createdAt = {};
+      if (params.fromDate) where.createdAt.gte = params.fromDate;
+      if (params.toDate) where.createdAt.lte = params.toDate;
     }
 
     const [items, total] = await Promise.all([
-      prisma.sale.findMany({
+      prisma.return.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { updatedAt: "desc" },
+        orderBy: { createdAt: "desc" },
         include: {
           client: { select: { nombre: true, apellido: true } },
           user: { select: { name: true } },
           items: { include: { product: { select: { name: true, sku: true } } } },
         },
       }),
-      prisma.sale.count({ where }),
+      prisma.return.count({ where }),
     ]);
 
     return { items, total, page, limit, pages: Math.ceil(total / limit) };

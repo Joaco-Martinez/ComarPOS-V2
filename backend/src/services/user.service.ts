@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { CategoryClient, Role } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import { startOfDayAR, endOfDayAR } from "../utils/dateAR";
 
 type ClientCategory = "Price" | "Cliente" | "Mayorista";
 
@@ -28,10 +29,15 @@ function cleanEmail(value?: string | null) {
 }
 
 
-function parseDateParam(value?: string | null) {
+function parseFromDateParam(value?: string | null) {
   if (!value) return undefined;
+  const date = startOfDayAR(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
 
-  const date = new Date(value);
+function parseToDateParam(value?: string | null) {
+  if (!value) return undefined;
+  const date = endOfDayAR(value);
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
@@ -203,8 +209,8 @@ export const userService = {
 
 
   async getActivityById(id: string, params: UserActivityParams = {}) {
-    const fromDate = parseDateParam(params.fromDate);
-    const toDate = parseDateParam(params.toDate);
+    const fromDate = parseFromDateParam(params.fromDate);
+    const toDate = parseToDateParam(params.toDate);
 
     const user = await prisma.user.findFirst({
       where: { id, ...tenantScope() },

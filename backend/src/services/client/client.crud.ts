@@ -18,7 +18,7 @@ import {
   type ClientAddressData,
 } from "./client.helpers";
 
-export async function getClients() {
+export async function getClients(options?: { includeLoyalty?: boolean }) {
   return prisma.client.findMany({
     where: { ...tenantScope() },
     orderBy: { createdAt: "desc" },
@@ -32,6 +32,7 @@ export async function getClients() {
           accountMovements: true,
         },
       },
+      ...(options?.includeLoyalty ? { loyaltyAccount: true } : {}),
     },
   });
 }
@@ -91,7 +92,7 @@ export async function updateClient(
 ) {
   const existing = await prisma.client.findFirst({
     where: { id, ...tenantScope() },
-    include: { user: true },
+    include: { user: { select: { id: true, name: true, email: true, role: true } } },
   });
 
   if (!existing) throw new Error("Cliente no encontrado");
@@ -206,15 +207,16 @@ export async function deleteClient(id: string) {
     },
   });
 
-  if (!client) throw new Error("Cliente no encontrado");
+  if (!client) throw Object.assign(new Error("Cliente no encontrado"), { status: 404 });
 
   if (client.currentBalance > 0) {
-    throw new Error("No se puede eliminar un cliente con saldo deudor");
+    throw Object.assign(new Error("No se puede eliminar un cliente con saldo deudor"), { status: 409 });
   }
 
   if (client._count.sales > 0 || client._count.accountMovements > 0) {
-    throw new Error(
-      "No se puede eliminar un cliente con historial de ventas o cuenta corriente"
+    throw Object.assign(
+      new Error("No se puede eliminar un cliente con historial de ventas o cuenta corriente"),
+      { status: 409 }
     );
   }
 

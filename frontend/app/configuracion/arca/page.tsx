@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import { toDateInputAR, formatDateAR, formatDateTimeAR } from '@/lib/dateAR';
 import {
   ShieldCheck, Building2, FileKey2, FileText, CheckCircle2, XCircle,
   AlertCircle, HelpCircle, RefreshCcw, Save, Plus, Edit2, Trash2,
@@ -71,18 +72,15 @@ function getContent<T>(data: any): T {
 }
 
 function fmtDate(v?: string | null) {
-  if (!v) return '—';
-  return new Date(v).toLocaleDateString('es-AR');
+  return formatDateAR(v);
 }
 
 function fmtDateTime(v?: string | null) {
-  if (!v) return '—';
-  return new Date(v).toLocaleString('es-AR');
+  return formatDateTimeAR(v);
 }
 
 function toDateInput(v?: string | null) {
-  if (!v) return '';
-  return new Date(v).toISOString().slice(0, 10);
+  return toDateInputAR(v);
 }
 
 function normalizeCuit(v: string) { return v.replace(/\D/g, ''); }
@@ -151,7 +149,7 @@ function SectionCard({ title, subtitle, icon, right, children }: {
 }) {
   return (
     <div className="card" style={{ padding: '20px 22px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {icon && (
             <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
@@ -188,10 +186,10 @@ function HelpField({ label, help, children }: { label: string; help?: string; ch
 
 function StatusChip({ tone, children }: { tone: 'green' | 'red' | 'yellow' | 'blue' | 'gray'; children: React.ReactNode }) {
   const styles = {
-    green:  { bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.28)',  color: 'var(--success)' },
+    green:  { bg: 'rgba(24,193,94,0.12)',  border: 'rgba(24,193,94,0.28)',  color: 'var(--success)' },
     red:    { bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.28)',  color: 'var(--danger)' },
     yellow: { bg: 'rgba(243,156,18,0.12)', border: 'rgba(243,156,18,0.28)', color: 'var(--warn)' },
-    blue:   { bg: 'rgba(37,99,235,0.12)',  border: 'rgba(37,99,235,0.28)',  color: 'var(--accent)' },
+    blue:   { bg: 'rgba(13,89,231,0.12)',  border: 'rgba(13,89,231,0.28)',  color: 'var(--accent)' },
     gray:   { bg: 'var(--surface2)',        border: 'var(--border)',         color: 'var(--text3)' },
   }[tone];
   return (
@@ -505,8 +503,8 @@ export default function ArcaPage() {
       {toast && (
         <div style={{
           position: 'fixed', right: 20, bottom: 20, zIndex: 200,
-          background: toast.type === 'ok' ? 'rgba(34,197,94,0.15)' : toast.type === 'err' ? 'rgba(239,68,68,0.15)' : 'var(--surface)',
-          border: `1px solid ${toast.type === 'ok' ? 'rgba(34,197,94,0.3)' : toast.type === 'err' ? 'rgba(239,68,68,0.3)' : 'var(--border)'}`,
+          background: toast.type === 'ok' ? 'rgba(24,193,94,0.15)' : toast.type === 'err' ? 'rgba(239,68,68,0.15)' : 'var(--surface)',
+          border: `1px solid ${toast.type === 'ok' ? 'rgba(24,193,94,0.3)' : toast.type === 'err' ? 'rgba(239,68,68,0.3)' : 'var(--border)'}`,
           borderRadius: 10, padding: '12px 16px', fontSize: 13, fontWeight: 600,
           color: toast.type === 'ok' ? 'var(--success)' : toast.type === 'err' ? 'var(--danger)' : 'var(--text)',
           animation: 'fadeIn 0.2s ease', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
@@ -676,7 +674,7 @@ export default function ArcaPage() {
             subtitle="Configurá los números habilitados en ARCA para emitir facturas y notas de crédito"
             icon={<FileText size={18} color="var(--accent3)" />}
           >
-            <div style={{ background: 'rgba(37,99,235,0.07)', border: '1px solid rgba(37,99,235,0.18)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.6 }}>
+            <div style={{ background: 'rgba(13,89,231,0.07)', border: '1px solid rgba(13,89,231,0.18)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.6 }}>
               <strong>¿Qué es un punto de venta?</strong> Es el número que ARCA asigna para emitir comprobantes. El punto <strong>0001</strong> se carga como <strong>1</strong>. Tipos comunes: <strong>1,6,11,3,8,13</strong> = Facturas A/B/C y Notas de Crédito A/B/C.
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 14, marginBottom: 14 }}>

@@ -5,13 +5,13 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { DollarSign, ArrowLeftRight, RefreshCw, Plus, X, Clock } from 'lucide-react';
+import { DollarSign, ArrowLeftRight, RefreshCw, Plus, X, Clock, Trash2 } from 'lucide-react';
 
 type ExchangeRate = {
   id: string;
   currency: string;
   rate: number;
-  notes?: string;
+  source?: string;
   createdAt: string;
 };
 
@@ -55,7 +55,7 @@ export default function TipoCambioPage() {
     if (!form.rate) return;
     setSaving(true);
     try {
-      await api.post('/exchange-rates', { currency: form.currency, rate: Number(form.rate), notes: form.notes || undefined });
+      await api.post('/exchange-rates', { currency: form.currency, rate: Number(form.rate), source: form.notes || undefined });
       showToast('Tipo de cambio registrado');
       setModal(false);
       setForm(emptyForm());
@@ -63,6 +63,15 @@ export default function TipoCambioPage() {
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? 'Error al guardar');
     } finally { setSaving(false); }
+  };
+
+  const del = async (id: string) => {
+    if (!confirm('¿Eliminar este registro de tipo de cambio?')) return;
+    try {
+      await api.delete(`/exchange-rates/${id}`);
+      showToast('Eliminado');
+      load();
+    } catch { showToast('Error al eliminar'); }
   };
 
   const convert = async () => {
@@ -109,7 +118,7 @@ export default function TipoCambioPage() {
               <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                 1 {current.currency} → ARS · actualizado {fmtDate(current.createdAt)}
               </div>
-              {current.notes && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>{current.notes}</div>}
+              {current.source && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>{current.source}</div>}
             </>
           ) : (
             <div style={{ fontSize: 13, color: 'var(--text3)' }}>Sin tasa registrada</div>
@@ -122,7 +131,7 @@ export default function TipoCambioPage() {
             <ArrowLeftRight size={16} style={{ color: 'var(--accent2)' }} />
             <span className="section-title">Convertidor</span>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
             <input
               type="number"
               min="0"
@@ -174,6 +183,7 @@ export default function TipoCambioPage() {
                   <th>Moneda</th>
                   <th style={{ textAlign: 'right' }}>Tasa (→ ARS)</th>
                   <th>Notas</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -184,7 +194,10 @@ export default function TipoCambioPage() {
                     <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13 }}>
                       {num(r.rate).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                     </td>
-                    <td style={{ fontSize: 12, color: 'var(--text3)' }}>{r.notes ?? '—'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text3)' }}>{r.source ?? '—'}</td>
+                    <td>
+                      <button onClick={() => del(r.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

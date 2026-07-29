@@ -32,7 +32,7 @@ export async function updatePaymentMethod(id: string, method: PaymentMethod) {
       payments: true,
       businessLocation: true,
       items: true,
-      user: true,
+      user: { select: { id: true, name: true, email: true, role: true } },
       client: true,
     },
   });
@@ -157,7 +157,7 @@ export async function updatePayments(
         payments: true,
         businessLocation: true,
         items: true,
-        user: true,
+        user: { select: { id: true, name: true, email: true, role: true } },
         client: true,
         accountMovements: true,
       },

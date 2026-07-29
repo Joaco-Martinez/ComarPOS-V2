@@ -12,5 +12,6 @@ router.post("/", requireAnyRole(["ADMIN"]), promotionController.create);
 router.post("/apply", promotionController.applyToCart);
 router.put("/:id", requireAnyRole(["ADMIN"]), promotionController.update);
 router.post("/:id/deactivate", requireAnyRole(["ADMIN"]), promotionController.deactivate);
+router.delete("/:id", requireAnyRole(["ADMIN"]), promotionController.remove);
 
 export default router;

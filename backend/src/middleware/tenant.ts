@@ -13,6 +13,7 @@ type TenantRecord = {
   slug: string;
   name: string;
   isActive: boolean;
+  subscriptionStatus: string;
 };
 
 const DEFAULT_TENANT_SLUG = process.env.DEFAULT_TENANT_SLUG || "grupo-vj";
@@ -43,7 +44,7 @@ async function resolveTenantBySlug(slug: string): Promise<TenantRecord | null> {
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
-    select: { id: true, slug: true, name: true, isActive: true },
+    select: { id: true, slug: true, name: true, isActive: true, subscriptionStatus: true },
   });
 
   tenantCache.set(slug, tenant);
@@ -55,7 +56,17 @@ async function resolveTenantBySlug(slug: string): Promise<TenantRecord | null> {
  * En desarrollo (NODE_ENV !== "production") se puede forzar el tenant con el
  * header X-Tenant-Slug, util para probar sin DNS por subdominio configurado.
  */
-export async function tenantMiddleware(req: Request, _res: Response, next: NextFunction) {
+// Rutas que deben seguir funcionando aunque el tenant este suspendido:
+// healthcheck de infraestructura y el panel de super-admin (cross-tenant por
+// diseno, no depende del estado de ningun tenant de negocio). /auth/login NO
+// se exime a proposito: asi el 403 de suspension se ve ahi en vez de un
+// generico "credenciales invalidas". /auth/logout si se exime para poder
+// cerrar sesion limpio con un tenant recien suspendido.
+function isSuspensionExempt(path: string): boolean {
+  return path === "/" || path.startsWith("/platform-admin") || path === "/auth/logout";
+}
+
+export async function tenantMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
     const overrideSlug =
       process.env.NODE_ENV !== "production"
@@ -71,6 +82,17 @@ export async function tenantMiddleware(req: Request, _res: Response, next: NextF
 
     if (!tenant) {
       console.warn(`⚠️ No se pudo resolver tenant para host "${req.hostname}" (slug "${slug}")`);
+    }
+
+    if (
+      tenant &&
+      !isSuspensionExempt(req.path) &&
+      (tenant.subscriptionStatus === "SUSPENDED" || !tenant.isActive)
+    ) {
+      return res.status(403).json({
+        code: "TENANT_SUSPENDED",
+        message: "Esta cuenta está suspendida. Contactá a soporte para reactivarla.",
+      });
     }
 
     runWithTenant(tenant?.id, next);

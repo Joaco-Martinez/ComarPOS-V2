@@ -68,3 +68,9 @@ export function formatShortDateAR(v?: string | Date | null) {
   if (!d) return '—';
   return new Intl.DateTimeFormat('es-AR', { timeZone: TZ, day: '2-digit', month: '2-digit' }).format(d);
 }
+
+export function formatTimeAR(v?: string | Date | null) {
+  const d = toDate(v);
+  if (!d) return '—';
+  return new Intl.DateTimeFormat('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+}

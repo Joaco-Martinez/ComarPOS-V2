@@ -67,7 +67,7 @@ export default function UsuariosPage() {
 
   const toggleActive = async (u: User) => {
     try {
-      await api.patch(`/users/${u.id}`, { isActive: !u.isActive });
+      await api.put(`/users/${u.id}`, { isActive: !u.isActive });
       load();
     } catch { showToast('Error al cambiar estado'); }
   };
@@ -113,7 +113,7 @@ export default function UsuariosPage() {
                   <tr key={u.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid rgba(37,99,235,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--accent)', flexShrink: 0 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid rgba(13,89,231,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--accent)', flexShrink: 0 }}>
                           {u.name[0].toUpperCase()}
                         </div>
                         <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{u.name}</span>

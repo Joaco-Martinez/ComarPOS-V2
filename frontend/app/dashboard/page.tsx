@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import { fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { formatShortDateAR, todayInputAR } from '@/lib/dateAR';
+import { formatShortDateAR, formatTimeAR, todayInputAR, toDateInputAR } from '@/lib/dateAR';
 import type { Sale } from '@/types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -22,7 +22,7 @@ function DeltaBadge({ pct }: { pct: number | null }) {
   if (pct === null) return null;
   const up = pct >= 0;
   return (
-    <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: up ? 'var(--success)' : 'var(--danger)', background: up ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', borderRadius: 4, padding: '2px 5px', marginLeft: 6 }}>
+    <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: up ? 'var(--success)' : 'var(--danger)', background: up ? 'rgba(24,193,94,0.1)' : 'rgba(239,68,68,0.1)', borderRadius: 4, padding: '2px 5px', marginLeft: 6 }}>
       {up ? '+' : ''}{pct.toFixed(1)}%
     </span>
   );
@@ -41,7 +41,7 @@ export default function DashboardPage() {
       try {
         const from7 = new Date();
         from7.setDate(from7.getDate() - 6);
-        const from7str = from7.toISOString().slice(0, 10);
+        const from7str = toDateInputAR(from7);
 
         const [dashRes, salesTodayRes, salesWeekRes] = await Promise.all([
           api.get('/analytics/dashboard').catch(() => null),
@@ -57,10 +57,10 @@ export default function DashboardPage() {
         for (let i = 6; i >= 0; i--) {
           const d = new Date();
           d.setDate(d.getDate() - i);
-          wMap[d.toISOString().slice(0, 10)] = { revenue: 0, count: 0 };
+          wMap[toDateInputAR(d)] = { revenue: 0, count: 0 };
         }
         normalizeArray<Sale>(salesWeekRes?.data).forEach((s) => {
-          const key = s.createdAt?.slice(0, 10);
+          const key = toDateInputAR(s.createdAt);
           if (key && wMap[key]) { wMap[key].revenue += num(s.total); wMap[key].count += 1; }
         });
         setWeeklyStats(
@@ -92,13 +92,13 @@ export default function DashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             {[
               {
-                label: 'Ventas hoy', icon: TrendingUp, color: '#2563EB',
+                label: 'Ventas hoy', icon: TrendingUp, color: '#0D59E7',
                 value: fmtMoney(d?.today?.revenue ?? 0),
                 sub: `${d?.today?.salesCount ?? 0} tickets`,
                 pct: d?.today?.vsYesterday?.revenuePercent ?? null,
               },
               {
-                label: 'Ganancia bruta', icon: ShoppingCart, color: '#22C55E',
+                label: 'Ganancia bruta', icon: ShoppingCart, color: '#18C15E',
                 value: fmtMoney(d?.today?.grossProfit ?? 0),
                 sub: d?.today?.revenue > 0 ? `${d.today.grossMarginPercent?.toFixed(1) ?? '—'}% margen` : '—',
                 pct: null,
@@ -110,7 +110,7 @@ export default function DashboardPage() {
                 pct: null,
               },
               {
-                label: 'Alertas stock', icon: AlertTriangle, color: (d?.activeAlerts ?? 0) > 0 ? '#EF4444' : '#22C55E',
+                label: 'Alertas stock', icon: AlertTriangle, color: (d?.activeAlerts ?? 0) > 0 ? '#EF4444' : '#18C15E',
                 value: String(d?.activeAlerts ?? 0),
                 sub: (d?.activeAlerts ?? 0) > 0 ? 'productos con bajo stock' : 'sin alertas activas',
                 pct: null,
@@ -135,7 +135,7 @@ export default function DashboardPage() {
             {[
               { label: 'Esta semana', value: fmtMoney(d?.thisWeek?.revenue ?? 0), sub: `${d?.thisWeek?.salesCount ?? 0} ventas`, pct: d?.thisWeek?.vsLastWeek?.revenuePercent ?? null, color: '#6474BB' },
               { label: 'Este mes', value: fmtMoney(d?.thisMonth?.revenue ?? 0), sub: `${d?.thisMonth?.salesCount ?? 0} ventas`, pct: null, color: '#6474BB' },
-              { label: 'Cuentas por cobrar', value: fmtMoney(d?.receivables?.totalPending ?? 0), sub: `${d?.receivables?.clientsWithDebt ?? 0} clientes con deuda`, pct: null, color: d?.receivables?.totalPending > 0 ? '#F39C12' : '#22C55E' },
+              { label: 'Cuentas por cobrar', value: fmtMoney(d?.receivables?.totalPending ?? 0), sub: `${d?.receivables?.clientsWithDebt ?? 0} clientes con deuda`, pct: null, color: d?.receivables?.totalPending > 0 ? '#F39C12' : '#18C15E' },
               { label: 'Gastos hoy', value: fmtMoney(d?.today?.expenses ?? 0), sub: 'egresos registrados', pct: null, color: '#EF4444' },
             ].map((s) => (
               <div key={s.label} className="card" style={{ padding: '14px 16px' }}>
@@ -150,7 +150,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Charts */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="grid-responsive" style={{ gap: 16 }}>
             <div className="card" style={{ padding: '18px 16px' }}>
               <div style={{ marginBottom: 14 }}>
                 <div className="section-title" style={{ fontSize: 14 }}>Ventas últimos 7 días</div>
@@ -162,7 +162,7 @@ export default function DashboardPage() {
                   <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text3)', fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: 'var(--text3)', fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
                   <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => [fmtMoney(v), 'Ingresos']} />
-                  <Line type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={2} dot={{ fill: '#2563EB', r: 3 }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="revenue" stroke="#0D59E7" strokeWidth={2} dot={{ fill: '#0D59E7', r: 3 }} activeDot={{ r: 5 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -195,33 +195,57 @@ export default function DashboardPage() {
             {todaySales.length === 0 ? (
               <div className="empty-state"><ShoppingCart size={36} /><p>Sin ventas registradas hoy</p></div>
             ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr><th>Hora</th><th>Cliente</th><th>Método</th><th>Tipo</th><th>Estado</th><th style={{ textAlign: 'right' }}>Total</th></tr>
-                  </thead>
-                  <tbody>
-                    {todaySales.slice(0, 15).map((s) => (
-                      <tr key={s.id}>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
-                          {new Date(s.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td style={{ color: 'var(--text)' }}>
-                          {s.client ? `${s.client.nombre} ${s.client.apellido}` : 'Consumidor final'}
-                        </td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{s.paymentMethod}</td>
-                        <td><span className={s.receiptType === 'FACTURA' ? 'badge badge-blue' : 'badge badge-gray'}>{s.receiptType}</span></td>
-                        <td>
-                          <span className={s.status === 'COMPLETED' ? 'badge badge-green' : s.status === 'PENDING' ? 'badge badge-amber' : 'badge badge-red'}>
-                            {s.status}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700 }}>{fmtMoney(s.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                <div className="table-wrap desktop-only-table">
+                  <table>
+                    <thead>
+                      <tr><th>Hora</th><th>Cliente</th><th>Método</th><th>Tipo</th><th>Estado</th><th style={{ textAlign: 'right' }}>Total</th></tr>
+                    </thead>
+                    <tbody>
+                      {todaySales.slice(0, 15).map((s) => (
+                        <tr key={s.id}>
+                          <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
+                            {formatTimeAR(s.createdAt)}
+                          </td>
+                          <td style={{ color: 'var(--text)' }}>
+                            {s.client ? `${s.client.nombre} ${s.client.apellido}` : 'Consumidor final'}
+                          </td>
+                          <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{s.paymentMethod}</td>
+                          <td><span className={s.receiptType === 'FACTURA' ? 'badge badge-blue' : 'badge badge-gray'}>{s.receiptType}</span></td>
+                          <td>
+                            <span className={s.status === 'COMPLETED' ? 'badge badge-green' : s.status === 'PENDING' ? 'badge badge-amber' : 'badge badge-red'}>
+                              {s.status}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700 }}>{fmtMoney(s.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mobile-card-list" style={{ padding: 10 }}>
+                  {todaySales.slice(0, 15).map((s) => (
+                    <div className="mobile-card" key={s.id}>
+                      <div className="mobile-card-head">
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text3)' }}>
+                          {formatTimeAR(s.createdAt)}
+                        </span>
+                        <span className={s.status === 'COMPLETED' ? 'badge badge-green' : s.status === 'PENDING' ? 'badge badge-amber' : 'badge badge-red'}>
+                          {s.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                        {s.client ? `${s.client.nombre} ${s.client.apellido}` : 'Consumidor final'}
+                      </div>
+                      <div className="mobile-card-row">
+                        <span>{s.paymentMethod} · <span className={s.receiptType === 'FACTURA' ? 'badge badge-blue' : 'badge badge-gray'}>{s.receiptType}</span></span>
+                        <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(s.total)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>

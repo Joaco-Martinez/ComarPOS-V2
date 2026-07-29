@@ -12,6 +12,8 @@ import {
 import alertService from "./alert.service";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import { cashSessionService } from "./cashSession.service";
+import { parseDateInputAR } from "../utils/dateAR";
 
 type PurchaseItemInput = {
   productId: string;
@@ -53,8 +55,7 @@ function validatePaymentMethod(value: unknown): PaymentMethod | undefined {
 }
 
 function parseDate(value: unknown): Date {
-  if (!value) return new Date();
-  const date = value instanceof Date ? value : new Date(String(value));
+  const date = parseDateInputAR(value as string | Date | null | undefined) ?? new Date();
   if (Number.isNaN(date.getTime())) throw new Error("Fecha inválida");
   return date;
 }
@@ -276,6 +277,16 @@ export const purchaseService = {
     for (const item of createdPurchase.items) {
       await alertService.checkProductStock(item.productId).catch(() => undefined);
     }
+
+    // Igual que un egreso de Finanzas: solo descuenta de la caja abierta si
+    // se pago en EFECTIVO. Compras por transferencia/tarjeta no tocan la caja.
+    await cashSessionService.maybeLinkExpense({
+      userId,
+      paymentMethod: createdPurchase.paymentMethod,
+      amount: createdPurchase.totalAmount,
+      description: `Compra${createdPurchase.providerName ? ` - ${createdPurchase.providerName}` : ""}`,
+      reference: `purchase:${createdPurchase.id}`,
+    }).catch(() => null);
 
     return createdPurchase;
   },

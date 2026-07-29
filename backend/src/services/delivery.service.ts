@@ -1,23 +1,28 @@
 import prisma from "../prisma";
 import { tenantScope } from "../utils/tenantScope";
+import { currentTenantId } from "../context/tenantContext";
+import { DELIVERY_SKU } from "./sale/sale.types";
 
 const DEFAULT_PRICE_PER_KM = Number(process.env.DELIVERY_PRICE_PER_KM ?? 8000);
-const GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
-const GOOGLE_ROUTES_TIMEOUT_MS = Number(process.env.GOOGLE_ROUTES_TIMEOUT_MS ?? 8000);
+// OSRM: routing por calles real, gratis y sin API key (demo server publico de
+// project-osrm.org). Se puede apuntar a un servidor propio via OSRM_BASE_URL
+// si en algun momento hace falta mas volumen/SLA que el demo publico.
+const OSRM_BASE_URL = process.env.OSRM_BASE_URL || "https://router.project-osrm.org";
+const OSRM_TIMEOUT_MS = Number(process.env.OSRM_TIMEOUT_MS ?? 8000);
 const DELIVERY_FALLBACK_MULTIPLIER = Number(process.env.DELIVERY_FALLBACK_MULTIPLIER ?? 1.4);
 
-// Google no tiene una opción directa de "ruta más larga".
-// Entonces pedimos rutas alternativas y elegimos la de mayor distancia.
-const GOOGLE_ROUTES_USE_LONGEST_ALTERNATIVE =
-  String(process.env.GOOGLE_ROUTES_USE_LONGEST_ALTERNATIVE ?? "true").toLowerCase() !==
-  "false";
+// OSRM puede devolver rutas alternativas; elegimos la de mayor distancia
+// (mismo criterio de negocio que se usaba antes con Google Routes).
+const ROUTING_USE_LONGEST_ALTERNATIVE =
+  String(process.env.ROUTING_USE_LONGEST_ALTERNATIVE ?? "true").toLowerCase() !== "false";
 
-type DeliveryRouteSource = "GOOGLE_ROUTES" | "COORDINATES_FALLBACK";
+type DeliveryRouteSource = "OSRM" | "COORDINATES_FALLBACK";
 
-type GoogleRoutesResponse = {
+type OsrmRouteResponse = {
+  code?: string;
   routes?: {
-    distanceMeters?: number;
-    duration?: string;
+    distance?: number;
+    duration?: number;
   }[];
 };
 
@@ -41,16 +46,6 @@ function isValidCoordinate(lat: unknown, lng: unknown) {
     longitude >= -180 &&
     longitude <= 180
   );
-}
-
-function parseGoogleDurationSeconds(duration?: string | null) {
-  if (!duration) return null;
-
-  const match = duration.match(/^(\d+(?:\.\d+)?)s$/);
-  if (!match) return null;
-
-  const seconds = Number(match[1]);
-  return Number.isFinite(seconds) ? seconds : null;
 }
 
 function haversineKm(params: {
@@ -119,15 +114,15 @@ function buildLocationAddress(location: {
   return [street, city, location.addressNotes].filter(Boolean).join(" - ");
 }
 
-function selectGoogleRoute(routes?: GoogleRoutesResponse["routes"]) {
+function selectOsrmRoute(routes?: OsrmRouteResponse["routes"]) {
   const validRoutes = (routes ?? []).filter((route) => {
-    const distanceMeters = Number(route.distanceMeters);
-    return Number.isFinite(distanceMeters) && distanceMeters > 0;
+    const distance = Number(route.distance);
+    return Number.isFinite(distance) && distance > 0;
   });
 
   if (!validRoutes.length) return null;
 
-  if (!GOOGLE_ROUTES_USE_LONGEST_ALTERNATIVE) {
+  if (!ROUTING_USE_LONGEST_ALTERNATIVE) {
     return {
       route: validRoutes[0],
       routeIndex: 0,
@@ -140,7 +135,7 @@ function selectGoogleRoute(routes?: GoogleRoutesResponse["routes"]) {
   let longestRouteIndex = 0;
 
   validRoutes.forEach((route, index) => {
-    if (Number(route.distanceMeters) > Number(longestRoute.distanceMeters)) {
+    if (Number(route.distance) > Number(longestRoute.distance)) {
       longestRoute = route;
       longestRouteIndex = index;
     }
@@ -154,93 +149,87 @@ function selectGoogleRoute(routes?: GoogleRoutesResponse["routes"]) {
   };
 }
 
-async function getGoogleRoute(params: {
+// OSRM (Open Source Routing Machine), demo server publico: gratis, sin API
+// key, ruteo real por calles. Si no responde (caido, timeout, sin conexion),
+// calculate() cae solo al fallback Haversine*multiplicador mas abajo.
+async function getOsrmRoute(params: {
   originLat: number;
   originLng: number;
   destinationLat: number;
   destinationLng: number;
 }) {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-
-  if (!apiKey) return null;
-
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GOOGLE_ROUTES_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), OSRM_TIMEOUT_MS);
 
   try {
-    const response = await fetch(GOOGLE_ROUTES_URL, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
-      },
-      body: JSON.stringify({
-        origin: {
-          location: {
-            latLng: {
-              latitude: params.originLat,
-              longitude: params.originLng,
-            },
-          },
-        },
-        destination: {
-          location: {
-            latLng: {
-              latitude: params.destinationLat,
-              longitude: params.destinationLng,
-            },
-          },
-        },
-        travelMode: "DRIVE",
+    const coords =
+      `${params.originLng},${params.originLat};` +
+      `${params.destinationLng},${params.destinationLat}`;
+    const url =
+      `${OSRM_BASE_URL}/route/v1/driving/${coords}` +
+      `?overview=false&alternatives=${ROUTING_USE_LONGEST_ALTERNATIVE ? "true" : "false"}`;
 
-        // Importante: TRAFFIC_UNAWARE evita pedir features Pro de tráfico.
-        // Para cobrar envíos por km real, alcanza con la ruta por calles.
-        routingPreference: "TRAFFIC_UNAWARE",
-
-        // Esto hace que Google devuelva alternativas.
-        // Después nosotros elegimos la de mayor cantidad de metros.
-        computeAlternativeRoutes: GOOGLE_ROUTES_USE_LONGEST_ALTERNATIVE,
-
-        units: "METRIC",
-        languageCode: "es-AR",
-      }),
-    });
+    const response = await fetch(url, { signal: controller.signal });
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      console.error("Google Routes API error:", response.status, text);
+      console.error("OSRM API error:", response.status, text);
       return null;
     }
 
-    const json = (await response.json()) as GoogleRoutesResponse;
-    const selectedRoute = selectGoogleRoute(json.routes);
+    const json = (await response.json()) as OsrmRouteResponse;
 
+    if (json.code !== "Ok") return null;
+
+    const selectedRoute = selectOsrmRoute(json.routes);
     if (!selectedRoute) return null;
 
-    const distanceMeters = Number(selectedRoute.route.distanceMeters);
-
+    const distanceMeters = Number(selectedRoute.route.distance);
     if (!distanceMeters || !Number.isFinite(distanceMeters)) return null;
 
-    const durationSeconds = parseGoogleDurationSeconds(selectedRoute.route.duration);
+    const durationSeconds = Number(selectedRoute.route.duration);
 
     return {
       distanceKm: distanceMeters / 1000,
-      durationMinutes: durationSeconds !== null ? round2(durationSeconds / 60) : null,
+      durationMinutes: Number.isFinite(durationSeconds) ? round2(durationSeconds / 60) : null,
       routeIndex: selectedRoute.routeIndex,
       alternativesCount: selectedRoute.alternativesCount,
       routeStrategy: selectedRoute.routeStrategy,
     };
   } catch (error) {
-    console.error("Google Routes API request failed:", error);
+    console.error("OSRM API request failed:", error);
     return null;
   } finally {
     clearTimeout(timeout);
   }
 }
 
+// El item "envio" se carga en la venta como un Product mas (ver DELIVERY_SKU
+// en sale.types.ts) con precio manual = costo calculado. Si el tenant todavia
+// no tiene ese producto (nadie lo creo a mano), lo creamos la primera vez.
+async function ensureDeliveryProduct() {
+  const scope = tenantScope();
+  const existing = await prisma.product.findFirst({ where: { sku: DELIVERY_SKU, ...scope } });
+  if (existing) return existing;
+
+  return prisma.product.create({
+    data: {
+      name: "Costo de envío",
+      sku: DELIVERY_SKU,
+      type: "SIMPLE",
+      saleUnit: "UNIT",
+      isService: true,
+      price: 0,
+      clientPrice: 0,
+      wholesalePrice: 0,
+      tenantId: currentTenantId(),
+    },
+  });
+}
+
 export const deliveryService = {
+  ensureDeliveryProduct,
+
   async calculate(params: {
     businessLocationId: string;
     clientId: string;
@@ -323,7 +312,7 @@ export const deliveryService = {
     let alternativesCount: number | null = null;
     let routeStrategy: "LONGEST_ALTERNATIVE" | "DEFAULT_ROUTE" | "FALLBACK" = "FALLBACK";
 
-    const googleRoute = await getGoogleRoute({
+    const osrmRoute = await getOsrmRoute({
       originLat,
       originLng,
       destinationLat,
@@ -332,13 +321,13 @@ export const deliveryService = {
 
     let distanceKm: number;
 
-    if (googleRoute) {
-      source = "GOOGLE_ROUTES";
-      distanceKm = googleRoute.distanceKm;
-      durationMinutes = googleRoute.durationMinutes;
-      routeIndex = googleRoute.routeIndex;
-      alternativesCount = googleRoute.alternativesCount;
-      routeStrategy = googleRoute.routeStrategy;
+    if (osrmRoute) {
+      source = "OSRM";
+      distanceKm = osrmRoute.distanceKm;
+      durationMinutes = osrmRoute.durationMinutes;
+      routeIndex = osrmRoute.routeIndex;
+      alternativesCount = osrmRoute.alternativesCount;
+      routeStrategy = osrmRoute.routeStrategy;
     } else {
       const multiplier =
         Number.isFinite(DELIVERY_FALLBACK_MULTIPLIER) && DELIVERY_FALLBACK_MULTIPLIER > 0
@@ -353,9 +342,11 @@ export const deliveryService = {
 
     const originAddress = buildLocationAddress(location);
     const destinationAddress = buildClientAddress(client);
+    const deliveryProduct = await ensureDeliveryProduct();
 
     return {
       distanceKm: roundedDistanceKm,
+      deliveryProduct,
       straightDistanceKm: round2(straightDistanceKm),
       durationMinutes,
       pricePerKm,

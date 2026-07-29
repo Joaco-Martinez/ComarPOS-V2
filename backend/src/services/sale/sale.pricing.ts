@@ -144,8 +144,7 @@ function resolveUnitPrice(
   product: any,
   client: ClientMini,
   priceTypeInput: any,
-  manualPriceInput?: number,
-  priceListOverride?: number
+  manualPriceInput?: number
 ) {
   const isKg = product.saleUnit === SaleUnit.KG;
   const hasManualPrice =
@@ -194,14 +193,6 @@ function resolveUnitPrice(
     return {
       unitPrice: validate(Number(wholesalePrice ?? publicPrice), "mayorista"),
       priceType,
-    };
-  }
-
-  // Si el cliente tiene lista de precios y hay un precio definido para este producto, usarlo.
-  if (priceListOverride !== undefined && Number.isFinite(priceListOverride)) {
-    return {
-      unitPrice: validate(priceListOverride, "lista de precios"),
-      priceType: SaleItemPriceType.PRICE,
     };
   }
 
@@ -280,16 +271,6 @@ async function resolveSaleItems(
 
   const productById = new Map(products.map((product) => [product.id, product]));
 
-  // Precio especial por lista de precios del cliente
-  const priceListPrices = new Map<string, number>();
-  if (client?.priceListId) {
-    const listItems = await prisma.priceListItem.findMany({
-      where: { priceListId: client.priceListId, productId: { in: productIds } },
-      select: { productId: true, price: true },
-    });
-    for (const li of listItems) priceListPrices.set(li.productId, li.price);
-  }
-
   const itemsWithPrices: ResolvedSaleItem[] = [];
 
   for (const item of saleItems) {
@@ -326,8 +307,7 @@ async function resolveSaleItems(
       product,
       client,
       item.priceType,
-      manualPrice,
-      priceListPrices.get(product.id)
+      manualPrice
     );
 
     const unitPrice = resolvedPrice.unitPrice;

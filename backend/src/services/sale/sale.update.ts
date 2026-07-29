@@ -43,7 +43,7 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
         },
       },
       client: true,
-      user: true,
+      user: { select: { id: true, name: true, email: true, role: true } },
       invoiceAfip: true,
     },
   });

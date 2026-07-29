@@ -76,6 +76,18 @@ export const promotionService = {
     return prisma.promotion.update({ where: { id }, data: { isActive: false } });
   },
 
+  async remove(id: string) {
+    const existing = await prisma.promotion.findFirst({
+      where: { id, ...tenantScope() },
+      include: { _count: { select: { sales: true } } },
+    });
+    if (!existing) throw new Error("Promoción no encontrada.");
+    if (existing._count.sales > 0) {
+      throw new Error("No se puede eliminar una promoción ya usada en ventas. Desactivala en su lugar.");
+    }
+    return prisma.promotion.delete({ where: { id } });
+  },
+
   // Given cart context, returns applicable promotions and best discount
   async applyToCart(params: {
     cartTotal: number;

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { auditLogService } from "../services/auditLog.service";
+import { startOfDayAR, endOfDayAR } from "../utils/dateAR";
 
 function wrap(fn: (req: Request, res: Response) => Promise<any>) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -22,8 +23,8 @@ export const auditLogController = {
       userId: q(req, "userId"),
       entity: q(req, "entity"),
       entityId: q(req, "entityId"),
-      from: fromStr ? new Date(fromStr) : undefined,
-      to: toStr ? new Date(toStr) : undefined,
+      from: fromStr ? startOfDayAR(fromStr) : undefined,
+      to: toStr ? endOfDayAR(toStr) : undefined,
       limit: limitStr ? parseInt(limitStr, 10) : undefined,
       offset: offsetStr ? parseInt(offsetStr, 10) : undefined,
     });

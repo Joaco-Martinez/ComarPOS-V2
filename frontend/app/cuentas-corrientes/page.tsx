@@ -62,7 +62,7 @@ export default function CuentasCorrientesPage() {
     try {
       await api.post(`/accounts/clients/${selectedClient.id}/payment`, {
         amount: Number(form.amount),
-        paymentMethod: form.paymentMethod,
+        method: form.paymentMethod,
         description: form.description || undefined,
       });
       showToast('Pago registrado');
@@ -108,9 +108,9 @@ export default function CuentasCorrientesPage() {
         <div style={{ position: 'fixed', top: 70, right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
       )}
 
-      <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 110px)' }}>
+      <div className="grid-responsive cta-cte-layout" style={{ ['--gtc' as any]: '280px 1fr', gap: 16 }}>
         {/* Clients list */}
-        <div style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
             <input value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Buscar cliente..." style={{ paddingLeft: 30, fontSize: 13 }} />
@@ -126,8 +126,8 @@ export default function CuentasCorrientesPage() {
                   key={c.id}
                   onClick={() => selectClient(c)}
                   style={{
-                    background: selectedClient?.id === c.id ? 'rgba(37,99,235,0.12)' : 'var(--surface)',
-                    border: `1px solid ${selectedClient?.id === c.id ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
+                    background: selectedClient?.id === c.id ? 'rgba(13,89,231,0.12)' : 'var(--surface)',
+                    border: `1px solid ${selectedClient?.id === c.id ? 'rgba(13,89,231,0.3)' : 'var(--border)'}`,
                     borderRadius: 7, padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
                   }}
                 >
@@ -153,7 +153,7 @@ export default function CuentasCorrientesPage() {
             </div>
           ) : (
             <>
-              <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: 15 }}>{clientName(selectedClient)}</div>
                   <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
@@ -165,7 +165,7 @@ export default function CuentasCorrientesPage() {
                     )}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => { setAdjForm({ amount: '', type: 'POSITIVE', description: '' }); setModal('adjustment'); }} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
                     <Plus size={13} /> Ajuste
                   </button>

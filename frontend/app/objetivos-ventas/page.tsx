@@ -8,37 +8,48 @@ import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
 import { Target, TrendingUp, Plus, X, Trash2, Edit2 } from 'lucide-react';
 
+type Metric = 'REVENUE' | 'GROSS_PROFIT' | 'UNITS_SOLD' | 'SALES_COUNT';
+
 type Goal = {
   id: string;
-  name: string;
+  title: string;
+  description?: string | null;
+  metric: Metric;
   targetAmount: number;
-  startDate: string;
-  endDate: string;
-  type?: string;
-  userId?: string;
-  locationId?: string;
+  periodStart: string;
+  periodEnd: string;
+  isActive: boolean;
   createdAt: string;
 };
 
 type Progress = {
-  goal?: any;
-  current: number;
-  percentage: number;
+  goal: Goal;
+  currentValue: number;
+  progressPercent: number;
   remaining: number;
-  daysLeft: number;
+  timeProgressPercent: number;
+  onTrack: boolean;
+};
+
+const metricLabel: Record<Metric, string> = {
+  REVENUE: 'Ingresos',
+  GROSS_PROFIT: 'Ganancia bruta',
+  UNITS_SOLD: 'Unidades vendidas',
+  SALES_COUNT: 'Cantidad de ventas',
 };
 
 const emptyForm = () => ({
-  name: '',
+  title: '',
   targetAmount: '',
-  startDate: firstDayOfMonthAR(),
-  endDate: todayInputAR(),
-  type: '',
+  periodStart: firstDayOfMonthAR(),
+  periodEnd: todayInputAR(),
+  metric: 'REVENUE' as Metric,
 });
 
-function goalStatus(g: Goal): 'CUMPLIDO' | 'EN_CURSO' | 'VENCIDO' {
-  const now = new Date().toISOString().slice(0, 10);
-  if (g.endDate < now) return 'VENCIDO';
+function goalStatus(g: Goal, pct: number): 'CUMPLIDO' | 'EN_CURSO' | 'VENCIDO' {
+  if (pct >= 100) return 'CUMPLIDO';
+  const now = todayInputAR();
+  if (g.periodEnd < now) return 'VENCIDO';
   return 'EN_CURSO';
 }
 
@@ -49,8 +60,7 @@ const statusBadge: Record<string, string> = {
 };
 
 export default function ObjetivosVentasPage() {
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [progressMap, setProgressMap] = useState<Record<string, Progress>>({});
+  const [progresses, setProgresses] = useState<Progress[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [editing, setEditing] = useState<Goal | null>(null);
@@ -62,16 +72,7 @@ export default function ObjetivosVentasPage() {
     setLoading(true);
     try {
       const { data } = await api.get('/sales-goals');
-      const list = normalizeArray<Goal>(data);
-      setGoals(list);
-      const progresses = await Promise.allSettled(
-        list.map((g) => api.get(`/sales-goals/${g.id}/progress`).then((r) => ({ id: g.id, data: r.data })))
-      );
-      const map: Record<string, Progress> = {};
-      progresses.forEach((r) => {
-        if (r.status === 'fulfilled') map[r.value.id] = r.value.data;
-      });
-      setProgressMap(map);
+      setProgresses(normalizeArray<Progress>(data));
     } finally {
       setLoading(false);
     }
@@ -84,15 +85,27 @@ export default function ObjetivosVentasPage() {
   const openCreate = () => { setEditing(null); setForm(emptyForm()); setModal('create'); };
   const openEdit = (g: Goal) => {
     setEditing(g);
-    setForm({ name: g.name, targetAmount: String(g.targetAmount), startDate: g.startDate?.slice(0, 10) ?? '', endDate: g.endDate?.slice(0, 10) ?? '', type: g.type ?? '' });
+    setForm({
+      title: g.title,
+      targetAmount: String(g.targetAmount),
+      periodStart: g.periodStart?.slice(0, 10) ?? '',
+      periodEnd: g.periodEnd?.slice(0, 10) ?? '',
+      metric: g.metric,
+    });
     setModal('edit');
   };
 
   const save = async () => {
-    if (!form.name || !form.targetAmount) return;
+    if (!form.title || !form.targetAmount) return;
     setSaving(true);
     try {
-      const payload = { name: form.name, targetAmount: Number(form.targetAmount), startDate: form.startDate, endDate: form.endDate, type: form.type || undefined };
+      const payload = {
+        title: form.title,
+        targetAmount: Number(form.targetAmount),
+        periodStart: form.periodStart,
+        periodEnd: form.periodEnd,
+        metric: form.metric,
+      };
       if (modal === 'edit' && editing) {
         await api.put(`/sales-goals/${editing.id}`, payload);
         showToast('Objetivo actualizado');
@@ -116,7 +129,7 @@ export default function ObjetivosVentasPage() {
     } catch { showToast('Error al eliminar'); }
   };
 
-  const activeGoals = goals.filter((g) => goalStatus(g) === 'EN_CURSO');
+  const activeProgresses = progresses.filter((p) => goalStatus(p.goal, p.progressPercent) === 'EN_CURSO');
 
   return (
     <AppLayout
@@ -133,24 +146,21 @@ export default function ObjetivosVentasPage() {
       )}
 
       {/* Active goals cards */}
-      {activeGoals.length > 0 && (
+      {activeProgresses.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <div className="section-title" style={{ marginBottom: 10 }}>Objetivos activos</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px,1fr))', gap: 12 }}>
-            {activeGoals.map((g) => {
-              const prog = progressMap[g.id];
-              const pct = Math.min(num(prog?.percentage), 100);
+            {activeProgresses.map((p) => {
+              const g = p.goal;
+              const pct = Math.min(num(p.progressPercent), 100);
               return (
                 <div key={g.id} className="card" style={{ padding: '16px 18px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <Target size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                    <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{g.name}</span>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{g.title}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)', marginBottom: 10 }}>
-                    {fmtDate(g.startDate)} → {fmtDate(g.endDate)}
-                    {prog?.daysLeft != null && prog.daysLeft >= 0 && (
-                      <span style={{ marginLeft: 8, color: 'var(--accent2)' }}>· {prog.daysLeft} días restantes</span>
-                    )}
+                    {fmtDate(g.periodStart)} → {fmtDate(g.periodEnd)}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
                     <span style={{ color: 'var(--text3)' }}>Progreso</span>
@@ -160,9 +170,9 @@ export default function ObjetivosVentasPage() {
                     <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? 'var(--success)' : 'var(--accent)', borderRadius: 3, transition: 'width 0.4s ease' }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span style={{ color: 'var(--text3)' }}>{prog ? fmtMoney(prog.current) : '—'} / {fmtMoney(g.targetAmount)}</span>
-                    {prog?.remaining != null && prog.remaining > 0 && (
-                      <span style={{ color: 'var(--text3)' }}>Resta {fmtMoney(prog.remaining)}</span>
+                    <span style={{ color: 'var(--text3)' }}>{fmtMoney(p.currentValue)} / {fmtMoney(g.targetAmount)}</span>
+                    {p.remaining > 0 && (
+                      <span style={{ color: 'var(--text3)' }}>Resta {fmtMoney(p.remaining)}</span>
                     )}
                   </div>
                 </div>
@@ -176,7 +186,7 @@ export default function ObjetivosVentasPage() {
       <div className="card">
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>
-        ) : goals.length === 0 ? (
+        ) : progresses.length === 0 ? (
           <div className="empty-state"><TrendingUp size={32} /><p>Sin objetivos registrados</p></div>
         ) : (
           <div className="table-wrap">
@@ -184,7 +194,7 @@ export default function ObjetivosVentasPage() {
               <thead>
                 <tr>
                   <th>Nombre</th>
-                  <th>Tipo</th>
+                  <th>Métrica</th>
                   <th>Período</th>
                   <th style={{ textAlign: 'right' }}>Meta</th>
                   <th style={{ textAlign: 'right' }}>Progreso</th>
@@ -193,17 +203,17 @@ export default function ObjetivosVentasPage() {
                 </tr>
               </thead>
               <tbody>
-                {goals.map((g) => {
-                  const prog = progressMap[g.id];
-                  const pct = Math.min(num(prog?.percentage), 100);
-                  const status = pct >= 100 ? 'CUMPLIDO' : goalStatus(g);
+                {progresses.map((p) => {
+                  const g = p.goal;
+                  const pct = Math.min(num(p.progressPercent), 100);
+                  const status = goalStatus(g, pct);
                   return (
                     <tr key={g.id}>
-                      <td style={{ fontWeight: 600, fontSize: 13 }}>{g.name}</td>
-                      <td style={{ fontSize: 12, color: 'var(--text3)' }}>{g.type ?? '—'}</td>
-                      <td style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{fmtDate(g.startDate)} → {fmtDate(g.endDate)}</td>
+                      <td style={{ fontWeight: 600, fontSize: 13 }}>{g.title}</td>
+                      <td style={{ fontSize: 12, color: 'var(--text3)' }}>{metricLabel[g.metric]}</td>
+                      <td style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{fmtDate(g.periodStart)} → {fmtDate(g.periodEnd)}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700 }}>{fmtMoney(g.targetAmount)}</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: pct >= 100 ? 'var(--success)' : 'var(--accent)' }}>{prog ? `${pct.toFixed(1)}%` : '—'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: pct >= 100 ? 'var(--success)' : 'var(--accent)' }}>{pct.toFixed(1)}%</td>
                       <td><span className={`badge ${statusBadge[status]}`}>{status.replace('_', ' ')}</span></td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
@@ -230,7 +240,7 @@ export default function ObjetivosVentasPage() {
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Nombre *</label>
-                <input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Ej: Meta mensual enero" autoFocus />
+                <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} placeholder="Ej: Meta mensual enero" autoFocus />
               </div>
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -238,24 +248,28 @@ export default function ObjetivosVentasPage() {
                   <input type="number" min="0" step="any" value={form.targetAmount} onChange={(e) => setForm((p) => ({ ...p, targetAmount: e.target.value }))} placeholder="0" />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Tipo</label>
-                  <input value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))} placeholder="Ej: MENSUAL" />
+                  <label className="form-label">Métrica</label>
+                  <select value={form.metric} onChange={(e) => setForm((p) => ({ ...p, metric: e.target.value as Metric }))}>
+                    {Object.entries(metricLabel).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Fecha inicio</label>
-                  <input type="date" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
+                  <input type="date" value={form.periodStart} onChange={(e) => setForm((p) => ({ ...p, periodStart: e.target.value }))} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Fecha fin</label>
-                  <input type="date" value={form.endDate} onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))} />
+                  <input type="date" value={form.periodEnd} onChange={(e) => setForm((p) => ({ ...p, periodEnd: e.target.value }))} />
                 </div>
               </div>
             </div>
             <div className="modal-footer">
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
-              <button onClick={save} disabled={saving || !form.name || !form.targetAmount} className="btn btn-primary btn-sm">
+              <button onClick={save} disabled={saving || !form.title || !form.targetAmount} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Guardar'}
               </button>
             </div>

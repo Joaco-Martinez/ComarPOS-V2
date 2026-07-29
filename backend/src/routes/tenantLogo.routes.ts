@@ -6,22 +6,24 @@ import { authMiddleware, requireRole } from "../middleware/auth";
 
 const router = Router();
 
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg", "image/svg+xml"];
-const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".svg"];
+// SVG excluido a propósito: puede llevar <script> embebido (XSS) si se sirve
+// directo al navegador.
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 
 const upload = multer({
   dest: "uploads/",
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      const err: any = new Error("Formato de imagen inválido. Usá JPG, PNG, WEBP o SVG.");
+      const err: any = new Error("Formato de imagen inválido. Usá JPG, PNG o WEBP.");
       err.status = 400;
       return cb(err);
     }
 
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      const err: any = new Error("Extensión de imagen inválida. Usá JPG, PNG, WEBP o SVG.");
+      const err: any = new Error("Extensión de imagen inválida. Usá JPG, PNG o WEBP.");
       err.status = 400;
       return cb(err);
     }

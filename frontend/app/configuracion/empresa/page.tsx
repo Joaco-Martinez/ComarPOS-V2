@@ -8,7 +8,7 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { Building2, UploadCloud, Trash2, ImageOff } from 'lucide-react';
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/svg+xml'];
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
 const MAX_SIZE = 5 * 1024 * 1024;
 
 export default function EmpresaPage() {
@@ -43,7 +43,7 @@ export default function EmpresaPage() {
 
   const validateFile = (file: File) => {
     if (!ALLOWED_TYPES.includes(file.type)) {
-      showToast('Formato inválido. Usá JPG, PNG, WEBP o SVG.');
+      showToast('Formato inválido. Usá JPG, PNG o WEBP.');
       return false;
     }
     if (file.size > MAX_SIZE) {
@@ -106,7 +106,7 @@ export default function EmpresaPage() {
       <div className="card" style={{ padding: 22, maxWidth: 560 }}>
         <h2 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>Logo de la empresa</h2>
         <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 18 }}>
-          Se muestra en el panel y se incluye en cotizaciones y facturas. JPG, PNG, WEBP o SVG, máx. 5MB.
+          Se muestra en el panel y se incluye en cotizaciones y facturas. JPG, PNG o WEBP, máx. 5MB.
         </p>
 
         {loading ? (
@@ -143,14 +143,14 @@ export default function EmpresaPage() {
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 gap: 8, padding: '28px 16px', borderRadius: 8, cursor: uploading ? 'default' : 'pointer',
                 border: `1px dashed ${dragOver ? 'var(--accent)' : 'var(--border2)'}`,
-                background: dragOver ? 'rgba(37,99,235,0.06)' : 'var(--surface2)',
+                background: dragOver ? 'rgba(13,89,231,0.06)' : 'var(--surface2)',
                 transition: 'all 0.12s',
               }}
             >
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/jpg,image/svg+xml"
+                accept="image/jpeg,image/png,image/webp,image/jpg"
                 style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ''; }}
               />
@@ -164,7 +164,7 @@ export default function EmpresaPage() {
                 <>
                   <UploadCloud size={22} style={{ color: 'var(--text3)' }} />
                   <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>Arrastrá una imagen o hacé clic para seleccionar</span>
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>JPG, PNG, WEBP o SVG · máx. 5MB</span>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>JPG, PNG o WEBP · máx. 5MB</span>
                 </>
               )}
             </div>

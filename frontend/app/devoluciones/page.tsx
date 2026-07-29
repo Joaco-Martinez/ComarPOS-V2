@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import type { Return, Sale } from '@/types';
-import { clientName, fmtDate, fmtMoney, normalizeArray } from '@/lib/helpers';
+import { fmtDate, fmtMoney, normalizeArray } from '@/lib/helpers';
+import { toDateInputAR } from '@/lib/dateAR';
 import { RotateCcw, Eye, X, RefreshCcw, Plus, Search } from 'lucide-react';
 
 const REFUND_METHODS = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'QR', 'CREDITO_CUENTA'];
@@ -48,7 +49,7 @@ export default function DevolucionesPage() {
       const from = new Date();
       from.setDate(from.getDate() - 60);
       const { data } = await api.get('/sales', {
-        params: { status: 'COMPLETED', from: from.toISOString().slice(0, 10), limit: 200 },
+        params: { status: 'COMPLETED', from: toDateInputAR(from), limit: 200 },
       });
       setSales(normalizeArray<Sale>(data));
     } catch { setSales([]); }
@@ -110,8 +111,8 @@ export default function DevolucionesPage() {
                 {returns.map((r) => (
                   <tr key={r.id}>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{fmtDate(r.createdAt)}</td>
-                    <td style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>{clientName(r.client)}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text2)' }}>{r.reason ?? r.notes ?? '—'}</td>
+                    <td style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>{r.client ? `${r.client.nombre} ${r.client.apellido}` : 'Consumidor final'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text2)' }}>{r.reason ?? '—'}</td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{r.items?.length ?? '—'}</td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(r.total)}</td>
                     <td>
@@ -150,7 +151,7 @@ export default function DevolucionesPage() {
                         key={s.id}
                         onClick={() => setPickedSale(s)}
                         style={{
-                          width: '100%', textAlign: 'left', padding: '9px 12px', background: pickedSale?.id === s.id ? 'rgba(37,99,235,0.12)' : 'transparent',
+                          width: '100%', textAlign: 'left', padding: '9px 12px', background: pickedSale?.id === s.id ? 'rgba(13,89,231,0.12)' : 'transparent',
                           borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           border: 'none',
                         }}
@@ -215,11 +216,10 @@ export default function DevolucionesPage() {
               <button onClick={() => setSelected(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="grid-responsive" style={{ gap: 10 }}>
                 {[
-                  ['Cliente', clientName(selected.client)],
-                  ['Motivo', selected.reason ?? selected.notes ?? '—'],
-                  ['Notas', selected.notes ?? '—'],
+                  ['Cliente', selected.client ? `${selected.client.nombre} ${selected.client.apellido}` : 'Consumidor final'],
+                  ['Motivo', selected.reason ?? '—'],
                   ['Total devuelto', fmtMoney(selected.total)],
                 ].map(([k, v]) => (
                   <div key={k}><div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>{k}</div><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{v}</div></div>

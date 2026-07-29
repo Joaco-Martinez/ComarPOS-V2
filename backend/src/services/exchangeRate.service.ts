@@ -22,10 +22,10 @@ export const exchangeRateService = {
     });
   },
 
-  async getHistory(currency = "USD", from?: Date, to?: Date) {
+  async getHistory(currency?: string, from?: Date, to?: Date) {
     return prisma.exchangeRate.findMany({
       where: {
-        currency: currency.toUpperCase(),
+        ...(currency ? { currency: currency.toUpperCase() } : {}),
         ...tenantScope(),
         ...(from || to
           ? { date: { ...(from && { gte: from }), ...(to && { lte: to }) } }
@@ -33,6 +33,12 @@ export const exchangeRateService = {
       },
       orderBy: { date: "desc" },
     });
+  },
+
+  async remove(id: string) {
+    const existing = await prisma.exchangeRate.findFirst({ where: { id, ...tenantScope() } });
+    if (!existing) throw new Error("Tipo de cambio no encontrado.");
+    return prisma.exchangeRate.delete({ where: { id } });
   },
 
   async getAllCurrencies() {

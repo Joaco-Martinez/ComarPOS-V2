@@ -5,35 +5,58 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import { fmtDate, fmtMoney, normalizeArray } from '@/lib/helpers';
-import { todayInputAR } from '@/lib/dateAR';
-import { RefreshCw, DollarSign, Plus, X, Trash2, Edit2, Play } from 'lucide-react';
+import { todayInputAR, toDateInputAR } from '@/lib/dateAR';
+import { DollarSign, Plus, X, Trash2, Edit2, Play } from 'lucide-react';
+
+const CATEGORIES: { value: string; label: string }[] = [
+  { value: 'VENTA',            label: 'Venta' },
+  { value: 'COBRANZA',         label: 'Cobranza' },
+  { value: 'CompraMercaderia', label: 'Compra mercadería' },
+  { value: 'AlquilerL1',       label: 'Alquiler local 1' },
+  { value: 'AlquilerF1',       label: 'Alquiler frío 1' },
+  { value: 'Alarma',           label: 'Alarma' },
+  { value: 'Sueldos',          label: 'Sueldos' },
+  { value: 'MateriaPrima',     label: 'Materia prima' },
+  { value: 'Impuestos',        label: 'Impuestos' },
+  { value: 'VEP',              label: 'VEP' },
+  { value: 'Contadora',        label: 'Contadora' },
+  { value: 'Arca',             label: 'ARCA' },
+  { value: 'Eenvios',          label: 'E-envíos' },
+  { value: 'Publicidad',       label: 'Publicidad' },
+  { value: 'Otro',             label: 'Otro' },
+];
+const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.value, c.label]));
 
 type RecurringExpense = {
   id: string;
   name: string;
   amount: number;
   category: string;
-  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
-  nextDueDate: string;
-  description?: string;
+  dayOfMonth: number;
+  lastCreated?: string | null;
+  notes?: string | null;
   isActive?: boolean;
-};
-
-const FREQ_LABEL: Record<string, string> = {
-  DAILY: 'Diario',
-  WEEKLY: 'Semanal',
-  MONTHLY: 'Mensual',
-  YEARLY: 'Anual',
 };
 
 const emptyForm = () => ({
   name: '',
   amount: '',
-  category: '',
-  frequency: 'MONTHLY' as RecurringExpense['frequency'],
-  nextDueDate: todayInputAR(),
-  description: '',
+  category: 'Otro',
+  dayOfMonth: '1',
+  notes: '',
 });
+
+// Recurrencia es siempre mensual (dayOfMonth). Está vencido si hoy ya pasó
+// el día del mes y todavía no se generó el gasto de este mes.
+function isOverdue(e: RecurringExpense): boolean {
+  if (e.isActive === false) return false;
+  const todayStr = todayInputAR();
+  const todayDay = Number(todayStr.slice(8, 10));
+  if (todayDay < e.dayOfMonth) return false;
+  if (!e.lastCreated) return true;
+  const lastStr = toDateInputAR(e.lastCreated);
+  return lastStr.slice(0, 7) !== todayStr.slice(0, 7);
+}
 
 export default function GastosRecurrentesPage() {
   const [expenses, setExpenses] = useState<RecurringExpense[]>([]);
@@ -60,7 +83,7 @@ export default function GastosRecurrentesPage() {
   const openCreate = () => { setEditing(null); setForm(emptyForm()); setModal('create'); };
   const openEdit = (e: RecurringExpense) => {
     setEditing(e);
-    setForm({ name: e.name, amount: String(e.amount), category: e.category, frequency: e.frequency, nextDueDate: e.nextDueDate?.slice(0, 10) ?? todayInputAR(), description: e.description ?? '' });
+    setForm({ name: e.name, amount: String(e.amount), category: e.category, dayOfMonth: String(e.dayOfMonth), notes: e.notes ?? '' });
     setModal('edit');
   };
 
@@ -68,7 +91,13 @@ export default function GastosRecurrentesPage() {
     if (!form.name || !form.amount || !form.category) return;
     setSaving(true);
     try {
-      const payload = { name: form.name, amount: Number(form.amount), category: form.category, frequency: form.frequency, nextDueDate: form.nextDueDate, description: form.description || undefined };
+      const payload = {
+        name: form.name,
+        amount: Number(form.amount),
+        category: form.category,
+        dayOfMonth: Number(form.dayOfMonth),
+        notes: form.notes || undefined,
+      };
       if (modal === 'edit' && editing) {
         await api.put(`/recurring-expenses/${editing.id}`, payload);
         showToast('Gasto actualizado');
@@ -96,7 +125,7 @@ export default function GastosRecurrentesPage() {
     setProcessing(true);
     try {
       const { data } = await api.post('/recurring-expenses/process');
-      const count = data?.processed ?? data?.count ?? 0;
+      const count = data?.processed ?? 0;
       showToast(`${count} gasto(s) procesado(s)`);
       load();
     } catch (err: any) {
@@ -104,13 +133,12 @@ export default function GastosRecurrentesPage() {
     } finally { setProcessing(false); }
   };
 
-  const today = todayInputAR();
-  const overdue = expenses.filter((e) => e.nextDueDate?.slice(0, 10) <= today && e.isActive !== false);
+  const overdue = expenses.filter(isOverdue);
 
   return (
     <AppLayout
       title="Gastos Recurrentes"
-      subtitle="Gastos periódicos automáticos"
+      subtitle="Gastos mensuales automáticos"
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
           {overdue.length > 0 && (
@@ -141,29 +169,29 @@ export default function GastosRecurrentesPage() {
                 <tr>
                   <th>Nombre</th>
                   <th>Categoría</th>
-                  <th>Frecuencia</th>
+                  <th>Día del mes</th>
                   <th style={{ textAlign: 'right' }}>Monto</th>
-                  <th>Próximo vencimiento</th>
+                  <th>Último generado</th>
                   <th>Estado</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {expenses.map((e) => {
-                  const isOverdue = e.nextDueDate?.slice(0, 10) <= today && e.isActive !== false;
+                  const overdueNow = isOverdue(e);
                   return (
                     <tr key={e.id}>
                       <td style={{ fontWeight: 600, fontSize: 13 }}>
                         {e.name}
-                        {e.description && <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400 }}>{e.description}</div>}
+                        {e.notes && <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400 }}>{e.notes}</div>}
                       </td>
-                      <td style={{ fontSize: 12 }}>{e.category}</td>
-                      <td style={{ fontSize: 12 }}>{FREQ_LABEL[e.frequency] ?? e.frequency}</td>
+                      <td style={{ fontSize: 12 }}>{CATEGORY_LABEL[e.category] ?? e.category}</td>
+                      <td style={{ fontSize: 12, fontFamily: 'var(--mono)' }}>
+                        Día {e.dayOfMonth}
+                        {overdueNow && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: 9 }}>VENCIDO</span>}
+                      </td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(e.amount)}</td>
-                      <td style={{ fontSize: 12, fontFamily: 'var(--mono)', color: isOverdue ? 'var(--danger)' : 'var(--text3)' }}>
-                        {fmtDate(e.nextDueDate)}
-                        {isOverdue && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: 9 }}>VENCIDO</span>}
-                      </td>
+                      <td style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{e.lastCreated ? fmtDate(e.lastCreated) : '—'}</td>
                       <td>
                         <span className={`badge ${e.isActive === false ? 'badge-red' : 'badge-green'}`}>
                           {e.isActive === false ? 'Inactivo' : 'Activo'}
@@ -203,29 +231,27 @@ export default function GastosRecurrentesPage() {
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Categoría *</label>
-                  <input value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} placeholder="Ej: Alquiler" />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Frecuencia</label>
-                  <select value={form.frequency} onChange={(e) => setForm((p) => ({ ...p, frequency: e.target.value as any }))}>
-                    {Object.entries(FREQ_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  <select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}>
+                    {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Próximo vencimiento</label>
-                  <input type="date" value={form.nextDueDate} onChange={(e) => setForm((p) => ({ ...p, nextDueDate: e.target.value }))} />
                 </div>
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Descripción</label>
-                <input value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} placeholder="Opcional" />
+                <label className="form-label">Día del mes (1-31) *</label>
+                <input type="number" min="1" max="31" value={form.dayOfMonth} onChange={(e) => setForm((p) => ({ ...p, dayOfMonth: e.target.value }))} placeholder="1" />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Notas</label>
+                <input value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Opcional" />
               </div>
             </div>
             <div className="modal-footer">
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
-              <button onClick={save} disabled={saving || !form.name || !form.amount || !form.category} className="btn btn-primary btn-sm">
+              <button
+                onClick={save}
+                disabled={saving || !form.name || !form.amount || !form.category || !form.dayOfMonth || Number(form.dayOfMonth) < 1 || Number(form.dayOfMonth) > 31}
+                className="btn btn-primary btn-sm"
+              >
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Guardar'}
               </button>
             </div>

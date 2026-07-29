@@ -11,6 +11,7 @@ import {
 } from "./remitoPdf.service";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import { startOfDayAR, endOfDayAR } from "../utils/dateAR";
 
 type CreateRemitoFromSaleInput = {
   saleId: string;
@@ -162,7 +163,7 @@ export const remitoService = {
       where: { id: input.saleId, ...tenantScope() },
       include: {
         client: true,
-        user: true,
+        user: { select: { id: true, name: true, email: true, role: true } },
         businessLocation: true,
         invoiceAfip: true,
         remitos: {
@@ -372,7 +373,7 @@ export const remitoService = {
       include: {
         sale: true,
         client: true,
-        user: true,
+        user: { select: { id: true, name: true, email: true, role: true } },
         businessLocation: true,
         items: {
           include: {
@@ -426,11 +427,11 @@ export const remitoService = {
       where.issueDate = {};
 
       if (params.from) {
-        where.issueDate.gte = new Date(params.from);
+        where.issueDate.gte = startOfDayAR(params.from);
       }
 
       if (params.to) {
-        where.issueDate.lte = new Date(params.to);
+        where.issueDate.lte = endOfDayAR(params.to);
       }
     }
 
@@ -442,7 +443,7 @@ export const remitoService = {
       include: {
         sale: true,
         client: true,
-        user: true,
+        user: { select: { id: true, name: true, email: true, role: true } },
         businessLocation: true,
         items: true,
       },
@@ -455,7 +456,7 @@ export const remitoService = {
       include: {
         sale: true,
         client: true,
-        user: true,
+        user: { select: { id: true, name: true, email: true, role: true } },
         businessLocation: true,
         arcaConfig: true,
         remitoCaiConfig: true,
@@ -481,7 +482,7 @@ async regeneratePdf(id: string) {
     include: {
       sale: true,
       client: true,
-      user: true,
+      user: { select: { id: true, name: true, email: true, role: true } },
       businessLocation: true,
       items: true,
     },
@@ -519,7 +520,7 @@ async regeneratePdf(id: string) {
       include: {
         sale: true,
         client: true,
-        user: true,
+        user: { select: { id: true, name: true, email: true, role: true } },
         businessLocation: true,
         items: true,
       },
@@ -547,7 +548,7 @@ async regeneratePdf(id: string) {
       include: {
         sale: true,
         client: true,
-        user: true,
+        user: { select: { id: true, name: true, email: true, role: true } },
         businessLocation: true,
         items: true,
       },

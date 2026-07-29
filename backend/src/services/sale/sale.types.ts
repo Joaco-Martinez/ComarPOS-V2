@@ -70,7 +70,6 @@ export type CreateSaleInput = {
 
 export type ClientMini = {
   category: CategoryClient;
-  priceListId?: string | null;
 } | null;
 
 export type ResolvedSaleItem = {
@@ -111,6 +110,8 @@ export type GetSalesParams = {
   limit?: number;
   search?: string;
   status?: SaleStatus | string;
+  from?: string;
+  to?: string;
 };
 
 export const DELIVERY_SKU = "ENVIO-FLETE2";

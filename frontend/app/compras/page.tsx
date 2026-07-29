@@ -16,7 +16,7 @@ export default function ComprasPage() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<'create' | 'detail' | null>(null);
   const [selected, setSelected] = useState<Purchase | null>(null);
-  const [form, setForm] = useState({ supplierId: '', date: todayInputAR(), notes: '' });
+  const [form, setForm] = useState({ supplierId: '', date: todayInputAR(), notes: '', to: 'DEPOSITO' as 'LOCAL' | 'DEPOSITO', paymentMethod: 'TRANSFERENCIA' });
   const [items, setItems] = useState<{ productId: string; quantity: string; quantityKg: string; unitCost: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
@@ -51,7 +51,9 @@ export default function ComprasPage() {
       await api.post('/purchases', {
         supplierId: form.supplierId || undefined,
         date: form.date,
-        notes: form.notes || undefined,
+        description: form.notes || undefined,
+        to: form.to,
+        paymentMethod: form.paymentMethod,
         items: items.filter((i) => i.productId).map((i) => {
           const p = products.find((x) => x.id === i.productId);
           return {
@@ -65,7 +67,7 @@ export default function ComprasPage() {
       showToast('Compra registrada');
       setModal(null);
       setItems([]);
-      setForm({ supplierId: '', date: todayInputAR(), notes: '' });
+      setForm({ supplierId: '', date: todayInputAR(), notes: '', to: 'DEPOSITO', paymentMethod: 'TRANSFERENCIA' });
       load();
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? 'Error al registrar');
@@ -80,14 +82,14 @@ export default function ComprasPage() {
     );
   }, [purchases, search]);
 
-  const totalMonth = purchases.reduce((a, p) => a + num(p.total), 0);
+  const totalMonth = purchases.reduce((a, p) => a + num(p.totalAmount), 0);
 
   return (
     <AppLayout
       title="Compras"
       subtitle={`${purchases.length} registros`}
       actions={
-        <button onClick={() => { setForm({ supplierId: '', date: todayInputAR(), notes: '' }); setItems([{ productId: '', quantity: '1', quantityKg: '', unitCost: '' }]); setModal('create'); }}
+        <button onClick={() => { setForm({ supplierId: '', date: todayInputAR(), notes: '', to: 'DEPOSITO', paymentMethod: 'TRANSFERENCIA' }); setItems([{ productId: '', quantity: '1', quantityKg: '', unitCost: '' }]); setModal('create'); }}
           className="btn btn-primary btn-sm" style={{ gap: 6 }}>
           <Plus size={13} /> Registrar compra
         </button>
@@ -121,7 +123,8 @@ export default function ComprasPage() {
         ) : filtered.length === 0 ? (
           <div className="empty-state"><ShoppingBag size={32} /><p>Sin compras registradas</p></div>
         ) : (
-          <div className="table-wrap">
+          <>
+          <div className="table-wrap desktop-only-table">
             <table>
               <thead>
                 <tr><th>Fecha</th><th>Proveedor</th><th>Productos</th><th>Notas</th><th style={{ textAlign: 'right' }}>Total</th><th></th></tr>
@@ -132,8 +135,8 @@ export default function ComprasPage() {
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{fmtDate(p.date)}</td>
                     <td style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>{p.supplier?.name ?? 'Sin proveedor'}</td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{p.items?.length ?? '—'}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text3)' }}>{p.notes ?? '—'}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(p.total)}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text3)' }}>{p.description ?? '—'}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(p.totalAmount)}</td>
                     <td>
                       <button onClick={() => { setSelected(p); setModal('detail'); }} className="btn btn-ghost btn-xs"><Eye size={12} /></button>
                     </td>
@@ -142,6 +145,23 @@ export default function ComprasPage() {
               </tbody>
             </table>
           </div>
+
+          <div className="mobile-card-list" style={{ padding: 10 }}>
+            {filtered.map((p) => (
+              <div className="mobile-card" key={p.id} onClick={() => { setSelected(p); setModal('detail'); }}>
+                <div className="mobile-card-head">
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text3)' }}>{fmtDate(p.date)}</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(p.totalAmount)}</span>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p.supplier?.name ?? 'Sin proveedor'}</div>
+                <div className="mobile-card-row">
+                  <span>{p.items?.length ?? 0} productos</span>
+                  <span>{p.description ?? '—'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </div>
 
@@ -166,36 +186,56 @@ export default function ComprasPage() {
                   <input type="date" value={form.date} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))} />
                 </div>
               </div>
+              <div className="form-row">
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Destino del stock</label>
+                  <select value={form.to} onChange={(e) => setForm((p) => ({ ...p, to: e.target.value as 'LOCAL' | 'DEPOSITO' }))}>
+                    <option value="DEPOSITO">Depósito</option>
+                    <option value="LOCAL">Local</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Forma de pago</label>
+                  <select value={form.paymentMethod} onChange={(e) => setForm((p) => ({ ...p, paymentMethod: e.target.value }))}>
+                    <option value="TRANSFERENCIA">Transferencia</option>
+                    <option value="EFECTIVO">Efectivo (sale de la caja abierta)</option>
+                    <option value="TARJETA">Tarjeta</option>
+                    <option value="CUENTA_CORRIENTE">Cta. Cte. proveedor</option>
+                  </select>
+                </div>
+              </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Notas</label>
                 <input value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Opcional" />
               </div>
 
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Productos</div>
-              {items.map((item, idx) => {
-                const prod = products.find((x) => x.id === item.productId);
-                return (
-                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, alignItems: 'end' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Producto</label>
-                      <select value={item.productId} onChange={(e) => updateItem(idx, 'productId', e.target.value)}>
-                        <option value="">Seleccionar...</option>
-                        {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+              <div className="line-item-scroll">
+                {items.map((item, idx) => {
+                  const prod = products.find((x) => x.id === item.productId);
+                  return (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 8 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Producto</label>
+                        <select value={item.productId} onChange={(e) => updateItem(idx, 'productId', e.target.value)}>
+                          <option value="">Seleccionar...</option>
+                          {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">{prod?.saleUnit === 'KG' ? 'Kilos' : 'Cantidad'}</label>
+                        <input type="number" min="0" step="any" value={prod?.saleUnit === 'KG' ? item.quantityKg : item.quantity}
+                          onChange={(e) => updateItem(idx, prod?.saleUnit === 'KG' ? 'quantityKg' : 'quantity', e.target.value)} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Costo unitario</label>
+                        <input type="number" min="0" step="any" value={item.unitCost} onChange={(e) => updateItem(idx, 'unitCost', e.target.value)} />
+                      </div>
+                      <button onClick={() => removeItem(idx)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', marginBottom: 0 }}><Trash2 size={12} /></button>
                     </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">{prod?.saleUnit === 'KG' ? 'Kilos' : 'Cantidad'}</label>
-                      <input type="number" min="0" step="any" value={prod?.saleUnit === 'KG' ? item.quantityKg : item.quantity}
-                        onChange={(e) => updateItem(idx, prod?.saleUnit === 'KG' ? 'quantityKg' : 'quantity', e.target.value)} />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Costo unitario</label>
-                      <input type="number" min="0" step="any" value={item.unitCost} onChange={(e) => updateItem(idx, 'unitCost', e.target.value)} />
-                    </div>
-                    <button onClick={() => removeItem(idx)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', marginBottom: 0 }}><Trash2 size={12} /></button>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
               <button onClick={addItem} className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start', gap: 6 }}>
                 <Plus size={13} /> Agregar producto
               </button>
@@ -225,8 +265,8 @@ export default function ComprasPage() {
               <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {[['Proveedor', selected.supplier?.name ?? 'Sin proveedor'], ['Fecha', fmtDate(selected.date)], ['Notas', selected.notes ?? '—'], ['Total', fmtMoney(selected.total)]].map(([k, v]) => (
+              <div className="grid-responsive" style={{ gap: 10 }}>
+                {[['Proveedor', selected.supplier?.name ?? 'Sin proveedor'], ['Fecha', fmtDate(selected.date)], ['Notas', selected.description ?? '—'], ['Total', fmtMoney(selected.totalAmount)]].map(([k, v]) => (
                   <div key={k}><div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>{k}</div><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{v}</div></div>
                 ))}
               </div>

@@ -47,28 +47,14 @@ export default function LoginPage() {
       }} />
 
       {/* Glows */}
-      <div style={{ position: 'absolute', top: '15%', left: '50%', transform: 'translateX(-50%)', width: 640, height: 640, background: 'radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: '15%', left: '50%', transform: 'translateX(-50%)', width: 640, height: 640, background: 'radial-gradient(circle, rgba(13,89,231,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', bottom: '5%', right: '10%', width: 320, height: 320, background: 'radial-gradient(circle, rgba(0,180,219,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
       <div style={{ width: '100%', maxWidth: 400, position: 'relative', animation: 'fadeIn 0.4s ease' }}>
         {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
-            <svg width="56" height="56" viewBox="0 0 40 40" fill="none">
-              <circle cx="18" cy="20" r="14" stroke="#2563EB" strokeWidth="3.5" strokeLinecap="round"
-                strokeDasharray="60 88" strokeDashoffset="-10" />
-              <rect x="25" y="27" width="9" height="9" rx="2" fill="#22C55E" />
-            </svg>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 30, fontWeight: 900, color: 'var(--text)', lineHeight: 1, letterSpacing: -1 }}>
-                Comar<span style={{ color: 'var(--accent)' }}>POS</span>
-              </div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--accent2)', letterSpacing: 3, marginTop: 3 }}>
-                SISTEMA ERP
-              </div>
-            </div>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--text3)' }}>Sistema que impulsa tu negocio</p>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <img src="/brand/logo-horizontal-negativo.svg" alt="ComarPOS" className="brand-logo-dark" style={{ height: 112, margin: '0 auto' }} />
+          <img src="/brand/logo-horizontal-positivo.svg" alt="ComarPOS" className="brand-logo-light" style={{ height: 112, margin: '0 auto' }} />
         </div>
 
         {/* Card */}

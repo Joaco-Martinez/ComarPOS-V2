@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
-import { fmtMoney, normalizeArray, num } from '@/lib/helpers';
+import { clientName, fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { Download, AlertTriangle, Lightbulb } from 'lucide-react';
 
-const COLORS = ['#2563EB', '#00B4DB', '#22C55E', '#F39C12', '#6474BB', '#EF4444', '#2ECC71', '#9B59B6'];
+const COLORS = ['#0D59E7', '#00B4DB', '#18C15E', '#F39C12', '#6474BB', '#EF4444', '#2ECC71', '#9B59B6'];
 
 const TABS = [
   { key: 'ventas',        label: 'Ventas' },
@@ -105,8 +105,12 @@ export default function ReportesPage() {
         byPayment: normalizeArray(byPayment.data),
         byHour: normalizeArray(byHour.data),
         byWeekday: normalizeArray(byWeekday.data),
-        byEmployee: normalizeArray(byEmployee.data),
-        byLocation: normalizeArray(byLocation.data),
+        byEmployee: normalizeArray<any>(byEmployee.data).map((r: any) => ({
+          employeeName: r.user?.name ?? '—', total: r.revenue, count: r.salesCount,
+        })),
+        byLocation: normalizeArray<any>(byLocation.data).map((r: any) => ({
+          locationName: r.location?.name ?? 'Sin sucursal', total: r.revenue, count: r.salesCount,
+        })),
         discounts: discounts.data,
       });
     } finally { setLoad('ventas', false); }
@@ -123,9 +127,15 @@ export default function ReportesPage() {
       ]);
       setRentabilidad({
         summary: summary.data,
-        byProduct: normalizeArray(byProduct.data),
-        byCategory: normalizeArray(byCategory.data),
-        lowMargin: normalizeArray(lowMargin.data),
+        byProduct: normalizeArray<any>(byProduct.data).map((r: any) => ({
+          productName: r.product?.name ?? '—', grossProfit: r.profit, margin: r.marginPercent,
+        })),
+        byCategory: normalizeArray<any>(byCategory.data).map((r: any) => ({
+          categoryName: r.categoryName ?? 'Sin categoría', grossProfit: r.profit, margin: r.marginPercent,
+        })),
+        lowMargin: normalizeArray<any>(lowMargin.data).map((r: any) => ({
+          productName: r.product?.name ?? '—', margin: r.marginPercent, revenue: r.revenue,
+        })),
       });
     } finally { setLoad('rentabilidad', false); }
   };
@@ -140,10 +150,18 @@ export default function ReportesPage() {
         api.get('/analytics/clients/debt-aging').catch(() => ({ data: [] })),
       ]);
       setClientes({
-        top: normalizeArray(top.data),
+        top: normalizeArray<any>(top.data).map((r: any) => ({
+          clientName: clientName(r.client), total: r.revenue, count: r.salesCount,
+        })),
         newVsReturning: newVsReturning.data,
-        inactive: normalizeArray(inactive.data),
-        debtAging: normalizeArray(debtAging.data),
+        inactive: normalizeArray<any>(inactive.data).map((r: any) => ({
+          clientName: clientName(r.client),
+          lastPurchase: r.lastSaleDate ? fmtDate(r.lastSaleDate) : 'Nunca compró',
+          total: r.lastSaleAmount ?? 0,
+        })),
+        debtAging: (debtAging.data?.details ?? []).map((r: any) => ({
+          clientName: clientName(r.client), debt: r.balance, daysOverdue: r.daysSinceLastDebt ?? '—',
+        })),
       });
     } finally { setLoad('clientes', false); }
   };
@@ -155,13 +173,19 @@ export default function ReportesPage() {
         api.get('/analytics/inventory/value').catch(() => ({ data: {} })),
         api.get('/analytics/inventory/dead-stock').catch(() => ({ data: [] })),
         api.get('/analytics/inventory/low-stock').catch(() => ({ data: [] })),
-        api.get('/analytics/inventory/rotation').catch(() => ({ data: [] })),
+        api.get('/analytics/inventory/rotation', { params }).catch(() => ({ data: [] })),
       ]);
       setInventario({
         value: value.data,
-        deadStock: normalizeArray(deadStock.data),
-        lowStock: normalizeArray(lowStock.data),
-        rotation: normalizeArray(rotation.data),
+        deadStock: normalizeArray<any>(deadStock.data).map((r: any) => ({
+          productName: r.product?.name ?? '—', stock: r.totalStock, lastSale: 'Sin ventas',
+        })),
+        lowStock: normalizeArray<any>(lowStock.data).map((r: any) => ({
+          productName: r.product?.name ?? '—', stock: r.stockLocal, minStock: r.minStockLocal,
+        })),
+        rotation: normalizeArray<any>(rotation.data).map((r: any) => ({
+          productName: r.product?.name ?? '—', rotationRate: r.rotationIndex, unitsSold: r.qtySold, avgStock: r.currentStock,
+        })),
       });
     } finally { setLoad('inventario', false); }
   };
@@ -192,7 +216,10 @@ export default function ReportesPage() {
       setCashflow({
         summary: summary.data,
         trend: normalizeArray(trend.data),
-        pendingReceivables: normalizeArray(pendingReceivables.data),
+        pendingReceivables: (pendingReceivables.data?.clients ?? []).map((r: any) => ({
+          clientName: clientName(r), amount: r.balance,
+          daysOverdue: r.lastDebtDate ? Math.floor((Date.now() - new Date(r.lastDebtDate).getTime()) / 86400000) : '—',
+        })),
         riskAlerts: normalizeArray(riskAlerts.data),
       });
     } finally { setLoad('cashflow', false); }
@@ -293,20 +320,20 @@ export default function ReportesPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 12 }}>
                 <StatCard label="Total ventas" value={fmtMoney(num(ventas.summary?.total ?? ventas.summary?.revenue))} />
                 <StatCard label="Ticket promedio" value={fmtMoney(num(ventas.summary?.averageTicket ?? ventas.summary?.avgTicket))} color="var(--accent2)" />
-                <StatCard label="Transacciones" value={String(num(ventas.summary?.count ?? ventas.summary?.transactions))} color="var(--accent3)" />
-                <StatCard label="Descuentos" value={fmtMoney(num(ventas.discounts?.totalDiscounts ?? ventas.discounts?.total))} color="var(--success)" />
+                <StatCard label="Transacciones" value={String(num(ventas.summary?.count ?? ventas.summary?.transactions ?? ventas.summary?.salesCount))} color="var(--accent3)" />
+                <StatCard label="Descuentos" value={fmtMoney(num(ventas.discounts?.totalDiscounts ?? ventas.discounts?.total ?? ventas.discounts?.totalDiscountGiven))} color="var(--success)" />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16 }}>
+              <div className="grid-responsive" style={{ ['--gtc' as any]: '1.5fr 1fr', gap: 16 }}>
                 <div className="card" style={{ padding: '18px 16px' }}>
                   <div className="section-title" style={{ fontSize: 13, marginBottom: 14 }}>Tendencia de ventas</div>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={ventas.trend}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,187,0.1)" />
-                      <XAxis dataKey="date" tick={axisStyle} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="period" tick={axisStyle} axisLine={false} tickLine={false} />
                       <YAxis tick={axisStyle} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                       <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [fmtMoney(v), 'Ventas']} />
-                      <Bar dataKey="total" fill="#2563EB" radius={[4,4,0,0]} />
+                      <Bar dataKey="revenue" fill="#0D59E7" radius={[4,4,0,0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -314,7 +341,7 @@ export default function ReportesPage() {
                   <div className="section-title" style={{ fontSize: 13, marginBottom: 14 }}>Por método de pago</div>
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
-                      <Pie data={ventas.byPayment} dataKey="total" nameKey="method" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }: any) => `${name} ${((percent ?? 0)*100).toFixed(0)}%`} labelLine={false} style={{ fontSize: 10 }}>
+                      <Pie data={ventas.byPayment} dataKey="totalAmount" nameKey="method" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }: any) => `${name} ${((percent ?? 0)*100).toFixed(0)}%`} labelLine={false} style={{ fontSize: 10 }}>
                         {ventas.byPayment.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                       </Pie>
                       <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => fmtMoney(v)} />
@@ -323,7 +350,7 @@ export default function ReportesPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="grid-responsive" style={{ gap: 16 }}>
                 <div className="card" style={{ padding: '18px 16px' }}>
                   <div className="section-title" style={{ fontSize: 13, marginBottom: 14 }}>Por hora del día</div>
                   <ResponsiveContainer width="100%" height={180}>
@@ -332,7 +359,7 @@ export default function ReportesPage() {
                       <XAxis dataKey="hour" tick={axisStyle} axisLine={false} tickLine={false} />
                       <YAxis tick={axisStyle} axisLine={false} tickLine={false} />
                       <Tooltip contentStyle={tooltipStyle} />
-                      <Bar dataKey="count" fill="#00B4DB" radius={[3,3,0,0]} />
+                      <Bar dataKey="salesCount" fill="#00B4DB" radius={[3,3,0,0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -341,16 +368,16 @@ export default function ReportesPage() {
                   <ResponsiveContainer width="100%" height={180}>
                     <BarChart data={ventas.byWeekday}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,187,0.1)" />
-                      <XAxis dataKey="weekday" tick={axisStyle} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="dayName" tick={axisStyle} axisLine={false} tickLine={false} />
                       <YAxis tick={axisStyle} axisLine={false} tickLine={false} />
                       <Tooltip contentStyle={tooltipStyle} />
-                      <Bar dataKey="total" fill="#22C55E" radius={[3,3,0,0]} />
+                      <Bar dataKey="revenue" fill="#18C15E" radius={[3,3,0,0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="grid-responsive" style={{ gap: 16 }}>
                 <div className="card" style={{ overflow: 'hidden' }}>
                   <div style={{ padding: '14px 16px 10px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--border)' }}>Por empleado</div>
                   <SimpleTable
@@ -374,12 +401,12 @@ export default function ReportesPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 12 }}>
                 <StatCard label="Ingresos" value={fmtMoney(num(rentabilidad.summary?.revenue ?? rentabilidad.summary?.totalRevenue))} />
-                <StatCard label="Costo" value={fmtMoney(num(rentabilidad.summary?.cost ?? rentabilidad.summary?.totalCost))} color="var(--accent3)" />
+                <StatCard label="Costo" value={fmtMoney(num(rentabilidad.summary?.cost ?? rentabilidad.summary?.totalCost ?? rentabilidad.summary?.cogs))} color="var(--accent3)" />
                 <StatCard label="Ganancia bruta" value={fmtMoney(num(rentabilidad.summary?.grossProfit))} color="var(--success)" />
-                <StatCard label="Margen" value={`${num(rentabilidad.summary?.grossMargin ?? rentabilidad.summary?.margin).toFixed(1)}%`} color="var(--accent2)" />
+                <StatCard label="Margen" value={`${num(rentabilidad.summary?.grossMargin ?? rentabilidad.summary?.margin ?? rentabilidad.summary?.grossMarginPercent).toFixed(1)}%`} color="var(--accent2)" />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="grid-responsive" style={{ gap: 16 }}>
                 <div className="card" style={{ overflow: 'hidden' }}>
                   <div style={{ padding: '14px 16px 10px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--border)' }}>Top productos por rentabilidad</div>
                   <SimpleTable
@@ -412,7 +439,7 @@ export default function ReportesPage() {
           {/* ── CLIENTES ── */}
           {tab === 'clientes' && clientes && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16 }}>
+              <div className="grid-responsive" style={{ ['--gtc' as any]: '1.5fr 1fr', gap: 16 }}>
                 <div className="card" style={{ overflow: 'hidden' }}>
                   <div style={{ padding: '14px 16px 10px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--border)' }}>Mejores clientes</div>
                   <SimpleTable
@@ -437,8 +464,8 @@ export default function ReportesPage() {
                           labelLine={false}
                           style={{ fontSize: 10 }}
                         >
-                          <Cell fill="#2563EB" />
-                          <Cell fill="#22C55E" />
+                          <Cell fill="#0D59E7" />
+                          <Cell fill="#18C15E" />
                         </Pie>
                         <Tooltip contentStyle={tooltipStyle} />
                         <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -448,7 +475,7 @@ export default function ReportesPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="grid-responsive" style={{ gap: 16 }}>
                 <div className="card" style={{ overflow: 'hidden' }}>
                   <div style={{ padding: '14px 16px 10px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--border)' }}>Clientes inactivos</div>
                   <SimpleTable
@@ -471,13 +498,13 @@ export default function ReportesPage() {
           {tab === 'inventario' && inventario && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 12 }}>
-                <StatCard label="Valor total inventario" value={fmtMoney(num(inventario.value?.totalValue ?? inventario.value?.value))} />
-                <StatCard label="Productos en stock" value={String(num(inventario.value?.productCount ?? inventario.value?.count))} color="var(--accent2)" />
+                <StatCard label="Valor total inventario" value={fmtMoney(num(inventario.value?.totalValue ?? inventario.value?.value ?? inventario.value?.summary?.totalCostValue))} />
+                <StatCard label="Productos en stock" value={String(num(inventario.value?.productCount ?? inventario.value?.count ?? inventario.value?.summary?.productCount))} color="var(--accent2)" />
                 <StatCard label="Stock muerto (items)" value={String(inventario.deadStock?.length ?? 0)} color="var(--accent3)" />
                 <StatCard label="Bajo stock (items)" value={String(inventario.lowStock?.length ?? 0)} color="var(--success)" />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="grid-responsive" style={{ gap: 16 }}>
                 <div className="card" style={{ overflow: 'hidden' }}>
                   <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--border)' }}>
                     <AlertTriangle size={14} style={{ color: 'var(--accent3)' }} />
@@ -514,9 +541,9 @@ export default function ReportesPage() {
           {tab === 'compras' && compras && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 12 }}>
-                <StatCard label="Total compras" value={fmtMoney(num(compras.summary?.total ?? compras.summary?.totalCost))} />
-                <StatCard label="Órdenes" value={String(num(compras.summary?.count ?? compras.summary?.orders))} color="var(--accent2)" />
-                <StatCard label="Costo promedio" value={fmtMoney(num(compras.summary?.averageOrder ?? compras.summary?.avgOrder))} color="var(--accent3)" />
+                <StatCard label="Total compras" value={fmtMoney(num(compras.summary?.total ?? compras.summary?.totalCost ?? compras.summary?.totalSpent))} />
+                <StatCard label="Órdenes" value={String(num(compras.summary?.count ?? compras.summary?.orders ?? compras.summary?.purchaseCount))} color="var(--accent2)" />
+                <StatCard label="Costo promedio" value={fmtMoney(num(compras.summary?.averageOrder ?? compras.summary?.avgOrder ?? compras.summary?.avgPurchaseAmount))} color="var(--accent3)" />
               </div>
 
               <div className="card" style={{ padding: '18px 16px' }}>
@@ -524,12 +551,12 @@ export default function ReportesPage() {
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={compras.vsSales}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,187,0.1)" />
-                    <XAxis dataKey="date" tick={axisStyle} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="period" tick={axisStyle} axisLine={false} tickLine={false} />
                     <YAxis tick={axisStyle} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => fmtMoney(v)} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Bar dataKey="purchases" name="Compras" fill="#EF4444" radius={[3,3,0,0]} />
-                    <Bar dataKey="sales" name="Ventas" fill="#2563EB" radius={[3,3,0,0]} />
+                    <Bar dataKey="salesRevenue" name="Ventas" fill="#0D59E7" radius={[3,3,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -540,8 +567,8 @@ export default function ReportesPage() {
           {tab === 'cashflow' && cashflow && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 12 }}>
-                <StatCard label="Ingresos" value={fmtMoney(num(cashflow.summary?.inflows ?? cashflow.summary?.income))} color="var(--success)" />
-                <StatCard label="Egresos" value={fmtMoney(num(cashflow.summary?.outflows ?? cashflow.summary?.expenses))} color="var(--accent3)" />
+                <StatCard label="Ingresos" value={fmtMoney(num(cashflow.summary?.inflows ?? cashflow.summary?.income ?? cashflow.summary?.totalIncome))} color="var(--success)" />
+                <StatCard label="Egresos" value={fmtMoney(num(cashflow.summary?.outflows ?? cashflow.summary?.expenses ?? cashflow.summary?.totalExpenses))} color="var(--accent3)" />
                 <StatCard label="Balance neto" value={fmtMoney(num(cashflow.summary?.netCashflow ?? cashflow.summary?.net))} />
                 <StatCard label="Cobranzas pendientes" value={fmtMoney(cashflow.pendingReceivables.reduce((a: number, r: any) => a + num(r.amount ?? r.debt), 0))} color="var(--accent2)" />
               </div>
@@ -551,18 +578,18 @@ export default function ReportesPage() {
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={cashflow.trend}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,187,0.1)" />
-                    <XAxis dataKey="date" tick={axisStyle} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="period" tick={axisStyle} axisLine={false} tickLine={false} />
                     <YAxis tick={axisStyle} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => fmtMoney(v)} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Line type="monotone" dataKey="inflows" name="Ingresos" stroke="#22C55E" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="outflows" name="Egresos" stroke="#EF4444" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="net" name="Neto" stroke="#2563EB" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="income" name="Ingresos" stroke="#18C15E" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="expenses" name="Egresos" stroke="#EF4444" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="net" name="Neto" stroke="#0D59E7" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="grid-responsive" style={{ gap: 16 }}>
                 <div className="card" style={{ overflow: 'hidden' }}>
                   <div style={{ padding: '14px 16px 10px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--border)' }}>Cobranzas pendientes</div>
                   <SimpleTable

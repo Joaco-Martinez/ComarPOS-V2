@@ -8,17 +8,17 @@ import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { todayInputAR } from '@/lib/dateAR';
 import { ClipboardList, Truck, Package, Plus, X, Eye, CheckCircle, Trash2, RefreshCcw } from 'lucide-react';
 
-type Status = 'PENDING' | 'SENT' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED';
+type Status = 'DRAFT' | 'SENT' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED';
 
 const statusBadge: Record<Status, string> = {
-  PENDING: 'badge-amber',
+  DRAFT: 'badge-amber',
   SENT: 'badge-cyan',
   PARTIAL: 'badge-cyan',
   RECEIVED: 'badge-green',
   CANCELLED: 'badge-red',
 };
 const statusLabel: Record<Status, string> = {
-  PENDING: 'Pendiente',
+  DRAFT: 'Borrador',
   SENT: 'Enviada',
   PARTIAL: 'Parcial',
   RECEIVED: 'Recibida',
@@ -89,7 +89,7 @@ export default function OrdenesCompraPage() {
         notes: form.notes || undefined,
         items: items.map((it) => ({
           productId: it.productId,
-          quantityOrdered: Number(it.quantityOrdered),
+          quantity: Number(it.quantityOrdered),
           unitCost: it.unitCost ? Number(it.unitCost) : undefined,
         })),
       });
@@ -118,7 +118,7 @@ export default function OrdenesCompraPage() {
     if (!selected) return;
     const payload = Object.entries(receiveItems)
       .filter(([, qty]) => qty !== '' && Number(qty) > 0)
-      .map(([productId, qty]) => ({ productId, quantityReceived: Number(qty) }));
+      .map(([productId, qty]) => ({ productId, receivedQuantity: Number(qty) }));
     if (!payload.length) return;
     setSaving(true);
     try {
@@ -190,7 +190,7 @@ export default function OrdenesCompraPage() {
                 )}
                 {orders.map((ord) => (
                   <tr key={ord.id} style={{ borderBottom: '1px solid var(--border)' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(37,99,235,0.04)'; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(13,89,231,0.04)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
                     <td style={{ padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)' }}>{ord.id?.slice(-6).toUpperCase()}</td>
                     <td style={{ padding: '10px 14px', color: 'var(--text)' }}>
@@ -224,9 +224,8 @@ export default function OrdenesCompraPage() {
 
       {/* Create Modal */}
       {modal === 'create' && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setModal(null)} />
-          <div style={{ position: 'relative', background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 12, padding: 24, width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal modal-lg" style={{ padding: 24 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <ClipboardList size={16} style={{ color: 'var(--accent)' }} /> Nueva Orden de Compra
@@ -234,7 +233,7 @@ export default function OrdenesCompraPage() {
               <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}><X size={15} /></button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div className="grid-responsive" style={{ gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Proveedor</label>
                 <select value={form.supplierId} onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))} style={{ width: '100%', fontSize: 13 }}>
@@ -259,17 +258,19 @@ export default function OrdenesCompraPage() {
                 <button className="btn btn-secondary btn-sm" onClick={addItem} style={{ gap: 5 }}><Plus size={12} /> Agregar</button>
               </div>
               {items.length === 0 && <div style={{ color: 'var(--text3)', fontSize: 12, textAlign: 'center', padding: 12 }}>Sin productos. Agregue al menos uno.</div>}
-              {items.map((it, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 32px', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                  <select value={it.productId} onChange={(e) => updateItem(i, 'productId', e.target.value)} style={{ fontSize: 13 }}>
-                    <option value="">Producto...</option>
-                    {products.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.nombre}</option>)}
-                  </select>
-                  <input type="number" min={1} placeholder="Cant." value={it.quantityOrdered} onChange={(e) => updateItem(i, 'quantityOrdered', e.target.value)} style={{ fontSize: 13 }} />
-                  <input type="number" min={0} placeholder="Costo u." value={it.unitCost} onChange={(e) => updateItem(i, 'unitCost', e.target.value)} style={{ fontSize: 13 }} />
-                  <button className="btn btn-ghost btn-sm" onClick={() => removeItem(i)}><X size={13} /></button>
-                </div>
-              ))}
+              <div className="line-item-scroll">
+                {items.map((it, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 32px', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                    <select value={it.productId} onChange={(e) => updateItem(i, 'productId', e.target.value)} style={{ fontSize: 13 }}>
+                      <option value="">Producto...</option>
+                      {products.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.nombre}</option>)}
+                    </select>
+                    <input type="number" min={1} placeholder="Cant." value={it.quantityOrdered} onChange={(e) => updateItem(i, 'quantityOrdered', e.target.value)} style={{ fontSize: 13 }} />
+                    <input type="number" min={0} placeholder="Costo u." value={it.unitCost} onChange={(e) => updateItem(i, 'unitCost', e.target.value)} style={{ fontSize: 13 }} />
+                    <button className="btn btn-ghost btn-sm" onClick={() => removeItem(i)}><X size={13} /></button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -284,9 +285,8 @@ export default function OrdenesCompraPage() {
 
       {/* Detail Modal */}
       {modal === 'detail' && selected && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setModal(null)} />
-          <div style={{ position: 'relative', background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 12, padding: 24, width: '100%', maxWidth: 720, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal modal-lg" style={{ padding: 24 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -302,7 +302,7 @@ export default function OrdenesCompraPage() {
             {/* Status actions */}
             {selected.status !== 'RECEIVED' && selected.status !== 'CANCELLED' && (
               <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-                {selected.status === 'PENDING' && (
+                {selected.status === 'DRAFT' && (
                   <button className="btn btn-secondary btn-sm" onClick={() => changeStatus(selected.id, 'SENT')}>Marcar como Enviada</button>
                 )}
                 {(selected.status === 'SENT' || selected.status === 'PARTIAL') && (

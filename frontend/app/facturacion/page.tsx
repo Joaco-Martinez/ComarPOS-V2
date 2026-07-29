@@ -14,6 +14,14 @@ type InvoiceState = 'INVOICED' | 'PENDING_AFIP' | 'ERROR' | 'NOT_REQUIRED';
 const invBadge = (s?: string | null) =>
   s === 'INVOICED' ? 'badge-green' : s === 'PENDING_AFIP' ? 'badge-amber' : s === 'ERROR' ? 'badge-red' : 'badge-gray';
 
+// Espejo de backend/src/afip/ivaCondition.ts: que tipo de comprobante puede
+// emitir el negocio segun su condicion frente al IVA configurada en ARCA.
+const INVOICE_TYPE_LABEL: Record<number, string> = { 1: 'Factura A', 6: 'Factura B', 11: 'Factura C' };
+function allowedInvoiceTypes(ivaCondition?: string | null): number[] {
+  if (String(ivaCondition ?? '').trim().toUpperCase() === 'IVA RESPONSABLE INSCRIPTO') return [6, 1];
+  return [11];
+}
+
 export default function FacturacionPage() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +31,7 @@ export default function FacturacionPage() {
   const [invoicing, setInvoicing] = useState<string | null>(null);
   const [modal, setModal] = useState<{ sale: Sale; dni: string; invoiceType: number } | null>(null);
   const [toast, setToast] = useState('');
+  const [invoiceTypes, setInvoiceTypes] = useState<number[]>([11]);
 
   const load = async () => {
     setLoading(true);
@@ -31,6 +40,12 @@ export default function FacturacionPage() {
       setSales(normalizeArray<Sale>(data));
     } finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    api.get('/arca-config/config').then(({ data }) => {
+      setInvoiceTypes(allowedInvoiceTypes(data?.content?.ivaCondition));
+    }).catch(() => setInvoiceTypes([11]));
+  }, []);
 
   useEffect(() => { load(); }, [from, to]);
 
@@ -98,7 +113,7 @@ export default function FacturacionPage() {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150, fontSize: 13 }} />
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150, fontSize: 13 }} />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 13, width: 160 }}>
@@ -142,7 +157,7 @@ export default function FacturacionPage() {
                         )}
                         {!s.invoiceAfip?.cae && (
                           <button
-                            onClick={() => setModal({ sale: s, dni: s.client?.dni ?? '', invoiceType: 6 })}
+                            onClick={() => setModal({ sale: s, dni: s.client?.dni ?? '', invoiceType: invoiceTypes[0] })}
                             disabled={invoicing === s.id}
                             className="btn btn-ghost btn-xs"
                             style={{ color: 'var(--accent)', gap: 4 }}
@@ -178,9 +193,7 @@ export default function FacturacionPage() {
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Tipo de comprobante</label>
                 <select value={modal.invoiceType} onChange={(e) => setModal((p) => p && ({ ...p, invoiceType: Number(e.target.value) }))}>
-                  <option value={6}>Factura B</option>
-                  <option value={1}>Factura A</option>
-                  <option value={11}>Factura C</option>
+                  {invoiceTypes.map((t) => <option key={t} value={t}>{INVOICE_TYPE_LABEL[t]}</option>)}
                 </select>
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>

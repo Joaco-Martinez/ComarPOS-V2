@@ -1,4 +1,5 @@
 node_modules
+dist/
 # Keep environment variables out of version control
 .env
 .env.*
@@ -13,3 +14,9 @@ certs/
 tmp/
 uploads/
 *.pdf
+
+# Tests
+coverage/
+
+# Backups locales de DB (ver npm run backup)
+backups/

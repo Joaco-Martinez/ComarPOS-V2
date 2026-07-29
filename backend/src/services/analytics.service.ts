@@ -15,8 +15,11 @@ function safeMargin(revenue: number, cost: number): number {
 
 function getGroupKey(date: Date, granularity: Granularity): string {
   const d = new Date(date);
-  if (granularity === "month") return d.toISOString().slice(0, 7);
-  if (granularity === "day") return d.toISOString().slice(0, 10);
+  // Agrupar por día/mes calendario de Argentina, no UTC (toISOString desfasa
+  // ventas de la noche AR al día/mes siguiente cuando el server corre en UTC).
+  const arDateStr = d.toLocaleDateString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });
+  if (granularity === "month") return arDateStr.slice(0, 7);
+  if (granularity === "day") return arDateStr;
   // week: ISO week
   const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = tmp.getUTCDay() || 7;

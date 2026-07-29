@@ -94,4 +94,13 @@ export const recurringExpenseService = {
     }
     return results;
   },
+
+  // Disparado a mano desde la UI de un tenant (boton "Procesar vencidos"):
+  // a diferencia de processDueNow() (cron global, todos los tenants), esto
+  // solo debe tocar el tenant del usuario que lo aprieta.
+  async processDueForCurrentTenant() {
+    const tenantId = currentTenantId();
+    if (!tenantId) throw new Error("No se pudo determinar el tenant actual.");
+    return recurringExpenseService.processForTenant(tenantId);
+  },
 };

@@ -87,7 +87,7 @@ export async function generarCotizacion(saleId: string) {
           },
         },
       },
-      user: true,
+      user: { select: { id: true, name: true, email: true, role: true } },
       client: true,
     },
   });
@@ -121,7 +121,7 @@ export async function generarCotizacion(saleId: string) {
             },
           },
         },
-        user: true,
+        user: { select: { id: true, name: true, email: true, role: true } },
         client: true,
       },
     });

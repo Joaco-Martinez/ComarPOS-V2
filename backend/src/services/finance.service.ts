@@ -13,6 +13,7 @@ import {
 } from "../utils/dateAR";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import { cashSessionService } from "./cashSession.service";
 function fmtKgAR(n: number) {
   return n.toLocaleString("es-AR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
@@ -47,17 +48,34 @@ export const financeService = {
     category: CategoryFinance;
     description?: string;
     date?: Date;
-  }) {
-    return prisma.finance.create({
+    paymentMethod?: string;
+  }, userId?: string) {
+    const finance = await prisma.finance.create({
       data: {
         type: data.type,
         amount: data.amount,
         category: data.category,
         description: data.description,
         date: data.date ?? new Date(),
+        paymentMethod: data.paymentMethod as any,
         tenantId: currentTenantId(),
       },
     });
+
+    // Un egreso pagado en EFECTIVO sale del cajon fisico -> se descuenta de la
+    // caja abierta del usuario que lo cargo (si tiene una). Si se pago por
+    // transferencia/tarjeta/etc, nunca toca la caja (ej: alquiler).
+    if (finance.type === "EGRESO") {
+      await cashSessionService.maybeLinkExpense({
+        userId,
+        paymentMethod: finance.paymentMethod,
+        amount: finance.amount,
+        description: finance.description ?? "Egreso",
+        reference: `finance:${finance.id}`,
+      }).catch(() => null);
+    }
+
+    return finance;
   },
 
 async registerIncomeFromSale(saleId: string) {

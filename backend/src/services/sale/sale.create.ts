@@ -35,7 +35,6 @@ export async function create(data: CreateSaleInput) {
       },
       select: {
         category: true,
-        priceListId: true,
       },
     });
 
@@ -254,7 +253,7 @@ export async function create(data: CreateSaleInput) {
               },
             },
           },
-          user: true,
+          user: { select: { id: true, name: true, email: true, role: true } },
           client: true,
         },
       });

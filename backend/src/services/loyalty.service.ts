@@ -14,7 +14,7 @@ export const loyaltyService = {
     const client = await prisma.client.findFirst({ where: { id: clientId, ...scope } });
     if (!client) throw new Error("Cliente no encontrado.");
 
-    return prisma.loyaltyAccount.create({ data: { clientId } });
+    return prisma.loyaltyAccount.create({ data: { clientId, tenantId: currentTenantId() } });
   },
 
   async getAccount(clientId: string) {

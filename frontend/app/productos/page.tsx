@@ -4,10 +4,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import SkuScannerModal from '@/components/SkuScannerModal';
 import api from '@/lib/api';
 import type { Product, ProductCategory } from '@/types';
 import { categoryName, fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { Package, Plus, Search, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle } from 'lucide-react';
+import { Package, Plus, Search, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, ScanBarcode } from 'lucide-react';
 
 const emptyForm = {
   name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '',
@@ -15,8 +16,7 @@ const emptyForm = {
   price: '', clientPrice: '', wholesalePrice: '', purchasePrice: '',
   ivaRate: '21',
   pricePerKg: '', clientPricePerKg: '', wholesalePricePerKg: '',
-  stockLocal: '0', stockDeposito: '0', minStock: '0',
-  stockLocalKg: '0', stockDepositoKg: '0', minStockKg: '0',
+  minStock: '0', minStockKg: '0',
 };
 
 type Form = typeof emptyForm;
@@ -34,6 +34,7 @@ export default function ProductosPage() {
   const [imgFile, setImgFile] = useState<File | null>(null);
   const [toast, setToast] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -72,8 +73,7 @@ export default function ProductosPage() {
       purchasePrice: String(p.purchasePrice ?? ''),
       ivaRate: String((p as any).ivaRate ?? 21),
       pricePerKg: String(p.pricePerKg ?? ''), clientPricePerKg: String(p.clientPricePerKg ?? ''), wholesalePricePerKg: String(p.wholesalePricePerKg ?? ''),
-      stockLocal: String(p.stockLocal), stockDeposito: String(p.stockDeposito), minStock: String(p.minStock ?? 0),
-      stockLocalKg: String(p.stockLocalKg ?? 0), stockDepositoKg: String(p.stockDepositoKg ?? 0), minStockKg: String(p.minStockKg ?? 0),
+      minStock: String(p.minStock ?? 0), minStockKg: String(p.minStockKg ?? 0),
     });
     setImgFile(null);
     setModal('edit');
@@ -83,6 +83,17 @@ export default function ProductosPage() {
     setForm((prev) => ({ ...prev, [k]: e.target.value }));
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+
+  const handleScannedSku = (rawSku: string) => {
+    const sku = rawSku.trim().toLowerCase();
+    const found = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
+    if (!found) {
+      showToast(`No encontré ningún producto con SKU: ${rawSku}`);
+      return;
+    }
+    setScannerOpen(false);
+    openEdit(found);
+  };
 
   const save = async () => {
     if (!form.name.trim()) return;
@@ -159,7 +170,17 @@ export default function ProductosPage() {
         <button onClick={() => { setSearch(''); setCatFilter(''); }} className="btn btn-ghost btn-sm" style={{ color: 'var(--text3)' }}>
           <RefreshCcw size={13} />
         </button>
+        <button onClick={() => setScannerOpen(true)} className="btn btn-secondary btn-sm" style={{ gap: 6 }} title="Escanear SKU con la cámara">
+          <ScanBarcode size={13} /> Escanear
+        </button>
       </div>
+
+      <SkuScannerModal
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onDetected={handleScannedSku}
+        hint="Cuando lo detecte, abre el producto para editarlo."
+      />
 
       {/* Table */}
       <div className="card">
@@ -168,7 +189,8 @@ export default function ProductosPage() {
         ) : filtered.length === 0 ? (
           <div className="empty-state"><Package size={32} /><p>Sin productos</p></div>
         ) : (
-          <div className="table-wrap">
+          <>
+          <div className="table-wrap desktop-only-table">
             <table>
               <thead>
                 <tr>
@@ -233,6 +255,54 @@ export default function ProductosPage() {
               </tbody>
             </table>
           </div>
+
+          <div className="mobile-card-list" style={{ padding: 10 }}>
+            {filtered.map((p) => {
+              const stockVal = p.saleUnit === 'KG' ? num(p.stockLocalKg) : num(p.stockLocal);
+              const minVal = p.saleUnit === 'KG' ? num(p.minStockKg) : num(p.minStock);
+              const low = stockVal <= minVal && minVal > 0;
+              return (
+                <div className="mobile-card" key={p.id}>
+                  <div className="mobile-card-head">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt={p.name} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 36, height: 36, borderRadius: 6, background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Package size={16} style={{ color: 'var(--text3)' }} />
+                        </div>
+                      )}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{p.sku ?? '—'} · {categoryName(p)}</div>
+                      </div>
+                    </div>
+                    <button onClick={() => toggleActive(p)} className={`badge ${p.isActive !== false ? 'badge-green' : 'badge-gray'}`} style={{ cursor: 'pointer', border: 'none', flexShrink: 0 }}>
+                      {p.isActive !== false ? 'Activo' : 'Inactivo'}
+                    </button>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span>Precio</span>
+                    <span style={{ fontFamily: 'var(--mono)', color: 'var(--text)', fontWeight: 700 }}>
+                      {fmtMoney(p.saleUnit === 'KG' ? num(p.pricePerKg) : p.price)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                    </span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span>Stock / mínimo</span>
+                    <span style={{ fontFamily: 'var(--mono)', color: low ? 'var(--warn)' : 'var(--text2)' }}>
+                      {low && <AlertTriangle size={11} style={{ display: 'inline', marginRight: 4 }} />}
+                      {stockVal}{p.saleUnit === 'KG' ? 'kg' : ''} / {minVal}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    <button onClick={() => openEdit(p)} className="btn btn-secondary btn-xs" style={{ flex: 1, gap: 4 }}><Edit2 size={12} /> Editar</button>
+                    <button onClick={() => setConfirmDelete(p)} className="btn btn-secondary btn-xs" style={{ color: 'var(--danger)', gap: 4 }}><Trash2 size={12} /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
       </div>
 
@@ -295,7 +365,7 @@ export default function ProductosPage() {
                 Precios {isKg ? '(por kg)' : ''}
               </div>
               {isKg ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <div className="form-grid-3">
                   {[['pricePerKg', 'Precio lista/kg'], ['clientPricePerKg', 'Precio cliente/kg'], ['wholesalePricePerKg', 'Precio mayor/kg']].map(([k, l]) => (
                     <div key={k} className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label">{l}</label>
@@ -304,7 +374,7 @@ export default function ProductosPage() {
                   ))}
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <div className="form-grid-3">
                   {[['price', 'Precio lista'], ['clientPrice', 'Precio cliente'], ['wholesalePrice', 'Precio mayor']].map(([k, l]) => (
                     <div key={k} className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label">{l}</label>
@@ -313,7 +383,7 @@ export default function ProductosPage() {
                   ))}
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Costo de compra</label>
                   <input type="number" min="0" step="any" value={form.purchasePrice} onChange={f('purchasePrice')} placeholder="0" />
@@ -331,23 +401,18 @@ export default function ProductosPage() {
 
               {/* Stock */}
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Stock</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -4 }}>
+                La cantidad de stock no se carga acá — se ajusta desde <b>Stock</b> o <b>Conteo de Stock</b> para que quede registrado el movimiento.
+              </div>
               {isKg ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                  {[['stockLocalKg', 'Stock local (kg)'], ['stockDepositoKg', 'Stock depósito (kg)'], ['minStockKg', 'Stock mínimo (kg)']].map(([k, l]) => (
-                    <div key={k} className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">{l}</label>
-                      <input type="number" min="0" step="any" value={form[k as keyof Form]} onChange={f(k as keyof Form)} />
-                    </div>
-                  ))}
+                <div className="form-group" style={{ marginBottom: 0, maxWidth: 220 }}>
+                  <label className="form-label">Stock mínimo (kg)</label>
+                  <input type="number" min="0" step="any" value={form.minStockKg} onChange={f('minStockKg')} />
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                  {[['stockLocal', 'Stock local'], ['stockDeposito', 'Stock depósito'], ['minStock', 'Stock mínimo']].map(([k, l]) => (
-                    <div key={k} className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">{l}</label>
-                      <input type="number" min="0" step="any" value={form[k as keyof Form]} onChange={f(k as keyof Form)} />
-                    </div>
-                  ))}
+                <div className="form-group" style={{ marginBottom: 0, maxWidth: 220 }}>
+                  <label className="form-label">Stock mínimo</label>
+                  <input type="number" min="0" step="any" value={form.minStock} onChange={f('minStock')} />
                 </div>
               )}
 
