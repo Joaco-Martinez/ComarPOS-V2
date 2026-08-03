@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { platformAdminController } from "../controllers/platformAdmin.controller";
 import { platformAuthMiddleware } from "../middleware/platformAuth";
+import { loginRateLimiter } from "../middleware/rateLimit";
 
 const router = Router();
 
-router.post("/auth/login", platformAdminController.login);
+router.post("/auth/login", loginRateLimiter, platformAdminController.login);
 router.post("/auth/logout", platformAdminController.logout);
 router.get("/auth/me", platformAuthMiddleware, platformAdminController.me);
 

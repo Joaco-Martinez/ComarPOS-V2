@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { Response, Request } from "express";
 import { CategoryClient, Role } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
+import { issueCsrfCookie, clearCsrfCookie } from "../middleware/csrf";
 
 const isProd = process.env.NODE_ENV === "production";
 // JWT_SECRET ya se valida (>=64 chars, sin fallback) al boot en src/index.ts
@@ -43,6 +44,8 @@ function setAuthCookies(res: Response, cleanUser: any, token: string) {
     ...getCookieOptions(),
     httpOnly: false,
   });
+
+  issueCsrfCookie(res);
 }
 
 export const authService = {
@@ -241,6 +244,8 @@ export const authService = {
       path: "/",
       domain: isProd ? COOKIE_DOMAIN : undefined,
     });
+
+    clearCsrfCookie(res);
 
     return { message: "Logout exitoso" };
   },

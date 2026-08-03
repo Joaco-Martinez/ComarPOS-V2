@@ -15,6 +15,7 @@ import {
 
 const DELIVERY_SKU = 'ENVIO-FLETE2';
 const PAGE_SIZE = 60;
+const SKU_SCANNER_ELEMENT_ID = 'comarpos-pos-sku-scanner';
 
 type StockLocation = 'LOCAL' | 'DEPOSITO';
 type QuickPriceType = 'price' | 'wholesalePrice';

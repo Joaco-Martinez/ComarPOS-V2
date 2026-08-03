@@ -2,6 +2,7 @@ import prisma from "../prisma";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Response, Request } from "express";
+import { issueCsrfCookie, clearCsrfCookie } from "../middleware/csrf";
 
 const isProd = process.env.NODE_ENV === "production";
 // JWT_SECRET ya se valida (>=64 chars, sin fallback) al boot; reusamos el
@@ -52,6 +53,7 @@ export const platformAdminService = {
     );
 
     res.cookie(COOKIE_NAME, token, getCookieOptions());
+    issueCsrfCookie(res);
 
     return { admin: sanitize(admin) };
   },
@@ -61,6 +63,8 @@ export const platformAdminService = {
       path: "/",
       domain: isProd ? COOKIE_DOMAIN : undefined,
     });
+
+    clearCsrfCookie(res);
 
     return { message: "Logout exitoso" };
   },

@@ -11,6 +11,7 @@ import { Sentry, sentryEnabled } from "./config/sentry";
 import { swaggerDocs } from "./config/swagger";
 import { authMiddleware, requireRole } from "./middleware/auth";
 import { tenantMiddleware } from "./middleware/tenant";
+import { verifyCsrfToken, ensureCsrfCookie } from "./middleware/csrf";
 import afipRoutes from "./afip/afip.routes";
 import notaCreditoPdfRoutes from "./routes/notaCreditoPdf.routes";
 import alertRoutes from "./routes/alert.routes";
@@ -134,6 +135,12 @@ app.use(cors({
 app.use(express.json());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(requestLogger);
+// Double-submit cookie CSRF (ver middleware/csrf.ts): primero repara sesiones
+// viejas sin csrf_token, despues bloquea mutaciones que ya viajan con una
+// cookie de sesion propia (token/platform_token) y no traen el header
+// X-CSRF-Token esperado.
+app.use(ensureCsrfCookie);
+app.use(verifyCsrfToken);
 
 // 🔹 Healthcheck (no expone datos sensibles)
 app.get("/", async (_req, res, next) => {
