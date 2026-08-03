@@ -49,19 +49,19 @@ async function main() {
   const pw2 = await bcrypt.hash("empleado123", 10);
 
   const admin = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: tId, email: "admin@grupovj.com" } },
+    where: { email: "admin@grupovj.com" },
     update: { name: "Administrador", role: Role.ADMIN, password: pw },
     create: { email: "admin@grupovj.com", password: pw, name: "Administrador", role: Role.ADMIN, tenantId: tId },
   });
 
   const cajera = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: tId, email: "cajera@grupovj.com" } },
+    where: { email: "cajera@grupovj.com" },
     update: { name: "Valentina Pérez", role: Role.EMPLEADO },
     create: { email: "cajera@grupovj.com", password: pw2, name: "Valentina Pérez", role: Role.EMPLEADO, tenantId: tId },
   });
 
   const vendedor = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: tId, email: "vendedor@grupovj.com" } },
+    where: { email: "vendedor@grupovj.com" },
     update: { name: "Marcos Rodríguez", role: Role.EMPLEADO },
     create: { email: "vendedor@grupovj.com", password: pw2, name: "Marcos Rodríguez", role: Role.EMPLEADO, tenantId: tId },
   });

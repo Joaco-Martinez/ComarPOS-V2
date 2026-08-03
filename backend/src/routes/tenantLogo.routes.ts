@@ -54,6 +54,7 @@ router.post(
 );
 
 router.get("/logo/:businessId", tenantLogoController.get);
+router.get("/logo/:businessId/escpos", tenantLogoController.getEscposRaster);
 
 router.delete(
   "/logo/:businessId",

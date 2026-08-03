@@ -3,6 +3,13 @@
  * Los services ya filtran por tenantId (via tenantScope()/currentTenantId());
  * esta resolucion nunca bloquea la request si no encuentra tenant para no
  * romper accesos sin subdominio configurado (ver DEFAULT_TENANT_SLUG).
+ *
+ * Desde que el login dejo de depender del subdominio, esto solo es la base
+ * del tenant context para rutas publicas/anonimas (catalog.routes.ts,
+ * auth.routes.ts /register) que necesitan un tenant sin haber autenticado
+ * todavia. En rutas autenticadas, authMiddleware pisa este contexto con el
+ * tenantId del JWT (ver runWithAuthenticatedTenant en middleware/auth.ts) -
+ * ese es el que manda, sin importar por que dominio entro la request.
  */
 import { Request, Response, NextFunction } from "express";
 import prisma from "../prisma";
@@ -20,8 +27,11 @@ const DEFAULT_TENANT_SLUG = process.env.DEFAULT_TENANT_SLUG || "grupo-vj";
 
 // Cache en memoria: los tenants cambian con muy poca frecuencia y esto evita
 // una query extra por request (el pedido explicito de "que los endpoints
-// funcionen rapido").
+// funcionen rapido"). Dos mapas porque hay dos formas de llegar a un tenant:
+// por slug (resolucion por subdominio, rutas publicas/anonimas) y por id
+// (authMiddleware, a partir del tenantId embebido en el JWT).
 const tenantCache = new Map<string, TenantRecord | null>();
+const tenantByIdCache = new Map<string, TenantRecord | null>();
 
 function extractSubdomainSlug(hostname: string): string | null {
   const parts = hostname.split(".");
@@ -51,6 +61,22 @@ async function resolveTenantBySlug(slug: string): Promise<TenantRecord | null> {
   return tenant;
 }
 
+// Usado por authMiddleware: el tenant autoritativo de un request autenticado
+// es el que viene en el JWT (tenantId), no el resuelto por subdominio.
+export async function resolveTenantById(id: string): Promise<TenantRecord | null> {
+  if (tenantByIdCache.has(id)) {
+    return tenantByIdCache.get(id) ?? null;
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    select: { id: true, slug: true, name: true, isActive: true, subscriptionStatus: true },
+  });
+
+  tenantByIdCache.set(id, tenant);
+  return tenant;
+}
+
 /**
  * Adjunta req.tenant / req.tenantId resolviendo por subdominio.
  * En desarrollo (NODE_ENV !== "production") se puede forzar el tenant con el
@@ -62,8 +88,12 @@ async function resolveTenantBySlug(slug: string): Promise<TenantRecord | null> {
 // se exime a proposito: asi el 403 de suspension se ve ahi en vez de un
 // generico "credenciales invalidas". /auth/logout si se exime para poder
 // cerrar sesion limpio con un tenant recien suspendido.
-function isSuspensionExempt(path: string): boolean {
+export function isSuspensionExempt(path: string): boolean {
   return path === "/" || path.startsWith("/platform-admin") || path === "/auth/logout";
+}
+
+export function isTenantSuspended(tenant: Pick<TenantRecord, "isActive" | "subscriptionStatus">): boolean {
+  return tenant.subscriptionStatus === "SUSPENDED" || !tenant.isActive;
 }
 
 export async function tenantMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -84,11 +114,7 @@ export async function tenantMiddleware(req: Request, res: Response, next: NextFu
       console.warn(`⚠️ No se pudo resolver tenant para host "${req.hostname}" (slug "${slug}")`);
     }
 
-    if (
-      tenant &&
-      !isSuspensionExempt(req.path) &&
-      (tenant.subscriptionStatus === "SUSPENDED" || !tenant.isActive)
-    ) {
+    if (tenant && !isSuspensionExempt(req.path) && isTenantSuspended(tenant)) {
       return res.status(403).json({
         code: "TENANT_SUSPENDED",
         message: "Esta cuenta está suspendida. Contactá a soporte para reactivarla.",
@@ -102,11 +128,13 @@ export async function tenantMiddleware(req: Request, res: Response, next: NextFu
   }
 }
 
-export function invalidateTenantCache(slug?: string) {
-  if (slug) {
-    tenantCache.delete(slug);
+export function invalidateTenantCache(slug?: string, id?: string) {
+  if (!slug && !id) {
+    tenantCache.clear();
+    tenantByIdCache.clear();
     return;
   }
 
-  tenantCache.clear();
+  if (slug) tenantCache.delete(slug);
+  if (id) tenantByIdCache.delete(id);
 }

@@ -452,9 +452,9 @@ export const userService = {
       throw new Error("La contraseña debe tener al menos 6 caracteres");
     }
 
-    const existing = await prisma.user.findFirst({
-      where: { email, ...tenantScope() },
-    });
+    // email es unico globalmente (migracion user_email_globally_unique), no
+    // por tenant - mismo motivo que en auth.service.ts register().
+    const existing = await prisma.user.findUnique({ where: { email } });
 
     if (existing) throw new Error("Ya existe un usuario con ese email");
 

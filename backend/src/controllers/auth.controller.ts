@@ -30,7 +30,7 @@ export const authController = {
   async login(req: Request, res: Response, next: NextFunction) {
     try {
       const { email, password } = req.body;
-      const result = await authService.login(email, password, res, (req as any).tenantId);
+      const result = await authService.login(email, password, res);
 
       res.json({
         ok: true,

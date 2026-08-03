@@ -46,6 +46,7 @@ import loyaltyRoutes from "./routes/loyalty.routes";
 import returnRoutes from "./routes/return.routes";
 import exportRoutes from "./routes/export.routes";
 import tenantLogoRoutes from "./routes/tenantLogo.routes";
+import printboxRoutes from "./routes/printbox.routes";
 import platformAdminRoutes from "./routes/platformAdmin.routes";
 dotenv.config();
 
@@ -182,6 +183,7 @@ app.use("/loyalty", loyaltyRoutes);
 app.use("/returns", returnRoutes);
 app.use("/exports", exportRoutes);
 app.use("/uploads", tenantLogoRoutes);
+app.use("/printbox", printboxRoutes);
 app.use("/platform-admin", platformAdminRoutes);
 
 // 🔹 Swagger

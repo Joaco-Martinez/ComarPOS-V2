@@ -1,6 +1,7 @@
 import axios from "axios";
 import prisma from "../prisma";
 import { tenantScope } from "../utils/tenantScope";
+import { printboxService } from "./printbox";
 
 function numberOrZero(value: unknown) {
   const n = Number(value ?? 0);
@@ -210,7 +211,7 @@ function getShippingPayload(sale: any) {
   };
 }
 
-function buildTicketPayload(sale: any) {
+function buildTicketPayload(sale: any, tenant: any) {
   const subtotal = numberOrZero(sale.subtotal);
   const total = numberOrZero(sale.total);
   const discount = subtotal > total ? subtotal - total : 0;
@@ -240,12 +241,25 @@ function buildTicketPayload(sale: any) {
       email: sellerEmail,
     },
 
+    // Datos por-tenant (backend/CLAUDE.md: hoy solo grupo-vj es real y no
+    // tiene estos campos cargados, por eso el fallback a las BUSINESS_*
+    // historicas -- una vez que un tenant carga sus propios datos en el
+    // panel, esos pisan al env var). El logoUrl viaja aparte: el printbox
+    // lo cachea en flash, no se manda de nuevo en cada ticket.
     business: {
-      name: process.env.BUSINESS_NAME ?? "GRUPO VJ",
+      name: tenant?.ticketBusinessName || tenant?.name || process.env.BUSINESS_NAME || "GRUPO VJ",
       subtitle: process.env.BUSINESS_SUBTITLE ?? "ComarPOS",
-      cuit: process.env.BUSINESS_CUIT ?? "",
-      address: process.env.BUSINESS_ADDRESS ?? "Dirección Grupo VJ",
-      phone: process.env.BUSINESS_PHONE ?? "Teléfono Grupo VJ",
+      cuit: tenant?.ticketCuit || process.env.BUSINESS_CUIT || "",
+      address: tenant?.ticketAddress || process.env.BUSINESS_ADDRESS || "Dirección Grupo VJ",
+      phone: tenant?.ticketPhone || process.env.BUSINESS_PHONE || "Teléfono Grupo VJ",
+      logoUrl: tenant?.logoUrl || null,
+      // Bitmap ESC/POS ya listo para imprimir (ver logoRaster.service.ts).
+      // Solo viaja si el tenant subió un logo -- el printbox lo cachea y
+      // no lo vuelve a pedir en cada ticket (ver printbox/README.md).
+      logoEscposUrl:
+        tenant?.id && process.env.API_PUBLIC_URL
+          ? `${process.env.API_PUBLIC_URL.replace(/\/$/, "")}/uploads/logo/${tenant.id}/escpos`
+          : null,
     },
 
     client: {
@@ -323,10 +337,17 @@ async function enviarTicketAlPOSLocal(payload: any) {
 }
 
 export const ticketService = {
-  async printSaleTicket(saleId: string) {
+  /**
+   * deviceId es opcional: si el tenant ya migró a printbox y solo tiene una
+   * caja, se resuelve solo. Si el tenant todavía no tiene ningún
+   * PrintboxDevice ACTIVE (caso de grupo-vj hoy), cae al bridge HTTP viejo
+   * (POS_LOCAL_URL) para no romper impresión que ya funciona en producción.
+   */
+  async printSaleTicket(saleId: string, deviceId?: string) {
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, ...tenantScope() },
       include: {
+        tenant: true,
         user: {
           select: {
             id: true,
@@ -348,13 +369,33 @@ export const ticketService = {
       throw new Error("Venta no encontrada");
     }
 
-    const payload = buildTicketPayload(sale);
+    const payload = buildTicketPayload(sale, sale.tenant);
+
+    if (sale.tenantId) {
+      const device = deviceId
+        ? await prisma.printboxDevice.findFirst({
+            where: { id: deviceId, tenantId: sale.tenantId, status: "ACTIVE" },
+          })
+        : await printboxService.resolveDefaultDevice(sale.tenantId);
+
+      if (device) {
+        const job = await printboxService.publishTicket({
+          tenantId: sale.tenantId,
+          deviceId: device.id,
+          saleId: sale.id,
+          payload,
+        });
+
+        return { payload, printJobId: job.id, via: "printbox" };
+      }
+    }
 
     const posResponse = await enviarTicketAlPOSLocal(payload);
 
     return {
       payload,
       posResponse,
+      via: "pos-local",
     };
   },
 };

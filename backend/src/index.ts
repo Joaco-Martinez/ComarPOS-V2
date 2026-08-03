@@ -17,10 +17,12 @@ if ((process.env.JWT_SECRET || "").length < 64) {
 
 import app from "./app";
 import { startScheduler } from "./cron/scheduler";
+import { startPrintboxAckListener } from "./services/printbox";
 
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   startScheduler();
+  startPrintboxAckListener();
 });

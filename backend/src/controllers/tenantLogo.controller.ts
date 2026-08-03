@@ -35,6 +35,26 @@ export const tenantLogoController = {
     }
   },
 
+  // Lo consume el firmware del printbox (sin auth de usuario, es un
+  // bitmap ya listo para imprimir, no información sensible) — devuelve el
+  // comando ESC/POS crudo, no JSON.
+  async getEscposRaster(req: Request, res: Response, next: NextFunction) {
+    try {
+      const businessId = getParamAsString(req.params.businessId, "businessId");
+      const raster = await tenantLogoService.getEscposRaster(businessId);
+
+      if (!raster) {
+        return res.status(404).json({ ok: false, error: "Este tenant todavía no tiene logo rasterizado." });
+      }
+
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      res.send(raster);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async remove(req: Request, res: Response, next: NextFunction) {
     try {
       const businessId = getParamAsString(req.params.businessId, "businessId");

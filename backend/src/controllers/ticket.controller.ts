@@ -5,6 +5,7 @@ export const ticketController = {
   async printSaleTicket(req: Request, res: Response) {
     try {
       const { saleId } = req.params;
+      const { deviceId } = req.body ?? {};
 
       if (!saleId || Array.isArray(saleId)) {
         return res.status(400).json({
@@ -13,7 +14,7 @@ export const ticketController = {
         });
       }
 
-      const result = await ticketService.printSaleTicket(saleId);
+      const result = await ticketService.printSaleTicket(saleId, deviceId);
 
       return res.status(200).json({
         ok: true,

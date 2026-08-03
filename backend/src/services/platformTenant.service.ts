@@ -79,7 +79,7 @@ export const platformTenantService = {
       return result;
     });
 
-    invalidateTenantCache(tenant.slug);
+    invalidateTenantCache(tenant.slug, tenant.id);
 
     return updated;
   },

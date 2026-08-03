@@ -71,9 +71,11 @@ export const authService = {
     if (!dni) throw new Error("El DNI/CUIT es obligatorio");
     if (!nombre) throw new Error("El nombre es obligatorio");
 
-    const existingUser = await prisma.user.findFirst({
-      where: { email, tenantId: tenantId ?? undefined },
-    });
+    // email es unico globalmente (migracion user_email_globally_unique), no
+    // por tenant: si solo miraramos dentro de tenantId, un email ya usado en
+    // otro tenant pasaria este chequeo y el create() de abajo explotaria con
+    // un error crudo de constraint en vez de este mensaje.
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) throw new Error("El email ya está registrado");
 
     const existingClientByDni = await prisma.client.findFirst({
@@ -119,11 +121,14 @@ export const authService = {
     return sanitizeUser(user);
   },
 
-  async login(email: string, password: string, res: Response, tenantId?: string | null) {
+  async login(email: string, password: string, res: Response) {
     const cleanEmail = String(email || "").trim().toLowerCase();
 
-    const user = await prisma.user.findFirst({
-      where: { email: cleanEmail, tenantId: tenantId ?? undefined },
+    // email es unico globalmente (migracion user_email_globally_unique): el
+    // tenant del usuario sale de esta fila, no hace falta resolverlo antes
+    // por subdominio.
+    const user = await prisma.user.findUnique({
+      where: { email: cleanEmail },
       include: {
         client: true,
       },
@@ -133,12 +138,6 @@ export const authService = {
 
     if (user.isActive === false) {
       throw new Error("Usuario deshabilitado");
-    }
-
-    // doc seccion 6 - multi-tenant: un usuario de otro tenant no puede loguearse
-    // en este subdominio. Usuarios con tenantId null (legacy) no se bloquean.
-    if (user.tenantId && tenantId && user.tenantId !== tenantId) {
-      throw new Error("Credenciales inválidas");
     }
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -255,13 +254,6 @@ export const authService = {
 
     try {
       const payload = jwt.verify(token, JWT_SECRET) as { userId: string; tenantId?: string | null };
-
-      // doc seccion 6 - multi-tenant: mismo chequeo que authMiddleware (tenantMismatch),
-      // sin esto un token de otro tenant seguia devolviendo el perfil aca.
-      const requestTenantId = (req as any).tenantId;
-      if (payload.tenantId && requestTenantId && payload.tenantId !== requestTenantId) {
-        throw new Error("Token inválido");
-      }
 
       const user = await prisma.user.findUnique({
         where: { id: payload.userId },

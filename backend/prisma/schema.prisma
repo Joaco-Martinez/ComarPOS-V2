@@ -15,22 +15,44 @@ enum TenantSubscriptionStatus {
 }
 
 model Tenant {
-  id                 String                    @id @default(uuid())
-  name               String
-  slug               String                    @unique
-  isActive           Boolean                   @default(true)
-  logoUrl            String?
-  logoId             String?
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
+  id                     String   @id @default(uuid())
+  name                   String
+  slug                   String   @unique
+  isActive               Boolean  @default(true)
+  logoUrl                String?
+  logoId                 String?
+  // Version rasterizada del logo para impresion termica (ESC/POS GS v 0,
+  // 1bpp), generada automaticamente al subir logoUrl (ver
+  // services/printbox/logoRaster.service.ts). Separada de logoUrl porque
+  // el ESP32 no decodifica PNG/JPEG arbitrario, necesita el bitmap ya
+  // convertido y listo para mandarle a la impresora tal cual.
+  logoEscposRasterBase64 String?  @db.Text
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   // billing manual (super-admin de plataforma)
-  subscriptionStatus TenantSubscriptionStatus  @default(ACTIVE)
+  subscriptionStatus TenantSubscriptionStatus @default(ACTIVE)
   paidUntil          DateTime?
   suspendedAt        DateTime?
   notes              String?
 
-  paymentLogs        TenantPaymentLog[]
+  // Datos de cabecera para tickets/documentos impresos (printbox). Si son
+  // null, ticket.service.ts cae a `name` para no dejar el ticket en blanco.
+  ticketBusinessName String?
+  ticketCuit         String?
+  ticketAddress      String?
+  ticketPhone        String?
+
+  // Credenciales MQTT del tenant (printbox): un solo par usuario/password
+  // compartido por todos los PrintboxDevice del tenant, generado la primera
+  // vez que se pairea un dispositivo (ver printbox.service.ts). El ACL del
+  // broker restringe ese usuario a tenants/{tenantId}/devices/+/jobs.
+  printboxMqttUsername          String? @unique
+  printboxMqttPasswordEncrypted String?
+
+  paymentLogs     TenantPaymentLog[]
+  printboxDevices PrintboxDevice[]
+  printJobs       PrintJob[]
 
   users             User[]
   clients           Client[]
@@ -72,20 +94,20 @@ model PlatformAdmin {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  paymentLogs  TenantPaymentLog[]
+  paymentLogs TenantPaymentLog[]
 }
 
 model TenantPaymentLog {
-  id              String                    @id @default(uuid())
+  id              String                   @id @default(uuid())
   tenantId        String
-  tenant          Tenant                    @relation(fields: [tenantId], references: [id])
+  tenant          Tenant                   @relation(fields: [tenantId], references: [id])
   platformAdminId String?
-  platformAdmin   PlatformAdmin?            @relation(fields: [platformAdminId], references: [id])
+  platformAdmin   PlatformAdmin?           @relation(fields: [platformAdminId], references: [id])
   previousStatus  TenantSubscriptionStatus
   newStatus       TenantSubscriptionStatus
   note            String?
   paidUntil       DateTime?
-  createdAt       DateTime                  @default(now())
+  createdAt       DateTime                 @default(now())
 
   @@index([tenantId])
   @@index([platformAdminId])
@@ -119,7 +141,7 @@ model User {
   auditLogs            AuditLog[]
   returns              Return[]
 
-  @@unique([tenantId, email])
+  @@unique([email])
   @@index([role])
   @@index([isActive])
   @@index([passwordResetToken])
@@ -218,42 +240,42 @@ model ProductCategory {
 }
 
 model Product {
-  id                  String             @id @default(uuid())
+  id                  String              @id @default(uuid())
   tenantId            String?
-  tenant              Tenant?            @relation(fields: [tenantId], references: [id])
+  tenant              Tenant?             @relation(fields: [tenantId], references: [id])
   name                String
   description         String?
-  type                ProductType        @default(SIMPLE)
+  type                ProductType         @default(SIMPLE)
   price               Float
   wholesalePrice      Float
   clientPrice         Float
   minStock            Int?
-  stockLocal          Int                @default(0)
-  stockDeposito       Int                @default(0)
+  stockLocal          Int                 @default(0)
+  stockDeposito       Int                 @default(0)
   categoryId          String?
   imageUrl            String?
   imageId             String?
-  isActive            Boolean            @default(true)
+  isActive            Boolean             @default(true)
   sku                 String?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  saleUnit            SaleUnit           @default(UNIT)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  saleUnit            SaleUnit            @default(UNIT)
   pricePerKg          Float?
   wholesalePricePerKg Float?
   clientPricePerKg    Float?
-  stockLocalKg        Float              @default(0)
-  stockDepositoKg     Float              @default(0)
-  minStockKg          Float?             @default(0)
-  purchasePrice       Float              @default(0)
-  ivaRate             Float              @default(21)
-  isService           Boolean            @default(false)
+  stockLocalKg        Float               @default(0)
+  stockDepositoKg     Float               @default(0)
+  minStockKg          Float?              @default(0)
+  purchasePrice       Float               @default(0)
+  ivaRate             Float               @default(21)
+  isService           Boolean             @default(false)
   minStockDeposito    Int?
   minStockDepositoKg  Float?
   alerts              Alert[]
   BoxContent          BoxContent[]
-  category            ProductCategory?   @relation(fields: [categoryId], references: [id])
-  usedIn              ProductComponent[] @relation("ComponentProduct")
-  components          ProductComponent[] @relation("CompositeProduct")
+  category            ProductCategory?    @relation(fields: [categoryId], references: [id])
+  usedIn              ProductComponent[]  @relation("ComponentProduct")
+  components          ProductComponent[]  @relation("CompositeProduct")
   stats               ProductStats[]
   remitoItems         RemitoItem[]
   SaleItem            SaleItem[]
@@ -651,6 +673,68 @@ model ReturnItem {
   @@index([productId])
 }
 
+// === PrintBox (impresion de tickets via ESP32 + MQTT, doc printbox) ===
+enum PrintboxDeviceStatus {
+  PENDING_PAIRING
+  ACTIVE
+  REVOKED
+}
+
+enum PrintJobStatus {
+  QUEUED
+  PUBLISHED
+  ACKED
+  FAILED
+}
+
+// Un ESP32 fisico. El pairing inicial es local (el device levanta un server
+// HTTP temporal en su IP de DHCP); a partir de ahi solo habla MQTT saliente,
+// nunca recibe conexiones entrantes (ver printbox/README.md).
+model PrintboxDevice {
+  id                   String               @id @default(uuid())
+  tenantId             String
+  tenant               Tenant               @relation(fields: [tenantId], references: [id])
+  name                 String
+  status               PrintboxDeviceStatus @default(PENDING_PAIRING)
+  hardwareId           String?              @unique
+  printerIp            String?
+  pairingCode          String?              @unique
+  pairingCodeExpiresAt DateTime?
+  lastSeenAt           DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  printJobs PrintJob[]
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+// Registro/auditoria de cada ticket publicado a MQTT. No es la cola en si
+// (esa la maneja el broker via QoS 1) - esto es para poder ver en
+// platform-admin "se publico, se imprimio, fallo" y reintentar a mano.
+// saleId es una referencia opaca (sin FK) a proposito: esta tabla es
+// auxiliar/operativa y no debe acoplarse al modelo Sale.
+model PrintJob {
+  id          String          @id @default(uuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  deviceId    String?
+  device      PrintboxDevice? @relation(fields: [deviceId], references: [id])
+  saleId      String?
+  payload     Json
+  status      PrintJobStatus  @default(QUEUED)
+  publishedAt DateTime?
+  ackedAt     DateTime?
+  error       String?
+  createdAt   DateTime        @default(now())
+
+  @@index([tenantId])
+  @@index([deviceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
 model SaleItem {
   id                    String            @id @default(uuid())
   saleId                String
@@ -866,9 +950,9 @@ model Invoice {
 // ═══════════════════════════════════════════════════
 
 model Supplier {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   tenantId    String?
-  tenant      Tenant?   @relation(fields: [tenantId], references: [id])
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
   name        String
   cuit        String?
   contactName String?
@@ -876,9 +960,9 @@ model Supplier {
   email       String?
   address     String?
   notes       String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   purchases      Purchase[]
   purchaseOrders PurchaseOrder[]
@@ -982,9 +1066,9 @@ model SalesGoal {
 }
 
 model Promotion {
-  id             String         @id @default(uuid())
+  id             String          @id @default(uuid())
   tenantId       String?
-  tenant         Tenant?        @relation(fields: [tenantId], references: [id])
+  tenant         Tenant?         @relation(fields: [tenantId], references: [id])
   name           String
   description    String?
   type           PromotionType
@@ -992,13 +1076,13 @@ model Promotion {
   discountType   DiscountType
   startsAt       DateTime
   endsAt         DateTime
-  isActive       Boolean        @default(true)
+  isActive       Boolean         @default(true)
   minAmount      Float?
-  categoryIds    String[]       @default([])
-  productIds     String[]       @default([])
+  categoryIds    String[]        @default([])
+  productIds     String[]        @default([])
   clientCategory CategoryClient?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   sales Sale[]
 
@@ -1124,16 +1208,16 @@ model Notification {
 }
 
 model LoyaltyAccount {
-  id            String               @id @default(uuid())
+  id            String   @id @default(uuid())
   tenantId      String?
-  tenant        Tenant?              @relation(fields: [tenantId], references: [id])
-  clientId      String               @unique
-  client        Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  points        Int                  @default(0)
-  totalEarned   Int                  @default(0)
-  totalRedeemed Int                  @default(0)
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id])
+  clientId      String   @unique
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  points        Int      @default(0)
+  totalEarned   Int      @default(0)
+  totalRedeemed Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   transactions LoyaltyTransaction[]
 
@@ -1156,15 +1240,15 @@ model LoyaltyTransaction {
 }
 
 model PriceList {
-  id          String          @id @default(uuid())
+  id          String   @id @default(uuid())
   tenantId    String?
-  tenant      Tenant?         @relation(fields: [tenantId], references: [id])
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
   name        String
   description String?
-  isDefault   Boolean         @default(false)
-  isActive    Boolean         @default(true)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   items   PriceListItem[]
   clients Client[]
