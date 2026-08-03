@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import type { ElementType } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
@@ -11,6 +10,7 @@ import {
   CreditCard, PieChart, Tag, Star, UserCog, MapPin, ShieldCheck, Building2,
   PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight,
   ClipboardList, ClipboardCheck, Target, RefreshCw, DollarSign, Shield, FileCheck2,
+  type LucideIcon,
 } from 'lucide-react';
 
 const NAV = [
@@ -50,7 +50,7 @@ const ADMIN_NAV = [
 
 const STORAGE_KEY = 'comarpos-sidebar-collapsed';
 
-type NavItem = { href: string; icon: ElementType; label: string; color: string };
+type NavItem = { href: string; icon: LucideIcon; label: string; color: string };
 
 interface SidebarProps {
   open?: boolean;

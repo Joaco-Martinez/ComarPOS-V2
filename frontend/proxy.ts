@@ -65,6 +65,10 @@ export function proxy(req: NextRequest) {
   const isLogged = Boolean(role);
   const isStaff = role === 'ADMIN' || role === 'EMPLEADO';
   const isLogin = pathname === '/login';
+  // "/" es público: en el dominio de marketing sirve la landing de ventas, y en
+  // los subdominios de tenant, page.tsx redirige a /pos (donde sí aplica el
+  // gate de auth de más abajo).
+  const isRoot = pathname === '/';
 
   if (isLogin) {
     if (isStaff) {
@@ -72,6 +76,10 @@ export function proxy(req: NextRequest) {
       url.pathname = '/pos';
       return NextResponse.redirect(url);
     }
+    return NextResponse.next();
+  }
+
+  if (isRoot) {
     return NextResponse.next();
   }
 
