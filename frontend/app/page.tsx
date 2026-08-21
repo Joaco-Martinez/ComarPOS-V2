@@ -9,6 +9,8 @@ import LandingPage from '@/components/landing/LandingPage';
 const MARKETING_HOSTS = new Set([
   'comarpos.com.ar',
   'www.comarpos.com.ar',
+  'comarpos.com',
+  'www.comarpos.com',
   'localhost:3000',
   'localhost',
 ]);
