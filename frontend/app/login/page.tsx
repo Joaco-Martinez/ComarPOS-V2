@@ -55,6 +55,17 @@ export default function LoginPage() {
     }
   };
 
+  // Mientras se confirma si ya hay sesión activa (o mientras se redirige a
+  // /pos porque la hay), no mostrar el formulario: evita el flash de
+  // "pantalla de login" cada vez que se abre la PWA ya logueado.
+  if (sessionLoading || user?.tenantSlug) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
+
   return (
     <div
       className="login-root"
