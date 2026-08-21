@@ -1,5 +1,5 @@
 import {
-  Receipt, ArrowRight, ShoppingBag, PawPrint, Wrench,
+  ArrowRight, ShoppingBag, PawPrint, Wrench,
   Cpu, Candy, Shirt, Hammer, Truck, Pill, BookOpen, Wine,
   Sparkles, Store, ShieldCheck, Zap, Layers, Target, CheckCircle2,
 } from 'lucide-react';
@@ -81,16 +81,16 @@ function Eyebrow({ children, align = 'center' }: { children: React.ReactNode; al
 
 export default function LandingPage() {
   return (
-    <div className="landing-root" style={{ background: 'var(--bg)', color: 'var(--text)', minHeight: '100vh', position: 'relative', overflowX: 'hidden' }}>
+    <div className="landing-root" style={{ background: 'var(--bg)', color: 'var(--text)', minHeight: '100vh', position: 'relative', overflowX: 'hidden', maxWidth: '100vw', contain: 'paint' }}>
       {/* Ambient glow (no grid technique: warm, soft, not "dev tool") */}
       <div style={{
         position: 'absolute', top: '-8%', left: '58%', transform: 'translateX(-50%)',
-        width: 900, height: 700, background: 'radial-gradient(circle, rgba(13,89,231,0.14) 0%, transparent 68%)',
+        width: 'min(900px, 100vw)', height: 700, background: 'radial-gradient(circle, rgba(13,89,231,0.14) 0%, transparent 68%)',
         pointerEvents: 'none',
       }} />
       <div style={{
         position: 'absolute', top: '6%', left: '2%',
-        width: 460, height: 460, background: 'radial-gradient(circle, rgba(243,156,18,0.08) 0%, transparent 70%)',
+        width: 'min(460px, 90vw)', height: 460, background: 'radial-gradient(circle, rgba(243,156,18,0.08) 0%, transparent 70%)',
         pointerEvents: 'none',
       }} />
 
@@ -118,13 +118,6 @@ export default function LandingPage() {
       <Section style={{ position: 'relative', padding: '72px 24px 48px' }}>
         <div style={{ display: 'flex', gap: 56, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 440px', animation: 'fadeIn 0.5s ease' }}>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700,
-              color: 'var(--accent)', background: 'var(--accent-dim)', border: '1px solid var(--border2)',
-              borderRadius: 999, padding: '6px 14px', marginBottom: 22, fontFamily: 'var(--mono)',
-            }}>
-              <Receipt size={13} /> FACTURACIÓN ELECTRÓNICA AFIP EN TIEMPO REAL
-            </div>
             <h1 style={{ fontSize: 'clamp(32px, 4.6vw, 52px)', fontWeight: 800, lineHeight: 1.12, letterSpacing: '-0.02em', marginBottom: 20 }}>
               Vendé, facturá y controlá tu negocio, todo en un solo lugar
             </h1>
@@ -328,6 +321,17 @@ export default function LandingPage() {
               ))}
             </ul>
           </div>
+        </Reveal>
+      </Section>
+
+      {/* Brand identity */}
+      <Section style={{ padding: '0 24px 88px', textAlign: 'center' }}>
+        <Reveal>
+          <img
+            src="/brand/logo-horizontal-positivo.svg"
+            alt="ComarPOS"
+            style={{ height: 64, margin: '0 auto', display: 'block' }}
+          />
         </Reveal>
       </Section>
 
