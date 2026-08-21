@@ -185,7 +185,9 @@ input, select, textarea {
   width: 100%;
 }
 @media (max-width: 768px) {
-  input, select, textarea { border-radius: 12px; padding: 11px 14px; background: var(--surface); border-color: var(--border); }
+  /* font-size >= 16px evita que iOS Safari haga zoom automático al enfocar
+     un input (ej. el buscador del POS, que tiene autoFocus). */
+  input, select, textarea { border-radius: 12px; padding: 11px 14px; background: var(--surface); border-color: var(--border); font-size: 16px; }
 }
 input:focus, select:focus, textarea:focus {
   border-color: var(--accent);
