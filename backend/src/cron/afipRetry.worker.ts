@@ -2,7 +2,8 @@ import "../config/timezone";
 import prisma from "../prisma";
 import { emitirFacturaAFIP } from "../afip/wsfe.service";
 import { generarFacturaAfipPDF } from "../afip/utils/generarFacturaAfipPDF";
-import { runWithTenant } from "../context/tenantContext";
+import { arcaConfigService } from "../services/arcaConfig.service";
+import { runWithTenant, currentTenantId } from "../context/tenantContext";
 
 function isAfipUnavailable(err: any) {
   const status = err?.response?.status;
@@ -87,6 +88,15 @@ async function processSale(sale: any, now: Date) {
 
     // Si aprobó => PDF + estado OK
     if (factura.resultado === "A" && factura.cae) {
+      const [arcaConfig, tenantForTicket] = await Promise.all([
+        arcaConfigService.getConfig().catch(() => null),
+        currentTenantId()
+          ? prisma.tenant
+              .findUnique({ where: { id: currentTenantId()! }, select: { ticketPhone: true } })
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
       await generarFacturaAfipPDF({
         tipoComprobante: factura.tipoComprobante,
         puntoVenta: factura.puntoVenta,
@@ -99,6 +109,9 @@ async function processSale(sale: any, now: Date) {
         cae: factura.cae,
         caeVto: factura.caeVto ? new Date(factura.caeVto) : new Date(),
         cuit: factura.cuit,
+        razonSocial: arcaConfig?.businessName || undefined,
+        direccion: arcaConfig?.fiscalAddress || undefined,
+        telefonoNegocio: tenantForTicket?.ticketPhone || undefined,
         qrBase64: factura.qrBase64 ?? null,
       });
 

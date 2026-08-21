@@ -6,14 +6,14 @@ import { useParams, useRouter } from 'next/navigation';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
 import type { Tenant, TenantSubscriptionStatus } from '@/types';
-import { fmtDate } from '@/lib/helpers';
+import { fmtDate, daysRemaining } from '@/lib/helpers';
 import { ArrowLeft, History, Save } from 'lucide-react';
 
 const statusBadge = (s: TenantSubscriptionStatus) =>
-  s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
+  s === 'TRIAL' ? 'badge-blue' : s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
 
 const statusLabel = (s: TenantSubscriptionStatus) =>
-  s === 'ACTIVE' ? 'Al día' : s === 'PAST_DUE' ? 'Vencido' : 'Suspendido';
+  s === 'TRIAL' ? 'Prueba gratis' : s === 'ACTIVE' ? 'Al día' : s === 'PAST_DUE' ? 'Vencido' : 'Suspendido';
 
 export default function PlatformAdminTenantDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +23,7 @@ export default function PlatformAdminTenantDetailPage() {
   const [status, setStatus] = useState<TenantSubscriptionStatus>('ACTIVE');
   const [note, setNote] = useState('');
   const [paidUntil, setPaidUntil] = useState('');
+  const [trialEndsAt, setTrialEndsAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
 
@@ -35,6 +36,7 @@ export default function PlatformAdminTenantDetailPage() {
       setStatus(t.subscriptionStatus);
       setNote(t.notes ?? '');
       setPaidUntil(t.paidUntil ? t.paidUntil.slice(0, 10) : '');
+      setTrialEndsAt(t.trialEndsAt ? t.trialEndsAt.slice(0, 10) : '');
     } finally {
       setLoading(false);
     }
@@ -51,6 +53,7 @@ export default function PlatformAdminTenantDetailPage() {
         status,
         note,
         ...(paidUntil ? { paidUntil } : {}),
+        ...(trialEndsAt ? { trialEndsAt } : {}),
       });
       showToast('Estado actualizado');
       load();
@@ -86,13 +89,30 @@ export default function PlatformAdminTenantDetailPage() {
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <span className={`badge ${statusBadge(tenant.subscriptionStatus)}`}>{statusLabel(tenant.subscriptionStatus)}</span>
+          {tenant.subscriptionStatus === 'TRIAL' && tenant.trialEndsAt && (
+            <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+              {(() => {
+                const d = daysRemaining(tenant.trialEndsAt);
+                return d !== null && d > 0 ? `Vence en ${d} día${d === 1 ? '' : 's'} (${fmtDate(tenant.trialEndsAt)})` : `Venció el ${fmtDate(tenant.trialEndsAt)}`;
+              })()}
+            </span>
+          )}
           {tenant.suspendedAt && <span style={{ fontSize: 11, color: 'var(--text3)' }}>Suspendido el {fmtDate(tenant.suspendedAt)}</span>}
+          {tenant.contactPhone && (
+            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>Tel: {tenant.contactPhone}</span>
+          )}
+          {tenant.mpPreapprovalId && (
+            <span className="badge badge-cyan" title={tenant.mpPreapprovalId}>
+              Mercado Pago{tenant.mpSubscriptionAmount ? ` · $${tenant.mpSubscriptionAmount.toLocaleString('es-AR')}/mes` : ''}
+            </span>
+          )}
         </div>
 
         <div className="grid-responsive" style={{ gap: 12 }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Estado de suscripción</label>
             <select value={status} onChange={(e) => setStatus(e.target.value as TenantSubscriptionStatus)}>
+              <option value="TRIAL">Prueba gratis</option>
               <option value="ACTIVE">Al día</option>
               <option value="PAST_DUE">Vencido</option>
               <option value="SUSPENDED">Suspendido</option>
@@ -101,6 +121,10 @@ export default function PlatformAdminTenantDetailPage() {
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Pago cubierto hasta</label>
             <input type="date" value={paidUntil} onChange={(e) => setPaidUntil(e.target.value)} />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Prueba gratis vence</label>
+            <input type="date" value={trialEndsAt} onChange={(e) => setTrialEndsAt(e.target.value)} />
           </div>
           <div className="form-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
             <label className="form-label">Notas</label>

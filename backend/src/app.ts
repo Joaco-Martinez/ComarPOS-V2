@@ -47,8 +47,11 @@ import loyaltyRoutes from "./routes/loyalty.routes";
 import returnRoutes from "./routes/return.routes";
 import exportRoutes from "./routes/export.routes";
 import tenantLogoRoutes from "./routes/tenantLogo.routes";
+import tenantRoutes from "./routes/tenant.routes";
 import printboxRoutes from "./routes/printbox.routes";
 import platformAdminRoutes from "./routes/platformAdmin.routes";
+import trialSignupRoutes from "./routes/trialSignup.routes";
+import billingRoutes from "./routes/billing.routes";
 dotenv.config();
 
 const app = express();
@@ -85,8 +88,10 @@ app.use((req, res, next) => {
 
 // 🔹 Middlewares globales
 app.use(cookieParser());
-// Resuelve req.tenant/req.tenantId por subdominio (doc seccion 6 - multi-tenant).
-// No bloquea requests: el scoping de queries por tenantId es incremental,
+// Resuelve req.tenant/req.tenantId con el tenant default (doc seccion 6 -
+// multi-tenant, ver middleware/tenant.ts) - solo es la base para requests sin
+// autenticar, authMiddleware lo pisa despues con el tenantId del JWT. No
+// bloquea requests: el scoping de queries por tenantId es incremental,
 // modulo por modulo, y todavia no esta aplicado en los services.
 app.use(tenantMiddleware);
 app.use((req, res, next) => {
@@ -190,8 +195,11 @@ app.use("/loyalty", loyaltyRoutes);
 app.use("/returns", returnRoutes);
 app.use("/exports", exportRoutes);
 app.use("/uploads", tenantLogoRoutes);
+app.use("/tenant", tenantRoutes);
 app.use("/printbox", printboxRoutes);
 app.use("/platform-admin", platformAdminRoutes);
+app.use("/trial-signup", trialSignupRoutes);
+app.use("/billing", billingRoutes);
 
 // 🔹 Swagger
 swaggerDocs(app);

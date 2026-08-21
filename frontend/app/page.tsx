@@ -30,5 +30,7 @@ export default async function RootPage() {
   if (await isMarketingHost()) {
     return <LandingPage />;
   }
-  redirect('/pos');
+  // El login se encarga de mandar al usuario ya autenticado a
+  // /[tenantSlug]/pos - acá no sabemos el tenant sin decodificar el JWT.
+  redirect('/login');
 }

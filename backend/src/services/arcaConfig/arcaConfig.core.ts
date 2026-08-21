@@ -122,7 +122,7 @@ export async function upsertConfig(data: UpdateArcaConfigInput) {
         // "GRUPO_VJ" se usa su tenantId como scope (doc seccion 6).
         scope: currentTenantId() ? `TENANT_${currentTenantId()}` : "GRUPO_VJ",
         tenantId: currentTenantId(),
-        businessName: data.businessName || "Grupo VJ",
+        businessName: data.businessName || "Mi Negocio",
         cuit: cuit || "",
         ivaCondition: data.ivaCondition || null,
         fiscalAddress: data.fiscalAddress || null,

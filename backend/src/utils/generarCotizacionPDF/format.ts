@@ -37,6 +37,10 @@ export function safe(value?: string | null) {
   return value?.trim() || "-";
 }
 
+export function getBusinessName(sale: CotizacionPDFSale) {
+  return sale.businessName?.trim() || "Mi Negocio";
+}
+
 export function getQuotationCategoryLabel(client?: CotizacionPDFSale["client"]) {
   const category = client?.category?.trim();
 

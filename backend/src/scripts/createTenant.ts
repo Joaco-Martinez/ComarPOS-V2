@@ -12,8 +12,9 @@
  *     [--adminName="Administrador"] \
  *     [--locationName="Casa Central"]
  *
- * El "slug" es el subdominio por el que se va a resolver el tenant
- * (src/middleware/tenant.ts), ej. slug "negocio-dos" -> negocio-dos.tudominio.com.
+ * El "slug" es solo un identificador legible del tenant (se usa en el panel
+ * de super-admin y como fallback del header X-Tenant-Slug en dev) - ya no
+ * hay resolucion por subdominio (src/middleware/tenant.ts).
  */
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
@@ -53,7 +54,7 @@ async function createTenant() {
   const adminName = String(args.adminName || "Administrador").trim();
   const locationName = String(args.locationName || "Casa Central").trim();
 
-  if (!rawSlug) throw new Error("Falta --slug (subdominio del negocio, ej. negocio-dos)");
+  if (!rawSlug) throw new Error("Falta --slug (identificador del negocio, ej. negocio-dos)");
   if (!name) throw new Error("Falta --name (nombre comercial del negocio)");
   if (!adminEmail) throw new Error("Falta --adminEmail");
   if (!adminPassword || adminPassword.length < 6) {
@@ -111,7 +112,7 @@ createTenant()
     console.log("✅ Tenant creado correctamente");
     console.log("");
     console.log(`Negocio: ${tenant.name}`);
-    console.log(`Slug (subdominio): ${tenant.slug}`);
+    console.log(`Slug: ${tenant.slug}`);
     console.log(`Tenant ID: ${tenant.id}`);
     console.log("");
     console.log("🔐 Usuario admin:");
@@ -122,7 +123,7 @@ createTenant()
     console.log(`📍 Sucursal default: ${location.name}`);
     console.log("");
     console.log(
-      `En desarrollo, probalo con el header "X-Tenant-Slug: ${tenant.slug}". En produccion, apuntá el subdominio "${tenant.slug}" a la app.`
+      `Cada usuario entra a su tenant por login (email/password), no por dominio. En desarrollo podés forzar este tenant para rutas publicas/anonimas con el header "X-Tenant-Slug: ${tenant.slug}".`
     );
     console.log("");
   })

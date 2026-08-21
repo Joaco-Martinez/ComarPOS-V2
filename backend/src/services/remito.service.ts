@@ -127,8 +127,8 @@ function mapRemitoToPdfData(remito: any): RemitoPDFData {
       copyLabel: "ORIGINAL",
     },
     business: {
-      businessName: remito.businessName || "GRUPO VJ",
-      fantasyName: "Grupo VJ",
+      businessName: remito.businessName || "Mi Negocio",
+      fantasyName: remito.businessName || "Mi Negocio",
       cuit: remito.businessCuit || "",
       ivaCondition: remito.businessIvaCondition || "IVA RESPONSABLE INSCRIPTO",
       grossIncomeNumber: remito.businessIibb || "",
@@ -204,6 +204,14 @@ export const remitoService = {
 
     const now = new Date();
 
+    const tenantId = currentTenantId();
+    const tenant = tenantId
+      ? await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { ticketPhone: true, ticketEmail: true },
+        })
+      : null;
+
     const createdRemito = await prisma.$transaction(async (tx) => {
       const arcaConfig = await tx.arcaConfig.findFirst({
         where: {
@@ -230,7 +238,7 @@ export const remitoService = {
 
       if (!arcaConfig) {
         throw new Error(
-          "No hay configuración ARCA activa. Cargá primero los datos fiscales de Grupo VJ."
+          "No hay configuración ARCA activa. Cargá primero los datos fiscales del negocio en Configuración > ARCA."
         );
       }
 
@@ -295,7 +303,7 @@ export const remitoService = {
           caiRangeFrom: remitoCai.rangeFrom,
           caiRangeTo: remitoCai.rangeTo,
 
-          businessName: arcaConfig.businessName || "GRUPO VJ",
+          businessName: arcaConfig.businessName || "Mi Negocio",
           businessCuit: arcaConfig.cuit,
           businessIvaCondition:
             arcaConfig.ivaCondition || "IVA RESPONSABLE INSCRIPTO",
@@ -303,8 +311,8 @@ export const remitoService = {
           businessActivityStart: arcaConfig.activityStart,
           businessFiscalAddress: arcaConfig.fiscalAddress,
           businessAddress,
-          businessEmail: process.env.BUSINESS_EMAIL || null,
-          businessPhone: process.env.BUSINESS_PHONE || null,
+          businessEmail: tenant?.ticketEmail || null,
+          businessPhone: tenant?.ticketPhone || null,
 
           clientName,
           clientDni: sale.client?.dni || null,

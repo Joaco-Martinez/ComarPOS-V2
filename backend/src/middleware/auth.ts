@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { runWithTenant } from "../context/tenantContext";
-import { resolveTenantById, isSuspensionExempt, isTenantSuspended } from "./tenant";
+import { resolveTenantById, isSuspensionExempt, getTenantBlock } from "./tenant";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET.length < 64) {
@@ -33,11 +33,18 @@ async function runWithAuthenticatedTenant(
 
   const tenant = await resolveTenantById(decoded.tenantId);
 
-  if (tenant && !isSuspensionExempt(req.path) && isTenantSuspended(tenant)) {
-    return res.status(403).json({
-      code: "TENANT_SUSPENDED",
-      message: "Esta cuenta está suspendida. Contactá a soporte para reactivarla.",
-    });
+  // req.path es relativo al punto de montaje (ej. "/" para GET /users, ya
+  // que authMiddleware se monta con prefijo en varios routes.ts) - usar
+  // req.originalUrl (siempre la ruta completa, sin importar el nesting de
+  // routers) para que isSuspensionExempt no confunda la raiz de un recurso
+  // cualquiera con el healthcheck real ("/").
+  const fullPath = req.originalUrl.split("?")[0];
+
+  if (tenant && !isSuspensionExempt(fullPath)) {
+    const block = getTenantBlock(tenant);
+    if (block) {
+      return res.status(403).json(block);
+    }
   }
 
   return runWithTenant(decoded.tenantId, next);

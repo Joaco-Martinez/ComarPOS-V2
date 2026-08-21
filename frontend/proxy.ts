@@ -65,17 +65,16 @@ export function proxy(req: NextRequest) {
   const isLogged = Boolean(role);
   const isStaff = role === 'ADMIN' || role === 'EMPLEADO';
   const isLogin = pathname === '/login';
-  // "/" es público: en el dominio de marketing sirve la landing de ventas, y en
-  // los subdominios de tenant, page.tsx redirige a /pos (donde sí aplica el
-  // gate de auth de más abajo).
+  // "/" es público: en el dominio de marketing sirve la landing de ventas; en
+  // cualquier otro caso page.tsx redirige a /login (donde sí aplica el gate
+  // de auth de más abajo).
   const isRoot = pathname === '/';
 
   if (isLogin) {
-    if (isStaff) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/pos';
-      return NextResponse.redirect(url);
-    }
+    // No hay forma de saber el slug del tenant acá (el JWT solo trae
+    // tenantId, no el slug, y no queremos pegarle a la DB desde el edge) -
+    // si ya está logueado, /login mismo lo manda a /[tenantSlug]/pos
+    // (ver app/login/page.tsx) apenas resuelve la sesión via /auth/me.
     return NextResponse.next();
   }
 

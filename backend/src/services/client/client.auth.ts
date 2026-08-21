@@ -26,6 +26,17 @@ export async function requestPasswordReset(emailValue?: string | null) {
   if (user.role !== Role.CLIENTE) return { ok: true };
   if (user.isActive === false) return { ok: true };
 
+  // El tenant del propio usuario manda (no currentTenantId()): este flujo es
+  // publico/anonimo y el tenant de contexto es el default, no necesariamente
+  // el del negocio real de este usuario.
+  const tenant = user.tenantId
+    ? await prisma.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { name: true, ticketBusinessName: true },
+      })
+    : null;
+  const businessName = tenant?.ticketBusinessName || tenant?.name || null;
+
   const rawToken = crypto.randomBytes(32).toString("hex");
 
   const hashedToken = crypto
@@ -47,6 +58,7 @@ export async function requestPasswordReset(emailValue?: string | null) {
     to: user.email,
     name: user.name,
     token: rawToken,
+    businessName,
   });
 
   return { ok: true };

@@ -7,6 +7,7 @@ import { COLORS, FacturaPDFData } from "./types";
 import { formatCurrency, formatDateAR, buildNumeroComprobante } from "./format";
 import { getEmpresa } from "./labels";
 import { drawBox } from "./sections.header";
+import { COMARPOS_FOOTER_TEXT } from "../../utils/comarposBranding";
 
 export function renderTotals(doc: PDFKit.PDFDocument, factura: FacturaPDFData["factura"]) {
   const boxW = 230;
@@ -178,6 +179,10 @@ export function renderFooter(doc: PDFKit.PDFDocument, data: FacturaPDFData) {
       { width, align: "center" }
     )
     .text("Verificación: comprobante.afip.gob.ar", left, y + 20, {
+      width,
+      align: "center",
+    })
+    .text(COMARPOS_FOOTER_TEXT, left, y + 32, {
       width,
       align: "center",
     });

@@ -1,9 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useAuthStore } from '@/store/auth';
 
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => { console.error(error); }, [error]);
+  // Igual que en not-found.tsx: sin slug de tenant en la URL acá, usamos la
+  // sesión si ya está cargada y si no hay, mandamos a /login.
+  const { user } = useAuthStore();
+  const dashboardHref = user?.tenantSlug ? `/${user.tenantSlug}/dashboard` : '/login';
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', color: 'var(--text)' }}>
@@ -17,7 +22,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         )}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 28 }}>
           <button onClick={reset} className="btn btn-primary btn-sm">Reintentar</button>
-          <a href="/dashboard" className="btn btn-secondary btn-sm">Ir al Dashboard</a>
+          <a href={dashboardHref} className="btn btn-secondary btn-sm">Ir al Dashboard</a>
         </div>
       </div>
     </div>

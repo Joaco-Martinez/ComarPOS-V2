@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function seedAdmin() {
-  const password = await bcrypt.hash("admin123", 10);
+  const password = await bcrypt.hash("Joaco1907!", 10);
 
   // doc seccion 6 - multi-tenant: este script corre fuera de un request, asi
   // que no hay tenant resuelto por subdominio. Se asigna el tenant default
@@ -20,7 +20,7 @@ async function seedAdmin() {
 
   const admin = await prisma.user.upsert({
     where: {
-      email: "admin@grupovj.com",
+      email: "joaco.martinez1480@gmail.com",
     },
     update: {
       name: "Administrador",
@@ -28,7 +28,7 @@ async function seedAdmin() {
       password,
     },
     create: {
-      email: "admin@grupovj.com",
+      email: "joaco.martinez1480@gmail.com",
       password,
       name: "Administrador",
       role: Role.ADMIN,
@@ -39,18 +39,44 @@ async function seedAdmin() {
   return admin;
 }
 
+// Super-admin de plataforma (PlatformAdmin), separado del User por-tenant de
+// seedAdmin(). Sin esto no hay forma de entrar a /platform-admin: la tabla
+// queda vacia y el login rechaza cualquier credencial.
+async function seedPlatformAdmin() {
+  const passwordHash = await bcrypt.hash("Joaco1907!", 10);
+
+  const platformAdmin = await prisma.platformAdmin.upsert({
+    where: { email: "joaco.martinez1480@gmail.com" },
+    update: {
+      name: "Joaco",
+      passwordHash,
+    },
+    create: {
+      email: "joaco.martinez1480@gmail.com",
+      passwordHash,
+      name: "Joaco",
+    },
+  });
+
+  return platformAdmin;
+}
+
 async function main() {
   console.log("🌱 Iniciando seed...");
 
   const admin = await seedAdmin();
+  const platformAdmin = await seedPlatformAdmin();
 
   console.log("");
   console.log("✅ Seed finalizado correctamente");
   console.log("");
-  console.log("🔐 Usuario admin creado/actualizado:");
+  console.log("🔐 Usuario admin (tenant grupo-vj) creado/actualizado:");
   console.log(`ID: ${admin.id}`);
-  console.log("Email: admin@grupovj.com");
-  console.log("Password: admin123");
+  console.log(`Email: ${admin.email}`);
+  console.log("");
+  console.log("🛡️  Platform admin (/platform-admin) creado/actualizado:");
+  console.log(`ID: ${platformAdmin.id}`);
+  console.log(`Email: ${platformAdmin.email}`);
   console.log("");
 }
 

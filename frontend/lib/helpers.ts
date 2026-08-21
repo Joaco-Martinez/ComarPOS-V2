@@ -7,6 +7,14 @@ export const fmtMoney = (n: number | unknown) =>
 
 export const fmtDate = (v?: string | null) => formatDateTimeAR(v);
 
+// Redondea para arriba: "vence en 1 hora" ya cuenta como "1 día" restante en
+// vez de "0" (más útil para el panel de super-admin que un piso a cero).
+export const daysRemaining = (v?: string | null): number | null => {
+  if (!v) return null;
+  const diff = new Date(v).getTime() - Date.now();
+  return Math.ceil(diff / (24 * 60 * 60 * 1000));
+};
+
 export const num = (v: unknown, fallback = 0): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
@@ -37,11 +45,10 @@ export const categoryName = (product: Product) => {
 
 export const productPrice = (
   product: Product,
-  priceType: 'price' | 'clientPrice' | 'wholesalePrice' = 'price'
+  priceType: 'price' | 'wholesalePrice' = 'price'
 ): number => {
   if (product.saleUnit === 'KG') {
-    if (priceType === 'wholesalePrice') return num(product.wholesalePricePerKg, num(product.clientPricePerKg, num(product.pricePerKg)));
-    if (priceType === 'clientPrice') return num(product.clientPricePerKg, num(product.pricePerKg));
+    if (priceType === 'wholesalePrice') return num(product.wholesalePricePerKg, num(product.pricePerKg));
     return num(product.pricePerKg);
   }
   return num(product[priceType], num(product.price));

@@ -2,6 +2,9 @@ import axios from "axios";
 import prisma from "../prisma";
 import { tenantScope } from "../utils/tenantScope";
 import { printboxService } from "./printbox";
+import { arcaConfigService } from "./arcaConfig.service";
+import { cbteTipoLabel } from "../afip/ivaCondition";
+import { buildNumeroComprobante } from "./facturaPdfGenerator/format";
 
 function numberOrZero(value: unknown) {
   const n = Number(value ?? 0);
@@ -21,6 +24,15 @@ function formatFechaTicket(date: Date) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+  }).format(date);
+}
+
+function formatFechaCorta(date: Date) {
+  return new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   }).format(date);
 }
 
@@ -211,7 +223,31 @@ function getShippingPayload(sale: any) {
   };
 }
 
-function buildTicketPayload(sale: any, tenant: any) {
+// Precio de cada item ya incluye IVA (precio de venta final) -- "destapa"
+// el neto de cada uno con su propia alicuota y agrupa el IVA por tasa.
+// Mismo criterio que generarCotizacionPDF/sections.ts (Subtotal sin IVA →
+// IVA por tasa → Total), para que no diverjan entre el PDF y el ticket.
+function buildIvaBreakdown(items: any[]) {
+  const ivaByRate: Record<number, number> = {};
+  let netoSum = 0;
+
+  for (const item of items) {
+    const rate = item.ivaRate ?? item.product?.ivaRate ?? 21;
+    const itemSubtotal = numberOrZero(item.subtotal);
+    const neto = itemSubtotal / (1 + rate / 100);
+    const iva = itemSubtotal - neto;
+    ivaByRate[rate] = (ivaByRate[rate] ?? 0) + iva;
+    netoSum += neto;
+  }
+
+  const ivaBreakdown = Object.entries(ivaByRate)
+    .filter(([, amount]) => amount > 0.01)
+    .map(([rate, amount]) => ({ rate: Number(rate), amount }));
+
+  return { netoSum, ivaBreakdown };
+}
+
+function buildTicketPayload(sale: any, tenant: any, arcaConfig: any) {
   const subtotal = numberOrZero(sale.subtotal);
   const total = numberOrZero(sale.total);
   const discount = subtotal > total ? subtotal - total : 0;
@@ -219,10 +255,26 @@ function buildTicketPayload(sale: any, tenant: any) {
   const sellerName = getSellerName(sale);
   const sellerEmail = getSellerEmail(sale);
   const shipping = getShippingPayload(sale);
+  const { netoSum, ivaBreakdown } = buildIvaBreakdown(sale.items);
+
+  // Solo hay QR/CAE si la venta esta REALMENTE facturada por AFIP (no
+  // alcanza con sale.isInvoiced -- eso puede estar en true con la emision
+  // todavia pendiente/en cola de reintento, ver invoiceStatus en
+  // backend/CLAUDE.md). El ticket no fiscal no lleva nada de esto.
+  const invoiceAfip = sale.invoiceAfip;
+  const invoice =
+    invoiceAfip?.cae
+      ? {
+          letra: cbteTipoLabel(invoiceAfip.tipoComprobante),
+          numero: buildNumeroComprobante(invoiceAfip.puntoVenta, invoiceAfip.numero),
+          cae: invoiceAfip.cae,
+          qrUrl: invoiceAfip.urlQR || "",
+        }
+      : null;
 
   return {
     saleId: `TICKET-${String(sale.id).slice(0, 8).toUpperCase()}`,
-    receiptType: "TICKET NO FISCAL",
+    receiptType: invoice ? `FACTURA ${invoice.letra}` : "COMPROBANTE NO FISCAL",
     paymentMethod: getMetodoPago(sale),
     createdAt: formatFechaTicket(sale.createdAt ?? new Date()),
 
@@ -247,11 +299,17 @@ function buildTicketPayload(sale: any, tenant: any) {
     // panel, esos pisan al env var). El logoUrl viaja aparte: el printbox
     // lo cachea en flash, no se manda de nuevo en cada ticket.
     business: {
-      name: tenant?.ticketBusinessName || tenant?.name || process.env.BUSINESS_NAME || "GRUPO VJ",
-      subtitle: process.env.BUSINESS_SUBTITLE ?? "ComarPOS",
+      name: tenant?.ticketBusinessName || tenant?.name || process.env.BUSINESS_NAME || "Mi Negocio",
       cuit: tenant?.ticketCuit || process.env.BUSINESS_CUIT || "",
-      address: tenant?.ticketAddress || process.env.BUSINESS_ADDRESS || "Dirección Grupo VJ",
-      phone: tenant?.ticketPhone || process.env.BUSINESS_PHONE || "Teléfono Grupo VJ",
+      address: tenant?.ticketAddress || process.env.BUSINESS_ADDRESS || "",
+      phone: tenant?.ticketPhone || process.env.BUSINESS_PHONE || "",
+      // Estos 3 solo existen en ArcaConfig (no hay campo espejo en Tenant,
+      // a diferencia de name/cuit/address/phone) -- sin ArcaConfig
+      // configurado, quedan vacios y el ticket simplemente no imprime esas
+      // lineas (ver strlen() checks en printTicketFromPayload).
+      ivaCondition: arcaConfig?.ivaCondition || "",
+      iibb: arcaConfig?.iibb || "",
+      activityStart: arcaConfig?.activityStart ? formatFechaCorta(arcaConfig.activityStart) : "",
       logoUrl: tenant?.logoUrl || null,
       // Bitmap ESC/POS ya listo para imprimir (ver logoRaster.service.ts).
       // Solo viaja si el tenant subió un logo -- el printbox lo cachea y
@@ -310,8 +368,11 @@ function buildTicketPayload(sale: any, tenant: any) {
     subtotal,
     discount,
     total,
+    netoSum,
+    ivaBreakdown,
+    invoice,
 
-    footer: "Ticket no fiscal - Gracias por su compra",
+    footer: invoice ? "Gracias por su compra" : "Comprobante no valido como factura",
   };
 }
 
@@ -362,6 +423,7 @@ export const ticketService = {
           },
         },
         payments: true,
+        invoiceAfip: true,
       },
     });
 
@@ -369,7 +431,10 @@ export const ticketService = {
       throw new Error("Venta no encontrada");
     }
 
-    const payload = buildTicketPayload(sale, sale.tenant);
+    // getConfig() usa tenantScope() (currentTenantId() de la request) --
+    // no hace falta pasarle el tenantId de la venta a mano.
+    const arcaConfig = await arcaConfigService.getConfig().catch(() => null);
+    const payload = buildTicketPayload(sale, sale.tenant, arcaConfig);
 
     if (sale.tenantId) {
       const device = deviceId

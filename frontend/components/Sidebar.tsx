@@ -2,55 +2,14 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import { NAV, ADMIN_NAV, type NavItem } from '@/lib/navConfig';
 import {
-  ShoppingCart, Receipt, Package, FolderTree, Users, BarChart2, AlertTriangle,
-  Wallet, FileText, RotateCcw, LayoutDashboard, ShoppingBag, Truck, TrendingUp,
-  CreditCard, PieChart, Tag, Star, UserCog, MapPin, ShieldCheck, Building2,
   PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight,
-  ClipboardList, ClipboardCheck, Target, RefreshCw, DollarSign, Shield, FileCheck2,
-  type LucideIcon,
 } from 'lucide-react';
 
-const NAV = [
-  { href: '/pos',          icon: ShoppingCart,   label: 'POS — Ventas',       color: '#0D59E7' },
-  { href: '/ventas',       icon: Receipt,         label: 'Historial Ventas',   color: '#0D59E7' },
-  { href: '/productos',    icon: Package,         label: 'Productos',          color: '#18C15E' },
-  { href: '/categorias',   icon: FolderTree,      label: 'Categorías',         color: '#F39C12' },
-  { href: '/clientes',     icon: Users,           label: 'Clientes',           color: '#00B4DB' },
-  { href: '/stock',        icon: BarChart2,       label: 'Stock',              color: '#6474BB' },
-  { href: '/alertas',      icon: AlertTriangle,   label: 'Alertas',            color: '#EF4444' },
-  { href: '/caja',         icon: Wallet,          label: 'Caja',               color: '#18C15E' },
-  { href: '/remitos',      icon: FileCheck2,      label: 'Remitos',            color: '#00B4DB' },
-  { href: '/facturacion',  icon: FileText,        label: 'AFIP / Facturas',    color: '#00B4DB' },
-  { href: '/devoluciones', icon: RotateCcw,       label: 'Devoluciones',       color: '#F39C12' },
-];
-
-const ADMIN_NAV = [
-  { href: '/dashboard',                        icon: LayoutDashboard, label: 'Dashboard',           color: '#18C15E' },
-  { href: '/compras',                          icon: ShoppingBag,     label: 'Compras',             color: '#18C15E' },
-  { href: '/ordenes-compra',                   icon: ClipboardList,   label: 'Órdenes de Compra',   color: '#6474BB' },
-  { href: '/proveedores',                      icon: Truck,           label: 'Proveedores',         color: '#00B4DB' },
-  { href: '/conteo-stock',                     icon: ClipboardCheck,  label: 'Conteo de Stock',     color: '#6474BB' },
-  { href: '/finanzas',                         icon: TrendingUp,      label: 'Finanzas',            color: '#18C15E' },
-  { href: '/gastos-recurrentes',               icon: RefreshCw,       label: 'Gastos Recurrentes',  color: '#F39C12' },
-  { href: '/tipo-cambio',                      icon: DollarSign,      label: 'Tipo de Cambio',      color: '#18C15E' },
-  { href: '/cuentas-corrientes',               icon: CreditCard,      label: 'Cuentas Corrientes',  color: '#F39C12' },
-  { href: '/reportes',                         icon: PieChart,        label: 'Reportes',            color: '#6474BB' },
-  { href: '/objetivos-ventas',                 icon: Target,          label: 'Objetivos de Ventas', color: '#18C15E' },
-  { href: '/promociones',                      icon: Tag,             label: 'Promociones',         color: '#00B4DB' },
-  { href: '/fidelidad',                        icon: Star,            label: 'Fidelidad',           color: '#F39C12' },
-  { href: '/usuarios',                         icon: UserCog,         label: 'Usuarios',            color: '#EF4444' },
-  { href: '/auditoria',                        icon: Shield,          label: 'Auditoría',           color: '#EF4444' },
-  { href: '/configuracion/business-locations', icon: MapPin,          label: 'Sucursales',          color: '#00B4DB' },
-  { href: '/configuracion/arca',               icon: ShieldCheck,     label: 'ARCA / AFIP',         color: '#18C15E' },
-  { href: '/configuracion/empresa',            icon: Building2,       label: 'Empresa',             color: '#F39C12' },
-];
-
 const STORAGE_KEY = 'comarpos-sidebar-collapsed';
-
-type NavItem = { href: string; icon: LucideIcon; label: string; color: string };
 
 interface SidebarProps {
   open?: boolean;
@@ -61,8 +20,10 @@ const SCROLL_KEY = 'comarpos-sidebar-scroll';
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const params = useParams<{ tenant?: string }>();
   const { user, logout } = useAuthStore();
   const navRef = useRef<HTMLElement>(null);
+  const tenantSlug = params?.tenant || user?.tenantSlug || '';
 
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -88,11 +49,12 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const w = collapsed ? 72 : 236;
 
   const renderItem = ({ href, icon: Icon, label, color }: NavItem) => {
-    const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
+    const fullHref = `/${tenantSlug}${href}`;
+    const active = pathname === fullHref || (href !== '/dashboard' && pathname.startsWith(fullHref));
     return (
       <Link
         key={href}
-        href={href}
+        href={fullHref}
         onClick={onClose}
         title={collapsed ? label : undefined}
         style={{
@@ -153,7 +115,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           <img src="/brand/isologo.png" alt="ComarPOS" width={64} height={64} style={{ objectFit: 'contain', flexShrink: 0 }} />
 
           {!collapsed && (
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--accent2)', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 3 }}>
                 SISTEMA ERP
               </div>
@@ -163,6 +125,27 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             </div>
           )}
         </div>
+
+        {!collapsed && (user?.tenantName || tenantSlug) && (
+          <div
+            title={user?.tenantName ?? tenantSlug}
+            style={{
+              marginTop: 10,
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--text2)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '5px 8px',
+            }}
+          >
+            {user?.tenantName ?? tenantSlug}
+          </div>
+        )}
       </div>
 
       {/* Collapse toggle (desktop) */}

@@ -1,5 +1,5 @@
 export type Role = 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
-export type TenantSubscriptionStatus = 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED';
+export type TenantSubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED';
 export type ProductType = 'SIMPLE' | 'COMPUESTO';
 export type SaleUnit = 'UNIT' | 'KG';
 export type ReceiptType = 'TICKET' | 'FACTURA';
@@ -30,6 +30,8 @@ export interface User {
   role: Role;
   isActive?: boolean;
   tenantId?: string | null;
+  tenantSlug?: string | null;
+  tenantName?: string | null;
   client?: Client | null;
   createdAt?: string;
   updatedAt?: string;
@@ -208,7 +210,7 @@ export interface CartItem {
   quantity: number;
   quantityKg?: number;
   manualPrice?: number;
-  priceType: 'price' | 'clientPrice' | 'wholesalePrice';
+  priceType: 'price' | 'wholesalePrice';
 }
 
 export interface StockMovement {
@@ -438,7 +440,27 @@ export interface Tenant {
   subscriptionStatus: TenantSubscriptionStatus;
   paidUntil?: string | null;
   suspendedAt?: string | null;
+  trialEndsAt?: string | null;
+  contactPhone?: string | null;
+  mpPreapprovalId?: string | null;
+  mpSubscriptionAmount?: number | null;
   notes?: string | null;
   createdAt: string;
   paymentLogs?: TenantPaymentLog[];
+}
+
+export type PrintboxDeviceStatus = 'PENDING_PAIRING' | 'ACTIVE' | 'REVOKED';
+
+export interface PrintboxDevice {
+  id: string;
+  name: string;
+  status: PrintboxDeviceStatus;
+  hardwareId?: string | null;
+  printerIp?: string | null;
+  remoteHost?: string | null;
+  pairingCode?: string | null;
+  pairingCodeExpiresAt?: string | null;
+  lastSeenAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

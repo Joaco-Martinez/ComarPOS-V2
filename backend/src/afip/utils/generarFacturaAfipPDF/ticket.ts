@@ -27,6 +27,7 @@ export function buildTicketPayload({
   cuit,
   razonSocial,
   direccion,
+  telefonoNegocio,
   documentoCliente,
   telefonoCliente,
   qrUrl,
@@ -44,6 +45,7 @@ export function buildTicketPayload({
   cuit: string;
   razonSocial: string;
   direccion: string;
+  telefonoNegocio?: string;
   documentoCliente?: string | number;
   telefonoCliente?: string;
   qrUrl?: string | null;
@@ -84,11 +86,15 @@ export function buildTicketPayload({
     createdAt: formatDateTimeTicket(fechaEmision),
 
     business: {
-      name: process.env.BUSINESS_NAME ?? razonSocial ?? "GRUPO VJ",
+      // Los datos reales del negocio (razonSocial/cuit/direccion, de
+      // ArcaConfig, y telefonoNegocio, del Tenant) mandan siempre - las
+      // BUSINESS_* de .env son solo un fallback opcional para instalaciones
+      // sin esos datos cargados todavia, nunca deberian pisar un dato real.
+      name: razonSocial || process.env.BUSINESS_NAME || "Mi Negocio",
       subtitle: process.env.BUSINESS_SUBTITLE ?? "ComarPOS",
-      cuit: process.env.BUSINESS_CUIT ?? cuit,
-      address: process.env.BUSINESS_ADDRESS ?? direccion,
-      phone: process.env.BUSINESS_PHONE ?? "Teléfono Grupo VJ",
+      cuit: cuit || process.env.BUSINESS_CUIT || "",
+      address: direccion || process.env.BUSINESS_ADDRESS || "",
+      phone: telefonoNegocio || process.env.BUSINESS_PHONE || "",
     },
 
     client: {

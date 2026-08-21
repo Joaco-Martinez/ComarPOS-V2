@@ -33,16 +33,41 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Codigos que devuelve middleware/tenant.ts (getTenantBlock) cuando el
+// tenant esta bloqueado (prueba gratis vencida, suspendido por MP o a
+// mano) - se resuelven todos mandando a /suscripcion, que ademas de dejar
+// pagar via Mercado Pago explica la situacion y da un link de soporte para
+// los casos de suspension manual que no se resuelven pagando solo.
+const BILLING_BLOCK_CODES = new Set(['TENANT_SUSPENDED', 'TRIAL_EXPIRED']);
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
+    // /auth/me y /platform-admin/auth/me son el chequeo de "¿hay sesión?":
+    // un 401 ahí es una respuesta normal para un visitante anónimo, no una
+    // sesión que se cayó a mitad de uso - el propio store ya maneja ese caso
+    // (limpia el user). Redirigir acá además rompe el login: la llamada a
+    // /auth/me que dispara /login al montar puede resolver *después* del
+    // login exitoso y mandarte de vuelta con un location.href duro.
+    const isMeCheck = typeof error.config?.url === 'string' && error.config.url.includes('/auth/me');
+    if (error.response?.status === 401 && !isMeCheck && typeof window !== 'undefined') {
       const isPlatform = window.location.pathname.startsWith('/platform-admin');
       const loginPath = isPlatform ? '/platform-admin/login' : '/login';
       if (!window.location.pathname.includes('/login')) {
         window.location.href = loginPath;
       }
     }
+
+    const blockCode = error.response?.status === 403 ? error.response?.data?.code : undefined;
+    if (
+      blockCode &&
+      BILLING_BLOCK_CODES.has(blockCode) &&
+      typeof window !== 'undefined' &&
+      !window.location.pathname.startsWith('/suscripcion')
+    ) {
+      window.location.href = '/suscripcion';
+    }
+
     return Promise.reject(error);
   }
 );

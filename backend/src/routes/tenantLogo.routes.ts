@@ -45,11 +45,15 @@ function uploadLogoMiddleware(req: any, res: any, next: any) {
   });
 }
 
+// uploadLogoMiddleware (multer) va ANTES que authMiddleware a proposito: el
+// contexto de tenant que arma authMiddleware (AsyncLocalStorage, ver
+// src/context/tenantContext.ts) se pierde si corre antes que multer procese
+// el body multipart/form-data - mismo caso que product.routes.ts.
 router.post(
   "/logo",
+  uploadLogoMiddleware,
   authMiddleware,
   requireRole("ADMIN"),
-  uploadLogoMiddleware,
   tenantLogoController.upload
 );
 

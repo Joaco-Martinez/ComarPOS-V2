@@ -7,6 +7,8 @@ import {
   TipoCliente,
 } from "./facturaPdfGenerator.service";
 import { tenantScope } from "../utils/tenantScope";
+import { currentTenantId } from "../context/tenantContext";
+import { arcaConfigService } from "./arcaConfig.service";
 
 function isNotaCreditoTipo(tipoComprobante?: number | null) {
   return [3, 8, 13].includes(Number(tipoComprobante));
@@ -142,6 +144,16 @@ export async function regenerarNotaCreditoPDFService(
     throw new Error("La nota de crédito no está aprobada por AFIP");
   }
 
+  const [arcaConfig, tenant] = await Promise.all([
+    arcaConfigService.getConfig().catch(() => null),
+    currentTenantId()
+      ? prisma.tenant.findUnique({
+          where: { id: currentTenantId()! },
+          select: { name: true, ticketPhone: true, ticketAddress: true },
+        })
+      : null,
+  ]);
+
   const pdfData: FacturaPDFData = {
     factura: {
       cuit: notaCredito.cuit,
@@ -164,14 +176,16 @@ export async function regenerarNotaCreditoPDFService(
     },
 
     empresa: {
-      name: process.env.BUSINESS_NAME || "GRUPO VJ",
-      subtitle: process.env.BUSINESS_SUBTITLE || "SANTILLAN JULIO CESAR",
-      cuit: process.env.BUSINESS_CUIT || notaCredito.cuit,
+      name: arcaConfig?.businessName || tenant?.name || process.env.BUSINESS_NAME || "Mi Negocio",
+      subtitle: process.env.BUSINESS_SUBTITLE || "ComarPOS",
+      cuit: notaCredito.cuit || arcaConfig?.cuit || process.env.BUSINESS_CUIT || "",
       address:
+        arcaConfig?.fiscalAddress ||
+        tenant?.ticketAddress ||
         process.env.BUSINESS_ADDRESS ||
-        "PASO DE LOS ANDES 893, BARRIO OBSERVATORIO, 5000-CORDOBA",
-      phone: process.env.BUSINESS_PHONE || "+54 9 3513 79-0057",
-      ivaCondition: process.env.BUSINESS_IVA_CONDITION || undefined,
+        "",
+      phone: tenant?.ticketPhone || process.env.BUSINESS_PHONE || "",
+      ivaCondition: arcaConfig?.ivaCondition || process.env.BUSINESS_IVA_CONDITION || undefined,
     },
 
     cliente: {

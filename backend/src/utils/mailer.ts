@@ -8,7 +8,7 @@ export const transporter = nodemailer.createTransport({
   },
 });
 
-export async function sendInvoiceEmail(sale: any, pdfPath: string) {
+export async function sendInvoiceEmail(sale: any, pdfPath: string, businessName?: string | null) {
   // prioridad: mail manual > mail del cliente
   const recipient =
     sale.gmailSend?.trim() ||
@@ -20,8 +20,10 @@ export async function sendInvoiceEmail(sale: any, pdfPath: string) {
     return;
   }
 
+  const from = businessName?.trim() || "Mi Negocio";
+
   await transporter.sendMail({
-    from: `"Grupo VJ" <${process.env.GMAIL_USER}>`,
+    from: `"${from}" <${process.env.GMAIL_USER}>`,
     to: recipient,
     subject: `Factura de compra #${sale.id}`,
     text: "Gracias por tu compra. Te adjuntamos la factura.",
@@ -40,21 +42,23 @@ export async function sendPasswordResetEmail(data: {
   to: string;
   name?: string | null;
   token: string;
+  businessName?: string | null;
 }) {
   if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
     throw new Error("No están configuradas las credenciales de Gmail");
   }
 
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const businessName = data.businessName?.trim() || "Mi Negocio";
 
   const resetUrl = `${frontendUrl.replace(/\/$/, "")}/tienda/reset-password?token=${encodeURIComponent(
     data.token
   )}`;
 
   await transporter.sendMail({
-    from: `"Grupo VJ" <${process.env.GMAIL_USER}>`,
+    from: `"${businessName}" <${process.env.GMAIL_USER}>`,
     to: data.to,
-    subject: "Restablecer contraseña - Grupo VJ",
+    subject: `Restablecer contraseña - ${businessName}`,
     html: `
       <div style="font-family: Arial, sans-serif; background: #f6f6f6; padding: 24px;">
         <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 24px; color: #111;">

@@ -3,6 +3,7 @@ import PDFDocument from "pdfkit";
 import axios from "axios";
 import fs from "fs";
 import path from "path";
+import { COMARPOS_FOOTER_TEXT_SHORT } from "./comarposBranding";
 
 const POS_LOCAL_URL = process.env.POS_LOCAL_URL;
 type Product = { name: string; quantity: number; price: number; };
@@ -12,9 +13,9 @@ export async function generarTicketPedidoPDF({
   total,
   metodoPago = "EFECTIVO",
   nombreCliente = "A CONSUMIDOR FINAL",
-  razonSocial = "VON KÖNIG",
-  direccion = "Av. Julio Argentino Roca 288, X5194 Villa Gral. Belgrano, Córdoba",
-  cuit = "20-00000000-0",
+  razonSocial = "Mi Negocio",
+  direccion = "",
+  cuit = "",
   mensaje = "RECIBO / NOTA DE PEDIDO",
 }: {
   saleId: string;
@@ -133,6 +134,9 @@ export async function generarTicketPedidoPDF({
       doc.font("Helvetica").fontSize(7)
         .text("Este ticket no es un comprobante fiscal.", { align: "center" })
         .text("Gracias por su compra.", { align: "center" });
+
+      doc.moveDown(0.8);
+      doc.fontSize(6.5).fillColor("#888888").text(COMARPOS_FOOTER_TEXT_SHORT, { align: "center" });
 
       doc.end();
 

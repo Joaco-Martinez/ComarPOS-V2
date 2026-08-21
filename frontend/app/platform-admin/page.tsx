@@ -6,14 +6,21 @@ import Link from 'next/link';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
 import type { Tenant, TenantSubscriptionStatus } from '@/types';
-import { fmtDate, normalizeArray } from '@/lib/helpers';
+import { fmtDate, normalizeArray, daysRemaining } from '@/lib/helpers';
 import { Building2, Plus, X, Search, Eye } from 'lucide-react';
 
 const statusBadge = (s: TenantSubscriptionStatus) =>
-  s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
+  s === 'TRIAL' ? 'badge-blue' : s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
 
 const statusLabel = (s: TenantSubscriptionStatus) =>
-  s === 'ACTIVE' ? 'Al día' : s === 'PAST_DUE' ? 'Vencido' : 'Suspendido';
+  s === 'TRIAL' ? 'Prueba gratis' : s === 'ACTIVE' ? 'Al día' : s === 'PAST_DUE' ? 'Vencido' : 'Suspendido';
+
+const trialLabel = (t: Tenant) => {
+  if (t.subscriptionStatus !== 'TRIAL' || !t.trialEndsAt) return null;
+  const d = daysRemaining(t.trialEndsAt);
+  if (d === null) return null;
+  return d > 0 ? `${d}d restantes` : 'Vencida';
+};
 
 const emptyForm = { name: '', slug: '', adminEmail: '', adminPassword: '' };
 
@@ -74,10 +81,12 @@ export default function PlatformAdminTenantsPage() {
     ? tenants.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()) || t.slug.toLowerCase().includes(search.toLowerCase()))
     : tenants;
 
+  const trialCount = tenants.filter((t) => t.subscriptionStatus === 'TRIAL').length;
+
   return (
     <PlatformAdminLayout
       title="Tenants"
-      subtitle={`${tenants.length} negocios registrados`}
+      subtitle={`${tenants.length} negocios registrados${trialCount ? ` · ${trialCount} en prueba gratis` : ''}`}
       actions={
         <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
           <Plus size={13} /> Nuevo tenant
@@ -111,12 +120,21 @@ export default function PlatformAdminTenantsPage() {
                   <tr key={t.id}>
                     <td style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{t.name}</td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text2)' }}>{t.slug}</td>
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{t.paidUntil ? fmtDate(t.paidUntil) : '—'}</td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>
+                      {t.subscriptionStatus === 'TRIAL'
+                        ? (t.trialEndsAt ? fmtDate(t.trialEndsAt) : '—')
+                        : (t.paidUntil ? fmtDate(t.paidUntil) : '—')}
+                    </td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtDate(t.createdAt)}</td>
                     <td>
-                      <button onClick={() => toggleSuspend(t)} className={`badge ${statusBadge(t.subscriptionStatus)}`} style={{ cursor: 'pointer', border: 'none' }}>
-                        {statusLabel(t.subscriptionStatus)}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button onClick={() => toggleSuspend(t)} className={`badge ${statusBadge(t.subscriptionStatus)}`} style={{ cursor: 'pointer', border: 'none' }}>
+                          {statusLabel(t.subscriptionStatus)}
+                        </button>
+                        {trialLabel(t) && (
+                          <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{trialLabel(t)}</span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <Link href={`/platform-admin/tenants/${t.id}`} className="btn btn-ghost btn-xs"><Eye size={12} /></Link>
@@ -142,7 +160,7 @@ export default function PlatformAdminTenantsPage() {
                 <input value={form.name} onChange={f('name')} placeholder="Ej: Almacén Don José" autoFocus />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Slug (subdominio) *</label>
+                <label className="form-label">Slug (identificador) *</label>
                 <input value={form.slug} onChange={f('slug')} placeholder="ej: don-jose" />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>

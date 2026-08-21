@@ -14,3 +14,18 @@ export const loginRateLimiter = rateLimit({
     message: "Demasiados intentos de inicio de sesión. Probá de nuevo en unos minutos.",
   },
 });
+
+// Alta de tenant self-service (prueba gratis): endpoint publico sin auth que
+// crea un Tenant + User ADMIN por request, tope mas estricto que el login
+// para no dejar automatizar la creacion masiva de negocios de prueba.
+export const trialSignupRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    code: "TOO_MANY_ATTEMPTS",
+    message: "Demasiados intentos. Probá de nuevo en un rato o escribinos por WhatsApp.",
+  },
+});

@@ -4,6 +4,7 @@ import path from "path";
 import axios from "axios";
 import { uploadPDFtoCloudinary } from "../utils/uploadPDFtoCloudinary";
 import prisma from "../../prisma";
+import { COMARPOS_FOOTER_TEXT_SHORT } from "../../utils/comarposBranding";
 
 const POS_LOCAL_URL = process.env.POS_LOCAL_URL; // ej: http://localhost:3002
 
@@ -26,8 +27,8 @@ export async function generarNotaCreditoAfipPDF({
   cae,
   caeVto,
   cuit,
-  razonSocial = "VON KÖNIG",
-  direccion = "Av. Julio Argentino Roca 288, X5194 Villa Gral. Belgrano, Córdoba",
+  razonSocial = "Mi Negocio",
+  direccion = "",
   qrBase64,
   products,
 }: {
@@ -179,6 +180,12 @@ export async function generarNotaCreditoAfipPDF({
           "Documento emitido conforme a las disposiciones vigentes de la AFIP.",
           { align: "center", width: 216, indent: 5 }
         );
+
+      doc
+        .moveDown(0.8)
+        .fontSize(6.5)
+        .fillColor("#888888")
+        .text(COMARPOS_FOOTER_TEXT_SHORT, { align: "center", width: 226 });
 
       doc.end();
 

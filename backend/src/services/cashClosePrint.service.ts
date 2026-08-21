@@ -4,6 +4,8 @@ import PDFDocument from "pdfkit";
 import { Buffer } from "buffer";
 import { dayRangeAR, rangeAR } from "../utils/dateAR";
 import { tenantScope } from "../utils/tenantScope";
+import { currentTenantId } from "../context/tenantContext";
+import { COMARPOS_FOOTER_TEXT_SHORT } from "../utils/comarposBranding";
 
 type CashClosePrintBody =
   | { date: string }
@@ -98,8 +100,9 @@ function buildTicket(params: {
   totalAmount: number;
   totalCount: number;
   byMethod: Array<{ methodCode: string; amount: number; count: number }>;
+  businessName?: string | null;
 }) {
-  const { from, to, totalAmount, totalCount, byMethod } = params;
+  const { from, to, totalAmount, totalCount, byMethod, businessName } = params;
 
   const fromStr = from.toLocaleString("es-AR", {
     timeZone: "America/Argentina/Buenos_Aires",
@@ -109,7 +112,7 @@ function buildTicket(params: {
   });
 
   const header = [
-    center("VON KONIG"),
+    center(businessName?.trim() || "Mi Negocio"),
     center("CIERRE DE CAJA"),
     line(),
     cut(`Desde: ${fromStr}`, WIDTH),
@@ -133,6 +136,7 @@ function buildTicket(params: {
     line(),
     center("Gracias"),
     "",
+    center(COMARPOS_FOOTER_TEXT_SHORT),
     "",
   ];
 
@@ -215,7 +219,16 @@ export async function printCashClose(body: CashClosePrintBody) {
   const totalAmount = Number(byMethod.reduce((acc, m) => acc + m.amount, 0).toFixed(2));
   const totalCount = ventas.length;
 
-  const ticket = buildTicket({ from: start, to: end, totalAmount, totalCount, byMethod });
+  const tenantId = currentTenantId();
+  const tenant = tenantId
+    ? await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, ticketBusinessName: true },
+      })
+    : null;
+  const businessName = tenant?.ticketBusinessName || tenant?.name || null;
+
+  const ticket = buildTicket({ from: start, to: end, totalAmount, totalCount, byMethod, businessName });
 
   // ✅ imprimir (descomentá)
   await sendToLocalPrinter({

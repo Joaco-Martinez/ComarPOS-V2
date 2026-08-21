@@ -74,7 +74,7 @@ export const authController = {
     }
   },
 
-  async me(req: Request, res: Response, next: NextFunction) {
+  async me(req: Request, res: Response) {
     try {
       const user = await authService.me(req);
 
@@ -82,10 +82,14 @@ export const authController = {
         ok: true,
         content: user,
       });
-    } catch (err) {
+    } catch {
+      // Sin sesion valida (sin token, token vencido/invalido, usuario
+      // deshabilitado/borrado) es trafico anonimo normal - 401, no un error
+      // de servidor. El frontend llama esto en cada carga para saber si hay
+      // sesion, asi que no vale la pena distinguir el motivo puntual.
       res.clearCookie("token", { path: "/" });
       res.clearCookie("user", { path: "/" });
-      next(err);
+      res.status(401).json({ ok: false, message: "No autenticado" });
     }
   },
 

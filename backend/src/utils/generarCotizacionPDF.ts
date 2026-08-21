@@ -34,7 +34,7 @@ export async function generarCotizacionPDF(
         bufferPages: true,
         info: {
           Title: `Cotización ${sale.id}`,
-          Author: "Grupo VJ",
+          Author: sale.businessName?.trim() || "Mi Negocio",
           Subject: "Cotización de productos",
         },
       });

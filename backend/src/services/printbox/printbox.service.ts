@@ -1,27 +1,25 @@
+import axios from "axios";
 import prisma from "../../prisma";
-import { publishPrintboxMessage, printboxMqttConfigured, subscribeRaw } from "./mqttAdmin.client";
+import { AppError } from "../../utils/asyncHandler";
+import { decryptPrintboxSecret } from "./printbox.crypto";
+import { signRequest } from "./printbox.hmac";
 
-/**
- * Escucha tenants/+/devices/+/jobs/ack (el printbox publica ahi cuando
- * termina de imprimir) y marca el PrintJob correspondiente como ACKED.
- * No-op si no hay broker configurado (opt-in, igual que Sentry) -- se
- * puede llamar sin condicionar desde src/index.ts.
- */
-export function startPrintboxAckListener() {
-  if (!printboxMqttConfigured()) return;
+const PRINT_TICKET_PATH = "/print/ticket";
 
-  subscribeRaw("tenants/+/devices/+/jobs/ack", async (topic, message) => {
-    if (!topic.endsWith("/jobs/ack")) return;
+// Puerto fijo del server HTTP que el ESP32 levanta una vez emparejado (ver
+// printbox/src/main.cpp) -- no configurable por env porque es un detalle
+// de protocolo entre el backend y el firmware, no algo que varie por
+// ambiente.
+const PRINTBOX_DEVICE_PORT = 80;
+const PRINTBOX_REQUEST_TIMEOUT_MS = 15000;
 
-    try {
-      const body = JSON.parse(message.toString());
-      if (body?.jobId) {
-        await printboxService.ackJob(body.jobId);
-      }
-    } catch (err) {
-      console.error("❌ Error procesando ack de printbox:", err);
-    }
-  });
+// Defensa extra por si quedó guardado un deviceIp viejo con el prefijo de
+// IPv4-mapeado-a-IPv6 (::ffff:1.2.3.4) -- ver el mismo normalizeIp en
+// printbox.controller.ts, que es donde se evita que esto vuelva a pasar
+// hacia adelante. new URL() (que usa axios por dentro) explota con eso sin
+// corchetes.
+function normalizeIp(ip: string) {
+  return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
 }
 
 export const printboxService = {
@@ -41,10 +39,10 @@ export const printboxService = {
   },
 
   /**
-   * Encola + publica un PrintJob por MQTT. Publica primero, marca PUBLISHED
-   * recien si el broker confirmo el ack de QoS 1 (mqtt.js espera eso antes
-   * de resolver la promesa) -- si el broker esta caido, queda FAILED y
-   * quien llamo decide si reintentar o avisar al usuario.
+   * Le pega directo por HTTP al PrintBox (POST /print/ticket, mismo
+   * contrato que el viejo agente local -- ver ticket.service.ts). Resuelve
+   * apenas el job queda PUBLISHED, sin esperar la respuesta del ESP32 (ver
+   * comentario más abajo) -- el ACK/FAILED final queda en PrintJob.
    */
   async publishTicket(params: {
     tenantId: string;
@@ -54,34 +52,80 @@ export const printboxService = {
   }) {
     const { tenantId, deviceId, saleId, payload } = params;
 
+    const device = await prisma.printboxDevice.findFirst({
+      where: { id: deviceId, tenantId },
+    });
+
+    // remoteHost (cargado a mano en el panel, ej. "printbox-x.comarpos.com"
+    // o "printbox-x.comarpos.com:8080") pisa a deviceIp:80 cuando esta
+    // seteado -- es lo que se usa cuando el tenant le puso DNS propio +
+    // port-forwarding al PrintBox para poder llegarle desde fuera de su LAN.
+    const target = device?.remoteHost || (device?.deviceIp ? `${normalizeIp(device.deviceIp)}:${PRINTBOX_DEVICE_PORT}` : null);
+
+    if (!target || !device?.tokenEncrypted) {
+      throw new AppError(
+        "DEVICE_NOT_REACHABLE",
+        "Este PrintBox todavía no tiene una IP/host registrado (esperá al primer heartbeat después de emparejarlo, o cargale un host remoto en el panel).",
+        409
+      );
+    }
+
     const job = await prisma.printJob.create({
       data: { tenantId, deviceId, saleId, payload: payload as any, status: "QUEUED" },
     });
 
-    const topic = `tenants/${tenantId}/devices/${deviceId}/jobs`;
+    const token = decryptPrintboxSecret(device.tokenEncrypted);
+    const url = `http://${target}${PRINT_TICKET_PATH}`;
 
-    try {
-      await publishPrintboxMessage(topic, { jobId: job.id, ...(payload as object) }, 1);
+    // Firmado HMAC en vez de mandar el token plano en un header -- ver
+    // printbox.hmac.ts para qué cubre esto y qué no (no reemplaza TLS,
+    // pero evita que alguien sin el token pueda fabricar o modificar un
+    // print job). bodyStr se manda tal cual (no el objeto payload
+    // directo) para que lo que se firma sea BYTE A BYTE lo mismo que lo
+    // que efectivamente sale por la red.
+    const timestamp = Math.floor(Date.now() / 1000).toString(); // segundos, ver printbox.hmac.ts
+    const bodyStr = JSON.stringify(payload);
+    const signature = signRequest(token, "POST", PRINT_TICKET_PATH, timestamp, bodyStr);
 
-      await prisma.printJob.update({
-        where: { id: job.id },
-        data: { status: "PUBLISHED", publishedAt: new Date() },
+    await prisma.printJob.update({
+      where: { id: job.id },
+      data: { status: "PUBLISHED", publishedAt: new Date() },
+    });
+
+    // No se espera la respuesta del ESP32 acá a propósito: el caller (botón
+    // "imprimir ticket" en el panel) necesita responder rápido, y la
+    // request HTTP al device puede tardar varios segundos (red del local +
+    // el tiempo real de impresión ESC/POS) o directamente colgarse hasta
+    // PRINTBOX_REQUEST_TIMEOUT_MS si está apagado/inalcanzable. El
+    // resultado real (ACKED/FAILED) se resuelve en background y queda en
+    // PrintJob para poder revisarlo/reintentar -- ya no hay un ack
+    // sincrónico que devolverle al usuario en esta misma respuesta.
+    axios
+      .post(url, bodyStr, {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Pos-Timestamp": timestamp,
+          "X-Pos-Signature": signature,
+        },
+        timeout: PRINTBOX_REQUEST_TIMEOUT_MS,
+      })
+      .then(async () => {
+        await prisma.printJob.update({
+          where: { id: job.id },
+          data: { status: "ACKED", ackedAt: new Date() },
+        });
+        await prisma.printboxDevice.update({
+          where: { id: device.id },
+          data: { lastSeenAt: new Date() },
+        });
+      })
+      .catch(async (err: any) => {
+        await prisma.printJob.update({
+          where: { id: job.id },
+          data: { status: "FAILED", error: String(err?.message ?? err).slice(0, 500) },
+        });
       });
-    } catch (err: any) {
-      await prisma.printJob.update({
-        where: { id: job.id },
-        data: { status: "FAILED", error: String(err?.message ?? err).slice(0, 500) },
-      });
-      throw err;
-    }
 
     return job;
-  },
-
-  async ackJob(jobId: string) {
-    return prisma.printJob.update({
-      where: { id: jobId },
-      data: { status: "ACKED", ackedAt: new Date() },
-    });
   },
 };

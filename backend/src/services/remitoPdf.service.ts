@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { COMARPOS_FOOTER_TEXT } from "../utils/comarposBranding";
 
 export type RemitoPDFData = {
   remito: {
@@ -143,7 +144,7 @@ function renderHeader(doc: PDFKit.PDFDocument, data: RemitoPDFData) {
     .fontSize(28)
     .fillColor("#111111")
     .text(
-      data.business.fantasyName || data.business.businessName || "GRUPO VJ",
+      data.business.fantasyName || data.business.businessName || "Mi Negocio",
       left + 12,
       y + 18,
       {
@@ -155,7 +156,7 @@ function renderHeader(doc: PDFKit.PDFDocument, data: RemitoPDFData) {
   doc
     .font("Helvetica-Bold")
     .fontSize(8)
-    .text(data.business.businessName || "GRUPO VJ", left + 12, y + 65, {
+    .text(data.business.businessName || "Mi Negocio", left + 12, y + 65, {
       width: leftW - 24,
       align: "center",
     });
@@ -496,6 +497,15 @@ function renderFooter(
       width,
       align: "center",
     });
+
+  doc
+    .font("Helvetica")
+    .fontSize(7)
+    .fillColor("#999999")
+    .text(COMARPOS_FOOTER_TEXT, left, y + 176, {
+      width,
+      align: "center",
+    });
 }
 
 export async function generateRemitoPDFBuffer(
@@ -547,7 +557,7 @@ export async function generateRemitoPDFBuffer(
         .text(
           pageData.business.fantasyName ||
             pageData.business.businessName ||
-            "GRUPO VJ",
+            "Mi Negocio",
           70,
           360,
           {

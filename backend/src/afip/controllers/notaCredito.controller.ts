@@ -8,6 +8,7 @@ import { generarNotaCreditoAfipPDF } from "../utils/generarNotaCreditoAfipPDF";
 import { financeService } from "../../services/finance.service";
 import prisma from "../../prisma";
 import { tenantScope } from "../../utils/tenantScope";
+import { arcaConfigService } from "../../services/arcaConfig.service";
 
 export async function notaCreditoController(req: Request, res: Response) {
   try {
@@ -55,6 +56,8 @@ export async function notaCreditoController(req: Request, res: Response) {
     let posDisconnected = false;
     let posErrorMessage: string | null = null;
 
+    const arcaConfig = await arcaConfigService.getConfig().catch(() => null);
+
     try {
       await generarNotaCreditoAfipPDF({
         saleId,
@@ -71,6 +74,8 @@ export async function notaCreditoController(req: Request, res: Response) {
         cae: notaCredito.cae || "—",
         caeVto: notaCredito.caeVto || new Date(),
         cuit: notaCredito.cuit,
+        razonSocial: arcaConfig?.businessName || undefined,
+        direccion: arcaConfig?.fiscalAddress || undefined,
         qrBase64: notaCredito.qrBase64 || null,
         products: facturaOriginal.sale?.items.map((i: any) => ({
           name: i.product.name,

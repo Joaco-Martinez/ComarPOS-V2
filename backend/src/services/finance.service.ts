@@ -14,6 +14,7 @@ import {
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { cashSessionService } from "./cashSession.service";
+import { COMARPOS_FOOTER_TEXT } from "../utils/comarposBranding";
 function fmtKgAR(n: number) {
   return n.toLocaleString("es-AR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
@@ -402,6 +403,9 @@ async registerCreditNote(amount: number, description: string, userId: string) {
           `${formatDateAR(f.date)} - ${f.type} - ${f.category} - $${f.amount} - ${f.description ?? ""}`
         );
     });
+
+    doc.moveDown(2);
+    doc.fontSize(8).fillColor("gray").text(COMARPOS_FOOTER_TEXT, { align: "center" });
 
     doc.end();
   },

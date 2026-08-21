@@ -219,17 +219,16 @@ function validatePricesBySaleUnit(data: CreateProductInput | any) {
   const saleUnit: SaleUnit = (data.saleUnit as SaleUnit) ?? SaleUnit.UNIT;
   const type: ProductType = (data.type as ProductType) ?? ProductType.SIMPLE;
 
+  // Solo 2 precios editables (lista y mayorista) - doc "solo 2 precios".
+  // clientPrice/clientPricePerKg siguen existiendo en el modelo (por si algo
+  // viejo los lee) pero ya no se piden ni se validan; product.write.ts los
+  // espeja siempre desde price/pricePerKg.
   if (saleUnit === SaleUnit.KG) {
     const pricePerKg = toNumberOrNull(data.pricePerKg);
-    const clientPricePerKg = toNumberOrNull(data.clientPricePerKg);
     const wholesalePricePerKg = toNumberOrNull(data.wholesalePricePerKg);
 
     if (pricePerKg === null) {
       throw new Error("Si saleUnit es KG, pricePerKg es requerido");
-    }
-
-    if (clientPricePerKg === null) {
-      throw new Error("Si saleUnit es KG, clientPricePerKg es requerido");
     }
 
     if (wholesalePricePerKg === null) {
@@ -240,10 +239,6 @@ function validatePricesBySaleUnit(data: CreateProductInput | any) {
       throw new Error("Si saleUnit es KG, pricePerKg debe ser mayor a 0");
     }
 
-    if (!isValidPositiveNumber(clientPricePerKg)) {
-      throw new Error("Si saleUnit es KG, clientPricePerKg debe ser mayor a 0");
-    }
-
     if (!isValidPositiveNumber(wholesalePricePerKg)) {
       throw new Error("Si saleUnit es KG, wholesalePricePerKg debe ser mayor a 0");
     }
@@ -251,15 +246,10 @@ function validatePricesBySaleUnit(data: CreateProductInput | any) {
 
   if (saleUnit === SaleUnit.UNIT) {
     const price = toNumberOrNull(data.price);
-    const clientPrice = toNumberOrNull(data.clientPrice);
     const wholesalePrice = toNumberOrNull(data.wholesalePrice);
 
     if (price === null) {
       throw new Error("Si saleUnit es UNIT, price es requerido");
-    }
-
-    if (clientPrice === null) {
-      throw new Error("Si saleUnit es UNIT, clientPrice es requerido");
     }
 
     if (wholesalePrice === null) {
@@ -268,10 +258,6 @@ function validatePricesBySaleUnit(data: CreateProductInput | any) {
 
     if (!isValidPositiveNumber(price)) {
       throw new Error("Si saleUnit es UNIT, price debe ser mayor a 0");
-    }
-
-    if (!isValidPositiveNumber(clientPrice)) {
-      throw new Error("Si saleUnit es UNIT, clientPrice debe ser mayor a 0");
     }
 
     if (!isValidPositiveNumber(wholesalePrice)) {

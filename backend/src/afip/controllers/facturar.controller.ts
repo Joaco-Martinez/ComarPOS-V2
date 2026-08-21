@@ -14,6 +14,7 @@ import { generarFacturaAfipPDF } from "../utils/generarFacturaAfipPDF";
 import { isAfipUnavailable } from "../utils/isAfipUnavailable";
 import prisma from "../../prisma";
 import { tenantScope } from "../../utils/tenantScope";
+import { currentTenantId } from "../../context/tenantContext";
 import { arcaConfigService } from "../../services/arcaConfig.service";
 import {
   normalizarDocumento,
@@ -46,6 +47,15 @@ export async function facturarController(req: Request, res: Response) {
   const arcaConfig = await arcaConfigService.getConfig().catch(() => null);
   const allowedTipos = getAllowedCbteTipos(arcaConfig?.ivaCondition);
   const requestedTipo = Number(facturaData.tipoComprobante ?? allowedTipos[0]);
+
+  // Telefono del negocio para el ticket impreso: no vive en ArcaConfig (esa
+  // es la config fiscal), sale del Tenant (mismo dato que usa la cotizacion).
+  const tenantForTicket = currentTenantId()
+    ? await prisma.tenant.findUnique({
+        where: { id: currentTenantId()! },
+        select: { ticketPhone: true },
+      }).catch(() => null)
+    : null;
 
   if (!allowedTipos.includes(requestedTipo)) {
     return res.status(400).json({
@@ -422,6 +432,9 @@ export async function facturarController(req: Request, res: Response) {
           cae: String(factura.cae),
           caeVto: factura.caeVto ? new Date(factura.caeVto) : new Date(),
           cuit: String(factura.cuit),
+          razonSocial: arcaConfig?.businessName || undefined,
+          direccion: arcaConfig?.fiscalAddress || undefined,
+          telefonoNegocio: tenantForTicket?.ticketPhone || undefined,
 
           qrBase64: factura.qrBase64 ?? null,
           qrUrl,

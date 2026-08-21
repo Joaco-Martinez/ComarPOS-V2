@@ -16,6 +16,11 @@ export type CotizacionPDFSale = {
   quotationExpiresAt?: Date | null;
   tenantId?: string | null;
   logoUrl?: string | null;
+  businessName?: string | null;
+  businessCuit?: string | null;
+  businessAddress?: string | null;
+  businessPhone?: string | null;
+  businessEmail?: string | null;
 
   user?: {
     name?: string | null;

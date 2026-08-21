@@ -9,6 +9,7 @@ import { generarCotizacionPDF } from "../../utils/generarCotizacionPDF";
 import { DEFAULT_QUOTATION_HOURS } from "./sale.types";
 import { addHours } from "./sale.query";
 import { tenantScope } from "../../utils/tenantScope";
+import { currentTenantId } from "../../context/tenantContext";
 
 export async function generarNotaPedido(saleId: string) {
   const sale = await prisma.sale.findFirst({
@@ -53,6 +54,14 @@ export async function generarNotaPedido(saleId: string) {
 
   const metodoPago = sale.payments?.length ? "MIXTO" : sale.paymentMethod;
 
+  const tenantId = currentTenantId();
+  const tenant = tenantId
+    ? await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, ticketBusinessName: true, ticketAddress: true, ticketCuit: true },
+      })
+    : null;
+
   await generarTicketPedidoPDF({
     saleId: sale.id,
     products,
@@ -61,6 +70,9 @@ export async function generarNotaPedido(saleId: string) {
     nombreCliente: sale.client
       ? `${sale.client.nombre} ${sale.client.apellido}`
       : "A CONSUMIDOR FINAL",
+    razonSocial: tenant?.ticketBusinessName || tenant?.name || undefined,
+    direccion: tenant?.ticketAddress || undefined,
+    cuit: tenant?.ticketCuit || undefined,
   });
 
   return {
@@ -130,11 +142,27 @@ export async function generarCotizacion(saleId: string) {
   const tenant = sale.tenantId
     ? await prisma.tenant.findUnique({
         where: { id: sale.tenantId },
-        select: { logoUrl: true },
+        select: {
+          logoUrl: true,
+          name: true,
+          ticketBusinessName: true,
+          ticketCuit: true,
+          ticketAddress: true,
+          ticketPhone: true,
+          ticketEmail: true,
+        },
       })
     : null;
 
-  const pdfBuffer = await generarCotizacionPDF({ ...sale, logoUrl: tenant?.logoUrl ?? null });
+  const pdfBuffer = await generarCotizacionPDF({
+    ...sale,
+    logoUrl: tenant?.logoUrl ?? null,
+    businessName: tenant?.ticketBusinessName || tenant?.name || null,
+    businessCuit: tenant?.ticketCuit ?? null,
+    businessAddress: tenant?.ticketAddress ?? null,
+    businessPhone: tenant?.ticketPhone ?? null,
+    businessEmail: tenant?.ticketEmail ?? null,
+  });
 
   return {
     filename: `cotizacion-${sale.id}.pdf`,

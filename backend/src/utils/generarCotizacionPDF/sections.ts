@@ -7,6 +7,7 @@ import {
   money,
   dateText,
   safe,
+  getBusinessName,
   getQuotationCategoryLabel,
   getClientName,
   getClientDetails,
@@ -15,6 +16,7 @@ import {
   getProductQty,
 } from "./format";
 import { findLogoPath, getImageBuffer } from "./assets";
+import { COMARPOS_FOOTER_TEXT } from "../comarposBranding";
 
 export function drawPageBackground(doc: PDFKit.PDFDocument) {
   doc.rect(0, 0, PAGE.width, PAGE.height).fill(C.white);
@@ -73,7 +75,10 @@ export async function drawHeader(doc: PDFKit.PDFDocument, sale: CotizacionPDFSal
     .fillColor(C.black)
     .font("Helvetica-Bold")
     .fontSize(21)
-    .text(`Grupo VJ - ${getQuotationCategoryLabel(sale.client)}`, x + 78, y + 13);
+    .text(`${getBusinessName(sale)} - ${getQuotationCategoryLabel(sale.client)}`, x + 78, y + 13, {
+      width: 330,
+      ellipsis: true,
+    });
 
   doc
     .fillColor(C.muted)
@@ -92,14 +97,18 @@ export async function drawHeader(doc: PDFKit.PDFDocument, sale: CotizacionPDFSal
     });
 
   const contactY = y + 82;
+  const contactParts = [sale.businessAddress, sale.businessPhone, sale.businessEmail]
+    .map((v) => v?.trim())
+    .filter((v): v is string => Boolean(v));
 
   doc
     .fillColor(C.text)
     .font("Helvetica")
     .fontSize(10.5)
-    .text("Paso de los Andes 893", x, contactY)
-    .text("03513790057", x + 172, contactY)
-    .text("Grupo-VJ@hotmail.com", x + 300, contactY);
+    .text(contactParts.join("   ·   "), x, contactY, {
+      width: PAGE.width - x * 2,
+      ellipsis: true,
+    });
 
   doc
     .moveTo(x, contactY + 23)
@@ -315,7 +324,10 @@ export function addPage(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale) {
     .fillColor(C.black)
     .font("Helvetica-Bold")
     .fontSize(13)
-    .text(`Grupo VJ - ${getQuotationCategoryLabel(sale.client)}`, PAGE.marginX, 42);
+    .text(`${getBusinessName(sale)} - ${getQuotationCategoryLabel(sale.client)}`, PAGE.marginX, 42, {
+      width: 400,
+      ellipsis: true,
+    });
 
   doc
     .fillColor(C.muted)
@@ -353,11 +365,27 @@ export function drawTotals(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, y: 
   const boxX = PAGE.width - x - boxW;
   const boxY = y + 24;
 
+  // El precio cargado en cada item ya incluye IVA (precio de venta final).
+  // Para mostrar el desglose correcto (neto -> + IVA por alicuota -> total)
+  // primero se "destapa" el neto de cada item con su propia alicuota, y el
+  // Subtotal que se muestra es la suma de esos netos - NO sale.subtotal
+  // (que es el bruto). netoSum + suma de IVA reconstruye exactamente
+  // sale.subtotal, asi que el descuento/total de mas abajo no cambian.
+  const ivaByRate: Record<number, number> = {};
+  let netoSum = 0;
+  for (const item of sale.items) {
+    const rate = item.ivaRate ?? (item.product as any)?.ivaRate ?? 21;
+    const neto = (item.subtotal || 0) / (1 + rate / 100);
+    const iva = (item.subtotal || 0) - neto;
+    ivaByRate[rate] = (ivaByRate[rate] ?? 0) + iva;
+    netoSum += neto;
+  }
+
   doc
     .fillColor(C.muted)
     .font("Helvetica")
     .fontSize(10.5)
-    .text("Subtotal", boxX, boxY, {
+    .text("Subtotal (sin IVA)", boxX, boxY, {
       width: 100,
       align: "left",
     });
@@ -366,19 +394,11 @@ export function drawTotals(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, y: 
     .fillColor(C.black)
     .font("Helvetica-Bold")
     .fontSize(11)
-    .text(money(sale.subtotal), boxX + 120, boxY, {
+    .text(money(netoSum), boxX + 120, boxY, {
       width: 120,
       align: "right",
     });
 
-  // IVA breakdown grouped by rate
-  const ivaByRate: Record<number, number> = {};
-  for (const item of sale.items) {
-    const rate = item.ivaRate ?? (item.product as any)?.ivaRate ?? 21;
-    const neto = (item.subtotal || 0) / (1 + rate / 100);
-    const iva = (item.subtotal || 0) - neto;
-    ivaByRate[rate] = (ivaByRate[rate] ?? 0) + iva;
-  }
   const ivaEntries = Object.entries(ivaByRate).filter(([, v]) => v > 0.01);
   let ivaOffsetY = 0;
   for (const [rateStr, ivaAmt] of ivaEntries) {
@@ -450,7 +470,7 @@ export function drawFooter(doc: PDFKit.PDFDocument, page: number, totalPages: nu
     .fillColor(C.lightMuted)
     .font("Helvetica")
     .fontSize(7.5)
-    .text(`Página ${page} de ${totalPages}`, PAGE.marginX, 820, {
+    .text(`Página ${page} de ${totalPages}   ·   ${COMARPOS_FOOTER_TEXT}`, PAGE.marginX, 820, {
       width: PAGE.width - PAGE.marginX * 2,
       align: "center",
     });

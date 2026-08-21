@@ -29,13 +29,11 @@ paths:
     post:
       summary: Iniciar sesión
       description: >
-        El tenant se resuelve por subdominio antes de validar credenciales:
-        un usuario de otro tenant no puede loguearse en este subdominio aunque
-        la contraseña sea correcta (responde 401 igual que credenciales invalidas,
-        para no filtrar a que tenant pertenece el email).
+        El tenant no se resuelve por subdominio: el email es unico globalmente,
+        asi que el usuario (y su tenant) salen directo de esa fila. El JWT
+        emitido incluye el tenantId del usuario y ese es el que manda en el
+        resto de la sesion, sin importar el dominio por el que entro.
       tags: [Auth]
-      parameters:
-        - $ref: "#/components/parameters/XTenantSlug"
       requestBody:
         required: true
         content:

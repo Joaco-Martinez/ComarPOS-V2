@@ -77,15 +77,26 @@ export async function create(data: CreateProductInput) {
     const components = await validateComponents(null, rawComponents);
 
     if (data.file) {
-      const result = await cloudinary.uploader.upload(data.file.path, {
-        folder: "grupo-vj/products",
-        resource_type: "image",
-      });
+      try {
+        const result = await cloudinary.uploader.upload(data.file.path, {
+          folder: "grupo-vj/products",
+          resource_type: "image",
+        });
 
-      imageUrl = result.secure_url;
-      imageId = result.public_id;
-
-      safeDeleteLocalFile(data.file.path);
+        imageUrl = result.secure_url;
+        imageId = result.public_id;
+      } catch {
+        // Cloudinary sin credenciales reales (CLOUDINARY_* en .env) tira un
+        // error crudo tipo "Unknown API key CHANGE_ME" que no le dice nada al
+        // usuario. Es un problema de configuracion, no del producto en si -
+        // pero no creamos el producto sin la imagen que el usuario eligio a
+        // proposito, para no perder silenciosamente lo que pidio subir.
+        throw new Error(
+          "No se pudo subir la imagen: el servicio de imágenes no está configurado (CLOUDINARY_* en .env). Probá crear el producto sin imagen, o pedile al administrador que lo configure."
+        );
+      } finally {
+        safeDeleteLocalFile(data.file.path);
+      }
     }
 
     const base = {
@@ -110,7 +121,10 @@ export async function create(data: CreateProductInput) {
       saleUnit === SaleUnit.UNIT
         ? {
             price: toNumberOrZero(data.price),
-            clientPrice: toNumberOrZero(data.clientPrice),
+            // clientPrice ya no se pide en el form (doc "solo 2 precios") -
+            // se espeja el precio de lista para que la columna, si algo
+            // viejo todavia la lee, nunca quede desincronizada.
+            clientPrice: toNumberOrZero(data.price),
             wholesalePrice: toNumberOrZero(data.wholesalePrice),
             stockLocal: toNumberOrZero(data.stockLocal),
             stockDeposito: toNumberOrZero(data.stockDeposito),
@@ -123,7 +137,7 @@ export async function create(data: CreateProductInput) {
           }
         : {
             pricePerKg: toNumberOrZero(data.pricePerKg),
-            clientPricePerKg: toNumberOrZero(data.clientPricePerKg),
+            clientPricePerKg: toNumberOrZero(data.pricePerKg),
             wholesalePricePerKg: toNumberOrZero(data.wholesalePricePerKg),
             stockLocalKg: toNumberOrZero(data.stockLocalKg),
             stockDepositoKg: toNumberOrZero(data.stockDepositoKg),
@@ -210,14 +224,18 @@ export async function updateImage(productId: string, file: Express.Multer.File) 
       },
       include: productInclude,
     });
-  } catch (err) {
+  } catch {
     safeDeleteLocalFile(file?.path);
 
     if (newImageId) {
       await cloudinary.uploader.destroy(newImageId).catch(() => undefined);
     }
 
-    throw err;
+    // Mismo caso que en create(): sin credenciales reales de Cloudinary el
+    // error crudo (ej. "Unknown API key CHANGE_ME") no dice nada util.
+    throw new Error(
+      "No se pudo subir la imagen: el servicio de imágenes no está configurado (CLOUDINARY_* en .env)."
+    );
   }
 }
 
@@ -274,9 +292,12 @@ export async function update(id: string, data: Partial<Product> & any) {
 
   setIfDefined("price", data.price !== undefined ? Number(data.price) : undefined);
 
+  // clientPrice ya no se edita (doc "solo 2 precios") - se espeja el precio
+  // de lista cada vez que este cambia, para que la columna nunca quede
+  // desincronizada por si algo viejo todavia la lee.
   setIfDefined(
     "clientPrice",
-    data.clientPrice !== undefined ? Number(data.clientPrice) : undefined
+    data.price !== undefined ? Number(data.price) : undefined
   );
 
   setIfDefined(
@@ -319,9 +340,10 @@ export async function update(id: string, data: Partial<Product> & any) {
     data.pricePerKg !== undefined ? Number(data.pricePerKg) : undefined
   );
 
+  // Igual que clientPrice: se espeja pricePerKg, ya no se edita directo.
   setIfDefined(
     "clientPricePerKg",
-    data.clientPricePerKg !== undefined ? Number(data.clientPricePerKg) : undefined
+    data.pricePerKg !== undefined ? Number(data.pricePerKg) : undefined
   );
 
   setIfDefined(

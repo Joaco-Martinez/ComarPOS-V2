@@ -34,6 +34,10 @@ function sanitizeUser(user: any) {
     mustChangePassword: user.mustChangePassword ?? false,
     client: user.client ?? null,
     tenantId: user.tenantId ?? null,
+    // Slug/nombre del tenant: el frontend los usa para armar la URL con
+    // el negocio identificado (ej. /grupo-vj/pos), como en Mi Taller Ya.
+    tenantSlug: user.tenant?.slug ?? null,
+    tenantName: user.tenant?.name ?? null,
   };
 }
 
@@ -118,6 +122,7 @@ export const authService = {
       },
       include: {
         client: true,
+        tenant: { select: { slug: true, name: true } },
       },
     });
 
@@ -134,6 +139,7 @@ export const authService = {
       where: { email: cleanEmail },
       include: {
         client: true,
+        tenant: { select: { slug: true, name: true } },
       },
     });
 
@@ -156,9 +162,7 @@ export const authService = {
 
     setAuthCookies(res, cleanUser, token);
 
-    return {
-      user: cleanUser,
-    };
+    return cleanUser;
   },
 
   async changePassword(
@@ -186,6 +190,7 @@ export const authService = {
       where: { id: userId },
       include: {
         client: true,
+        tenant: { select: { slug: true, name: true } },
       },
     });
 
@@ -213,6 +218,7 @@ export const authService = {
       },
       include: {
         client: true,
+        tenant: { select: { slug: true, name: true } },
       },
     });
 
@@ -264,6 +270,7 @@ export const authService = {
         where: { id: payload.userId },
         include: {
           client: true,
+          tenant: { select: { slug: true, name: true } },
         },
       });
 
@@ -287,6 +294,7 @@ export const authService = {
         where: { id: decoded.userId },
         include: {
           client: true,
+          tenant: { select: { slug: true, name: true } },
         },
       });
 

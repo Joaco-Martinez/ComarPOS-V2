@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
 import NotificationsBell from './NotificationsBell';
+import BottomNav from './mobile/BottomNav';
 import { useToast } from '@/hooks/useToast';
-import { Menu, Sun, Moon } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 
 interface AppLayoutProps {
@@ -22,7 +23,8 @@ const STORAGE_KEY = 'comarpos-sidebar-collapsed';
 export default function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
   const { user, loading, me } = useAuthStore();
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const params = useParams<{ tenant?: string }>();
+  const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(STORAGE_KEY) === 'true';
@@ -37,6 +39,18 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
   }, [user, loading, router]);
+
+  // La URL siempre lleva el slug del negocio (ej. /grupo-vj/pos), como en Mi
+  // Taller Ya, para que quede claro en qué empresa estás parado. Si el slug
+  // de la URL no coincide con el tenant real del usuario logueado (URL vieja
+  // en favoritos, usuario cambiado, etc.), se corrige la URL sola.
+  useEffect(() => {
+    if (loading || !user || !user.tenantSlug) return;
+    if (params?.tenant && params.tenant !== user.tenantSlug) {
+      const rest = pathname.split('/').slice(2).join('/');
+      router.replace(`/${user.tenantSlug}${rest ? `/${rest}` : ''}`);
+    }
+  }, [user, loading, params, pathname, router]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -62,7 +76,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar />
 
       <div
         id="main-content"
@@ -81,14 +95,6 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
         {/* Topbar */}
         <header className="app-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <button
-              className="md:hidden btn btn-ghost btn-sm"
-              style={{ padding: 8 }}
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu size={17} />
-            </button>
-
             {(title || subtitle) && (
               <div style={{ minWidth: 0 }}>
                 {title && (
@@ -108,7 +114,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
           <div className="app-header-actions">
             {actions}
             <button
-              className="btn btn-ghost btn-sm"
+              className="hidden md:flex btn btn-ghost btn-sm"
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
               style={{ padding: 7 }}
@@ -128,6 +134,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
         </main>
       </div>
 
+      <BottomNav />
       <Toasts toasts={toasts} />
     </div>
   );

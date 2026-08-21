@@ -9,6 +9,7 @@ datasource db {
 
 // === Multi-tenant (doc seccion 6) ===
 enum TenantSubscriptionStatus {
+  TRIAL
   ACTIVE
   PAST_DUE
   SUSPENDED
@@ -36,19 +37,36 @@ model Tenant {
   suspendedAt        DateTime?
   notes              String?
 
+  // Prueba gratis self-service (ver trialSignup.service.ts): tenants creados
+  // desde /trial-signup arrancan en subscriptionStatus=TRIAL con trialEndsAt
+  // seteado; se bloquean solos al vencer (ver middleware/tenant.ts,
+  // getTenantBlockCode) sin necesidad de un cron. Queda null para tenants
+  // creados por el super-admin o el script createTenant.ts.
+  trialEndsAt DateTime?
+  // Telefono de contacto de quien se dio de alta (obligatorio en
+  // /trial-signup, ver trialSignup.service.ts) - lo usa el super-admin para
+  // hacer seguimiento comercial/cobranza. Null para tenants creados a mano.
+  contactPhone String?
+
+  // Suscripcion self-service via Mercado Pago (ver services/billing/*.ts).
+  // mpPreapprovalId es el id de la "preapproval" (suscripcion recurrente) de
+  // MP asociada a este tenant - el webhook la usa para encontrar a que
+  // tenant corresponde cada pago/cancelacion y pisa subscriptionStatus/
+  // paidUntil solo (no reemplaza el billing manual: un tenant sin
+  // mpPreapprovalId sigue gestionandose a mano desde el panel, como hasta
+  // ahora). mpSubscriptionAmount queda fijo al monto pagado por primera vez
+  // (precio de lanzamiento "de por vida") aunque el precio de lista suba mas
+  // adelante para nuevos suscriptores.
+  mpPreapprovalId      String? @unique
+  mpSubscriptionAmount Float?
+
   // Datos de cabecera para tickets/documentos impresos (printbox). Si son
   // null, ticket.service.ts cae a `name` para no dejar el ticket en blanco.
   ticketBusinessName String?
   ticketCuit         String?
   ticketAddress      String?
   ticketPhone        String?
-
-  // Credenciales MQTT del tenant (printbox): un solo par usuario/password
-  // compartido por todos los PrintboxDevice del tenant, generado la primera
-  // vez que se pairea un dispositivo (ver printbox.service.ts). El ACL del
-  // broker restringe ese usuario a tenants/{tenantId}/devices/+/jobs.
-  printboxMqttUsername          String? @unique
-  printboxMqttPasswordEncrypted String?
+  ticketEmail        String?
 
   paymentLogs     TenantPaymentLog[]
   printboxDevices PrintboxDevice[]
@@ -673,7 +691,7 @@ model ReturnItem {
   @@index([productId])
 }
 
-// === PrintBox (impresion de tickets via ESP32 + MQTT, doc printbox) ===
+// === PrintBox (impresion de tickets via ESP32, HTTP directo) ===
 enum PrintboxDeviceStatus {
   PENDING_PAIRING
   ACTIVE
@@ -688,8 +706,12 @@ enum PrintJobStatus {
 }
 
 // Un ESP32 fisico. El pairing inicial es local (el device levanta un server
-// HTTP temporal en su IP de DHCP); a partir de ahi solo habla MQTT saliente,
-// nunca recibe conexiones entrantes (ver printbox/README.md).
+// HTTP temporal en su IP de DHCP para cargar el codigo). Una vez emparejado,
+// el ESP32 pasa a ser el que recibe conexiones: levanta su propio server
+// HTTP (POST /print/ticket) y el backend le pega directo a deviceIp -- no
+// hay broker/cola en el medio (ver printbox/README.md). deviceIp se
+// actualiza solo via heartbeat periodico del device, por si el DHCP le
+// cambia la IP.
 model PrintboxDevice {
   id                   String               @id @default(uuid())
   tenantId             String
@@ -698,6 +720,15 @@ model PrintboxDevice {
   status               PrintboxDeviceStatus @default(PENDING_PAIRING)
   hardwareId           String?              @unique
   printerIp            String?
+  deviceIp             String?
+  // Host (opcional, con puerto si hace falta -- ej. "printbox-x.comarpos.com"
+  // o "printbox-x.comarpos.com:8080") que el ADMIN carga a mano desde el
+  // panel cuando le puso DNS propio (+ port-forwarding de su lado) al
+  // PrintBox. Si esta seteado, el backend le pega ACA en vez de a
+  // deviceIp:80 -- ver printbox.service.ts. deviceIp se sigue actualizando
+  // solo via heartbeat igual, por si en algun momento se saca el dominio.
+  remoteHost           String?
+  tokenEncrypted       String?
   pairingCode          String?              @unique
   pairingCodeExpiresAt DateTime?
   lastSeenAt           DateTime?
@@ -710,9 +741,9 @@ model PrintboxDevice {
   @@index([status])
 }
 
-// Registro/auditoria de cada ticket publicado a MQTT. No es la cola en si
-// (esa la maneja el broker via QoS 1) - esto es para poder ver en
-// platform-admin "se publico, se imprimio, fallo" y reintentar a mano.
+// Registro/auditoria de cada ticket mandado por HTTP al PrintBox -- para
+// poder ver en platform-admin "se publico, se imprimio, fallo" y
+// reintentar a mano.
 // saleId es una referencia opaca (sin FK) a proposito: esta tabla es
 // auxiliar/operativa y no debe acoplarse al modelo Sale.
 model PrintJob {

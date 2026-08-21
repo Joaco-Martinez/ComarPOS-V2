@@ -4,8 +4,9 @@
  * Product, Sale, Finance, StockMovement, Purchase, InvoiceAfip, Remito,
  * ArcaConfig, BusinessLocation, ArcaAuditLog), ej. `where: { ...tenantScope(), status }`.
  * Lee el tenant actual del AsyncLocalStorage (src/context/tenantContext.ts),
- * seteado por el middleware de resolucion por subdominio - no hace falta
- * pasarlo a mano por cada funcion/controller.
+ * seteado por tenantMiddleware/authMiddleware (src/middleware/tenant.ts,
+ * src/middleware/auth.ts) - no hace falta pasarlo a mano por cada
+ * funcion/controller.
  */
 import { currentTenantId } from "../context/tenantContext";
 

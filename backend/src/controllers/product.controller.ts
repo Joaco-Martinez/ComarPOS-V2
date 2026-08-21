@@ -6,7 +6,11 @@ import { getParamAsString } from "../utils/params";
 import { optionalRangeAR } from "../utils/dateAR";
 import { logAudit } from "../utils/auditLogger";
 
-const upload = multer({
+// Se exporta para que product.routes.ts la monte ANTES de authMiddleware
+// (ver comentario ahi) - no antojadizo, es la forma de evitar que el
+// contexto de tenant (AsyncLocalStorage) se pierda en requests
+// multipart/form-data sin ningun archivo adjunto.
+export const upload = multer({
   dest: "uploads/",
   limits: {
     fileSize: 5 * 1024 * 1024,
@@ -107,64 +111,61 @@ export const productController = {
     }
   },
 
-  create: [
-    upload.single("image"),
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        const newProduct = await productService.create({
-          name: req.body.name,
-          description: req.body.description,
+  // El middleware `upload.single("image")` se monta en product.routes.ts
+  // ANTES de este handler (y antes de authMiddleware, ver comentario ahi).
+  async create(req: Request, res: Response, next: NextFunction) {
+    try {
+      const newProduct = await productService.create({
+        name: req.body.name,
+        description: req.body.description,
 
-          type: req.body.type,
-          isService: normalizeBoolean(req.body.isService),
+        type: req.body.type,
+        isService: normalizeBoolean(req.body.isService),
 
-          categoryId: req.body.categoryId,
-          category: req.body.category,
+        categoryId: req.body.categoryId,
+        category: req.body.category,
 
-          price: req.body.price,
-          wholesalePrice: req.body.wholesalePrice,
-          clientPrice: req.body.clientPrice,
-          purchasePrice: req.body.purchasePrice,
-          ivaRate: req.body.ivaRate,
+        price: req.body.price,
+        wholesalePrice: req.body.wholesalePrice,
+        purchasePrice: req.body.purchasePrice,
+        ivaRate: req.body.ivaRate,
 
-          saleUnit: req.body.saleUnit,
+        saleUnit: req.body.saleUnit,
 
-          pricePerKg: req.body.pricePerKg,
-          clientPricePerKg: req.body.clientPricePerKg,
-          wholesalePricePerKg: req.body.wholesalePricePerKg,
+        pricePerKg: req.body.pricePerKg,
+        wholesalePricePerKg: req.body.wholesalePricePerKg,
 
-          sku: req.body.sku,
+        sku: req.body.sku,
 
-          stockLocal: req.body.stockLocal,
-          stockDeposito: req.body.stockDeposito,
+        stockLocal: req.body.stockLocal,
+        stockDeposito: req.body.stockDeposito,
 
-          stockLocalKg: req.body.stockLocalKg,
-          stockDepositoKg: req.body.stockDepositoKg,
+        stockLocalKg: req.body.stockLocalKg,
+        stockDepositoKg: req.body.stockDepositoKg,
 
-          minStock: req.body.minStock,
-          minStockDeposito: req.body.minStockDeposito,
-          minStockKg: req.body.minStockKg,
-          minStockDepositoKg: req.body.minStockDepositoKg,
+        minStock: req.body.minStock,
+        minStockDeposito: req.body.minStockDeposito,
+        minStockKg: req.body.minStockKg,
+        minStockDepositoKg: req.body.minStockDepositoKg,
 
-          file: req.file,
+        file: req.file,
 
-          components: parseJsonArray(req.body.components),
-          boxContents: parseJsonArray(req.body.boxContents),
-        });
+        components: parseJsonArray(req.body.components),
+        boxContents: parseJsonArray(req.body.boxContents),
+      });
 
-        if ((newProduct as any)?.statusCode) {
-          return res
-            .status((newProduct as any).statusCode)
-            .json({ message: (newProduct as any).message });
-        }
-
-        logAudit(req, "CREATE", "Product", (newProduct as any).id, { name: (newProduct as any).name });
-        res.status(201).json(newProduct);
-      } catch (err) {
-        next(err);
+      if ((newProduct as any)?.statusCode) {
+        return res
+          .status((newProduct as any).statusCode)
+          .json({ message: (newProduct as any).message });
       }
-    },
-  ],
+
+      logAudit(req, "CREATE", "Product", (newProduct as any).id, { name: (newProduct as any).name });
+      res.status(201).json(newProduct);
+    } catch (err) {
+      next(err);
+    }
+  },
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
@@ -197,10 +198,6 @@ export const productController = {
         cleanBody.price = toNumberOrUndefined(body.price);
       }
 
-      if (body.clientPrice !== undefined) {
-        cleanBody.clientPrice = toNumberOrUndefined(body.clientPrice);
-      }
-
       if (body.wholesalePrice !== undefined) {
         cleanBody.wholesalePrice = toNumberOrUndefined(body.wholesalePrice);
       }
@@ -215,10 +212,6 @@ export const productController = {
 
       if (body.pricePerKg !== undefined) {
         cleanBody.pricePerKg = toNumberOrUndefined(body.pricePerKg);
-      }
-
-      if (body.clientPricePerKg !== undefined) {
-        cleanBody.clientPricePerKg = toNumberOrUndefined(body.clientPricePerKg);
       }
 
       if (body.wholesalePricePerKg !== undefined) {
@@ -257,10 +250,17 @@ export const productController = {
         cleanBody.minStockDepositoKg = toNumberOrUndefined(body.minStockDepositoKg);
       }
 
-      const updated = await productService.update(
+      let updated = await productService.update(
         getParamAsString(req.params.id, "id"),
         cleanBody
       );
+
+      // El form de edicion manda la imagen nueva (si el usuario eligio una)
+      // en el mismo request que el resto de los campos - ver `upload.single`
+      // montado en product.routes.ts antes de authMiddleware.
+      if (req.file) {
+        updated = await productService.updateImage(updated.id, req.file);
+      }
 
       res.json(updated);
     } catch (err) {
@@ -445,28 +445,27 @@ export const productController = {
     }
   },
 
-  updateImage: [
-    upload.single("image"),
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        if (!req.file) {
-          return res.status(400).json({
-            message: "Debe enviar una imagen.",
-          });
-        }
-
-        const updatedProduct = await productService.updateImage(
-          getParamAsString(req.params.id, "id"),
-          req.file
-        );
-
-        res.json({
-          message: "Imagen actualizada correctamente",
-          content: updatedProduct,
+  // El middleware `upload.single("image")` se monta en product.routes.ts
+  // ANTES de este handler (y antes de authMiddleware, ver comentario ahi).
+  async updateImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          message: "Debe enviar una imagen.",
         });
-      } catch (err) {
-        next(err);
       }
-    },
-  ],
+
+      const updatedProduct = await productService.updateImage(
+        getParamAsString(req.params.id, "id"),
+        req.file
+      );
+
+      res.json({
+        message: "Imagen actualizada correctamente",
+        content: updatedProduct,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
 };

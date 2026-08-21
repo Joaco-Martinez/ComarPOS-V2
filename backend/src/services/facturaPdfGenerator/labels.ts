@@ -6,20 +6,20 @@ import { FacturaPDFData, TipoCliente } from "./types";
 
 export function getEmpresa(data: FacturaPDFData) {
   return {
-    name: data.empresa?.name || process.env.BUSINESS_NAME || "GRUPO VJ",
+    name: data.empresa?.name || process.env.BUSINESS_NAME || "Mi Negocio",
     subtitle:
       data.empresa?.subtitle ||
       process.env.BUSINESS_SUBTITLE ||
-      "SANTILLAN JULIO CESAR",
+      "ComarPOS",
     cuit: data.empresa?.cuit || process.env.BUSINESS_CUIT || data.factura.cuit,
     address:
       data.empresa?.address ||
       process.env.BUSINESS_ADDRESS ||
-      "PASO DE LOS ANDES 893, BARRIO OBSERVATORIO, 5000-CORDOBA",
+      "",
     phone:
       data.empresa?.phone ||
       process.env.BUSINESS_PHONE ||
-      "+54 9 3513 79-0057",
+      "",
     ivaCondition:
       data.empresa?.ivaCondition ||
       process.env.BUSINESS_IVA_CONDITION ||

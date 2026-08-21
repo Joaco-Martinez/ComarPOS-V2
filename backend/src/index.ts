@@ -17,7 +17,6 @@ if ((process.env.JWT_SECRET || "").length < 64) {
 
 import app from "./app";
 import { startScheduler } from "./cron/scheduler";
-import { startPrintboxAckListener } from "./services/printbox";
 
 // La mayoria de los controllers todavia no usa asyncHandler (ver
 // CAMBIOS_AUDITORIA.md) y depende de try/catch manual: una promesa
@@ -42,5 +41,4 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   startScheduler();
-  startPrintboxAckListener();
 });

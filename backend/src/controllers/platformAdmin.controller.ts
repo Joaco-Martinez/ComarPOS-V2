@@ -67,6 +67,7 @@ export const platformAdminController = {
           status: req.body.status,
           note: req.body.note,
           paidUntil: req.body.paidUntil,
+          trialEndsAt: req.body.trialEndsAt,
         },
         platformAdminId
       );

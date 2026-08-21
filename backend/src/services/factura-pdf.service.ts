@@ -7,6 +7,8 @@ import {
   TipoCliente,
 } from "./facturaPdfGenerator.service";
 import { tenantScope } from "../utils/tenantScope";
+import { currentTenantId } from "../context/tenantContext";
+import { arcaConfigService } from "./arcaConfig.service";
 
 export async function regenerarFacturaPDFService(
   saleId: string,
@@ -35,6 +37,16 @@ export async function regenerarFacturaPDFService(
 
   const invoice = sale.invoiceAfip;
 
+  const [arcaConfig, tenant] = await Promise.all([
+    arcaConfigService.getConfig().catch(() => null),
+    currentTenantId()
+      ? prisma.tenant.findUnique({
+          where: { id: currentTenantId()! },
+          select: { name: true, ticketPhone: true, ticketAddress: true },
+        })
+      : null,
+  ]);
+
   const pdfData: FacturaPDFData = {
     factura: {
       cuit: invoice.cuit,
@@ -57,14 +69,17 @@ export async function regenerarFacturaPDFService(
     },
 
     empresa: {
-      name: process.env.BUSINESS_NAME || "GRUPO VJ",
-      subtitle: process.env.BUSINESS_SUBTITLE || "SANTILLAN JULIO CESAR",
-      cuit: process.env.BUSINESS_CUIT || invoice.cuit,
+      name: arcaConfig?.businessName || tenant?.name || process.env.BUSINESS_NAME || "Mi Negocio",
+      subtitle: process.env.BUSINESS_SUBTITLE || "ComarPOS",
+      cuit: invoice.cuit || arcaConfig?.cuit || process.env.BUSINESS_CUIT || "",
       address:
+        arcaConfig?.fiscalAddress ||
+        tenant?.ticketAddress ||
         process.env.BUSINESS_ADDRESS ||
-        "PASO DE LOS ANDES 893, BARRIO OBSERVATORIO, 5000-CORDOBA",
-      phone: process.env.BUSINESS_PHONE || "+54 9 3513 79-0057",
+        "",
+      phone: tenant?.ticketPhone || process.env.BUSINESS_PHONE || "",
       ivaCondition:
+        arcaConfig?.ivaCondition ||
         process.env.BUSINESS_IVA_CONDITION ||
         undefined,
     },

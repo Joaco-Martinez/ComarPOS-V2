@@ -19,6 +19,10 @@ export const platformTenantService = {
         subscriptionStatus: true,
         paidUntil: true,
         suspendedAt: true,
+        trialEndsAt: true,
+        contactPhone: true,
+        mpPreapprovalId: true,
+        mpSubscriptionAmount: true,
         notes: true,
         createdAt: true,
       },
@@ -43,7 +47,7 @@ export const platformTenantService = {
 
   async updateSubscription(
     id: string,
-    data: { status?: string; note?: string; paidUntil?: string },
+    data: { status?: string; note?: string; paidUntil?: string; trialEndsAt?: string },
     platformAdminId?: string
   ) {
     const tenant = await prisma.tenant.findUnique({ where: { id } });
@@ -60,6 +64,11 @@ export const platformTenantService = {
         data: {
           subscriptionStatus: newStatus ?? tenant.subscriptionStatus,
           paidUntil: data.paidUntil !== undefined ? endOfDayAR(data.paidUntil) : tenant.paidUntil,
+          // Extender/acortar el vencimiento de la prueba gratis desde el
+          // panel (ej: darle unos días más antes de que la bloquee
+          // getTenantBlock). Si el status pasa a algo distinto de TRIAL no
+          // se toca: queda de referencia de cuando fue la prueba original.
+          trialEndsAt: data.trialEndsAt !== undefined ? endOfDayAR(data.trialEndsAt) : tenant.trialEndsAt,
           suspendedAt: newStatus === "SUSPENDED" ? new Date() : tenant.suspendedAt,
           notes: data.note !== undefined ? data.note : tenant.notes,
         },

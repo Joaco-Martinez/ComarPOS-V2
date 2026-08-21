@@ -22,6 +22,7 @@ import {
 } from "./generarFacturaAfipPDF/labels";
 import { formatCurrency, formatDateAR, formatTimeAR, formatCaeDate } from "./generarFacturaAfipPDF/format";
 import { buildTicketPayload, enviarTicketAlPOSLocal } from "./generarFacturaAfipPDF/ticket";
+import { COMARPOS_FOOTER_TEXT_SHORT } from "../../utils/comarposBranding";
 
 export async function generarFacturaAfipPDF({
   tipoComprobante,
@@ -37,8 +38,9 @@ export async function generarFacturaAfipPDF({
   caeVto,
   products,
   cuit,
-  razonSocial = "VON KÖNIG",
-  direccion = "Av. Julio Argentino Roca 288, X5194 Villa Gral. Belgrano, Córdoba",
+  razonSocial = "Mi Negocio",
+  direccion = "",
+  telefonoNegocio = "",
   qrBase64,
   qrUrl,
 
@@ -60,6 +62,7 @@ export async function generarFacturaAfipPDF({
   cuit: string;
   razonSocial?: string;
   direccion?: string;
+  telefonoNegocio?: string;
   qrBase64?: string | null;
   qrUrl?: string | null;
   products?: Product[];
@@ -314,6 +317,12 @@ export async function generarFacturaAfipPDF({
           }
         );
 
+      doc
+        .moveDown(0.8)
+        .fontSize(6.5)
+        .fillColor("#888888")
+        .text(COMARPOS_FOOTER_TEXT_SHORT, { align: "center", width: PAGE_WIDTH });
+
       doc.end();
 
       stream.on("finish", async () => {
@@ -343,6 +352,7 @@ export async function generarFacturaAfipPDF({
             cuit,
             razonSocial,
             direccion,
+            telefonoNegocio,
             documentoCliente,
             telefonoCliente,
             qrUrl,
