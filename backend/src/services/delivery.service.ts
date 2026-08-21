@@ -235,7 +235,16 @@ export const deliveryService = {
     clientId: string;
     pricePerKm?: number | null;
   }) {
-    const pricePerKm = Number(params.pricePerKm ?? DEFAULT_PRICE_PER_KM);
+    let pricePerKm = Number(params.pricePerKm);
+    if (!Number.isFinite(pricePerKm) || pricePerKm <= 0) {
+      // Sin override explicito: usa el precio propio del tenant
+      // (Configuracion > Empresa) si lo cargo, si no el default global.
+      const tenantId = currentTenantId();
+      const tenant = tenantId
+        ? await prisma.tenant.findUnique({ where: { id: tenantId }, select: { deliveryPricePerKm: true } })
+        : null;
+      pricePerKm = Number(tenant?.deliveryPricePerKm ?? DEFAULT_PRICE_PER_KM);
+    }
 
     if (!Number.isFinite(pricePerKm) || pricePerKm <= 0) {
       throw new Error("El precio por km debe ser mayor a 0");

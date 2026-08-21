@@ -15,7 +15,11 @@ export default function PwaRegister() {
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
+    // Turbopack en dev reusa las mismas URLs de chunk entre recompilaciones (no
+    // hay content-hash por build como en produccion), asi que un service worker
+    // cache-first como el nuestro (ver public/sw.js) freezaria para siempre el
+    // primer JS/CSS que haya visto y el hot-reload dejaria de reflejar cambios.
+    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
 

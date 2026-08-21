@@ -113,7 +113,7 @@ export default function PlatformAdminTenantsPage() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Negocio</th><th>Slug</th><th>Vence</th><th>Creado</th><th>Estado</th><th></th></tr>
+                <tr><th>Negocio</th><th>Slug</th><th>Vence</th><th>Creado</th><th>Cuentas</th><th>Estado</th><th></th></tr>
               </thead>
               <tbody>
                 {filtered.map((t) => (
@@ -126,6 +126,20 @@ export default function PlatformAdminTenantsPage() {
                         : (t.paidUntil ? fmtDate(t.paidUntil) : '—')}
                     </td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtDate(t.createdAt)}</td>
+                    <td
+                      style={{ fontSize: 12, color: 'var(--text2)' }}
+                      title={t.users?.map((u) => `${u.email}${u.lastLoginAt ? ` (último ingreso ${fmtDate(u.lastLoginAt)})` : ' (nunca ingresó)'}`).join('\n')}
+                    >
+                      {t.users?.length ?? 0}
+                      {(t.users?.length ?? 0) > 0 && (
+                        <span
+                          style={{
+                            display: 'inline-block', width: 6, height: 6, borderRadius: '50%', marginLeft: 6,
+                            background: t.users?.some((u) => u.lastLoginAt) ? 'var(--success)' : 'var(--text3)',
+                          }}
+                        />
+                      )}
+                    </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <button onClick={() => toggleSuspend(t)} className={`badge ${statusBadge(t.subscriptionStatus)}`} style={{ cursor: 'pointer', border: 'none' }}>

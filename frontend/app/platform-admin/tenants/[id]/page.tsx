@@ -7,7 +7,7 @@ import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
 import type { Tenant, TenantSubscriptionStatus } from '@/types';
 import { fmtDate, daysRemaining } from '@/lib/helpers';
-import { ArrowLeft, History, Save } from 'lucide-react';
+import { ArrowLeft, History, Save, Users } from 'lucide-react';
 
 const statusBadge = (s: TenantSubscriptionStatus) =>
   s === 'TRIAL' ? 'badge-blue' : s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
@@ -137,6 +137,41 @@ export default function PlatformAdminTenantDetailPage() {
             {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><Save size={13} /> Guardar</>}
           </button>
         </div>
+      </div>
+
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <Users size={15} style={{ color: 'var(--text3)' }} />
+          <span style={{ fontWeight: 700, fontSize: 13 }}>Cuentas ({tenant.users?.length ?? 0})</span>
+        </div>
+
+        {!tenant.users || tenant.users.length === 0 ? (
+          <div className="empty-state"><p>Sin cuentas creadas todavía</p></div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Alta</th><th>Último ingreso</th></tr>
+              </thead>
+              <tbody>
+                {tenant.users.map((u) => (
+                  <tr key={u.id}>
+                    <td style={{ fontSize: 12 }}>
+                      {u.name}
+                      {u.isActive === false && <span className="badge badge-red" style={{ marginLeft: 6 }}>Deshabilitado</span>}
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--text2)' }}>{u.email}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text2)' }}>{u.role}</td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{u.createdAt ? fmtDate(u.createdAt) : '—'}</td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: u.lastLoginAt ? 'var(--text)' : 'var(--text3)' }}>
+                      {u.lastLoginAt ? fmtDate(u.lastLoginAt) : 'Nunca'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ padding: 20 }}>

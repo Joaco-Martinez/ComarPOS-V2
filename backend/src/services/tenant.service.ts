@@ -12,6 +12,7 @@ type TenantSelfServiceInput = {
   ticketAddress?: string | null;
   ticketPhone?: string | null;
   ticketEmail?: string | null;
+  deliveryPricePerKm?: number | null;
 };
 
 // Datos que un ADMIN de tenant puede leer/editar de su propio negocio (no el
@@ -27,6 +28,7 @@ const SELF_SERVICE_SELECT = {
   ticketAddress: true,
   ticketPhone: true,
   ticketEmail: true,
+  deliveryPricePerKm: true,
 };
 
 export const tenantService = {
@@ -47,7 +49,7 @@ export const tenantService = {
     const tenantId = currentTenantId();
     if (!tenantId) throw new Error("No hay negocio en contexto");
 
-    const cleanData: Record<string, string | null> = {};
+    const cleanData: Record<string, string | number | null> = {};
     if (data.ticketBusinessName !== undefined) {
       cleanData.ticketBusinessName = cleanString(data.ticketBusinessName);
     }
@@ -62,6 +64,12 @@ export const tenantService = {
     }
     if (data.ticketEmail !== undefined) {
       cleanData.ticketEmail = cleanString(data.ticketEmail);
+    }
+    if (data.deliveryPricePerKm !== undefined) {
+      // null/0/NaN => borra el override y vuelve a usar el default global
+      // (DELIVERY_PRICE_PER_KM). Ver delivery.service.ts.
+      const value = Number(data.deliveryPricePerKm);
+      cleanData.deliveryPricePerKm = Number.isFinite(value) && value > 0 ? value : null;
     }
 
     return prisma.tenant.update({

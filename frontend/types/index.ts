@@ -35,6 +35,7 @@ export interface User {
   client?: Client | null;
   createdAt?: string;
   updatedAt?: string;
+  lastLoginAt?: string | null;
 }
 
 export interface ProductCategory {
@@ -447,6 +448,7 @@ export interface Tenant {
   notes?: string | null;
   createdAt: string;
   paymentLogs?: TenantPaymentLog[];
+  users?: User[];
 }
 
 export type PrintboxDeviceStatus = 'PENDING_PAIRING' | 'ACTIVE' | 'REVOKED';

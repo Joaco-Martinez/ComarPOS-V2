@@ -57,6 +57,7 @@ export default function LoginPage() {
 
   return (
     <div
+      className="login-root"
       style={{
         minHeight: '100vh',
         background: 'var(--bg)',

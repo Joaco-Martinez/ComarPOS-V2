@@ -17,6 +17,7 @@ type TenantInfo = {
   ticketAddress: string | null;
   ticketPhone: string | null;
   ticketEmail: string | null;
+  deliveryPricePerKm: number | null;
 };
 
 const emptyInfo: TenantInfo = {
@@ -25,6 +26,7 @@ const emptyInfo: TenantInfo = {
   ticketAddress: '',
   ticketPhone: '',
   ticketEmail: '',
+  deliveryPricePerKm: null,
 };
 
 export default function EmpresaPage() {
@@ -69,6 +71,7 @@ export default function EmpresaPage() {
         ticketAddress: data.tenant?.ticketAddress ?? '',
         ticketPhone: data.tenant?.ticketPhone ?? '',
         ticketEmail: data.tenant?.ticketEmail ?? '',
+        deliveryPricePerKm: data.tenant?.deliveryPricePerKm ?? null,
       });
     } catch {
       setInfo(emptyInfo);
@@ -201,7 +204,7 @@ export default function EmpresaPage() {
                 disabled={saving}
               />
             </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="form-group">
               <label className="form-label">Email</label>
               <input
                 type="email"
@@ -210,6 +213,24 @@ export default function EmpresaPage() {
                 placeholder="contacto@minegocio.com"
                 disabled={saving}
               />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Precio de envío por km</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={info.deliveryPricePerKm ?? ''}
+                onChange={(e) => setInfo((i) => ({
+                  ...i,
+                  deliveryPricePerKm: e.target.value === '' ? null : Number(e.target.value),
+                }))}
+                placeholder="Dejar vacío usa el precio por defecto de ComarPOS"
+                disabled={saving}
+              />
+              <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+                Se usa para calcular el costo de los envíos a domicilio en el POS. Dejalo vacío para usar el valor por defecto.
+              </p>
             </div>
 
             <button type="submit" className="btn btn-primary btn-sm" style={{ marginTop: 16, gap: 6 }} disabled={saving}>

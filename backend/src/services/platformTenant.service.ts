@@ -25,6 +25,12 @@ export const platformTenantService = {
         mpSubscriptionAmount: true,
         notes: true,
         createdAt: true,
+        // Auditoria: cuentas del negocio (nombre/email/rol/ultimo login), sin
+        // el hash de password ni tokens de reseteo.
+        users: {
+          select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true, lastLoginAt: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
   },
@@ -36,6 +42,10 @@ export const platformTenantService = {
         paymentLogs: {
           orderBy: { createdAt: "desc" },
           include: { platformAdmin: { select: { id: true, name: true, email: true } } },
+        },
+        users: {
+          select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true, lastLoginAt: true },
+          orderBy: { createdAt: "asc" },
         },
       },
     });

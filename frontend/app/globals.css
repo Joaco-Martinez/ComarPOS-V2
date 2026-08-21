@@ -69,6 +69,25 @@ html.light {
   --accent2-dim: rgba(9, 60, 157, 0.08);
 }
 
+/* --- Login: paleta propia, siempre clara, independiente del toggle de tema
+   de la app (comarpos-theme) o del modo oscuro del sistema. --- */
+.login-root {
+  --bg:        #F0F4F8;
+  --surface:   #FFFFFF;
+  --surface2:  #E8EEF5;
+  --surface3:  #DDE5EF;
+  --border:    rgba(13, 89, 231, 0.12);
+  --border2:   rgba(13, 89, 231, 0.22);
+  --text:      #001125;
+  --text2:     #2D3E55;
+  --text3:     #6B7280;
+  --accent-dim:   rgba(13, 89, 231, 0.10);
+  --accent2-dim:  rgba(9, 60, 157, 0.10);
+  --danger-dim:   rgba(239, 68, 68, 0.10);
+}
+.login-root .brand-logo-dark  { display: none; }
+.login-root .brand-logo-light { display: block; }
+
 /* --- Mobile: paleta clara/suave (fuerza look claro en mobile, dark o light) --- */
 @media (max-width: 768px) {
   :root, html.light {
@@ -409,7 +428,12 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
 .pos-cart-wrap { }
 @media (max-width: 767px) {
   .pos-cart-wrap {
-    position: fixed; inset: 0; z-index: 2147483010;
+    position: fixed; top: 0; left: 0; right: 0;
+    /* Se corta arriba de la bottom-nav (misma altura que .bottom-nav) en vez de
+       inset:0, para que el fondo oscuro del carrito no tape/opaque la navbar
+       mientras se esta vendiendo. */
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    z-index: 2147483010;
     display: flex; align-items: flex-end; justify-content: center;
     background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
     opacity: 0; pointer-events: none; transition: opacity 0.2s ease;

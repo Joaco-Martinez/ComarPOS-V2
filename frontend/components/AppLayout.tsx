@@ -7,6 +7,7 @@ import Sidebar from './Sidebar';
 import Toasts from './Toasts';
 import NotificationsBell from './NotificationsBell';
 import BottomNav from './mobile/BottomNav';
+import HelpCenter from './HelpCenter';
 import { useToast } from '@/hooks/useToast';
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -121,6 +122,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
             >
               {theme === 'dark' ? <Sun size={15} style={{ color: 'var(--text3)' }} /> : <Moon size={15} style={{ color: 'var(--text3)' }} />}
             </button>
+            <HelpCenter />
             <NotificationsBell />
           </div>
         </header>

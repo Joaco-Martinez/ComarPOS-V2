@@ -158,6 +158,10 @@ export const authService = {
       { expiresIn: "1d" }
     );
 
+    // Auditoria de platform-admin (ver platformTenant.service.ts): no
+    // bloquea el login si falla.
+    prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});
+
     const cleanUser = sanitizeUser(user);
 
     setAuthCookies(res, cleanUser, token);
