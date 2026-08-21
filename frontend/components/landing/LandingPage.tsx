@@ -81,16 +81,16 @@ function Eyebrow({ children, align = 'center' }: { children: React.ReactNode; al
 
 export default function LandingPage() {
   return (
-    <div className="landing-root" style={{ background: 'var(--bg)', color: 'var(--text)', minHeight: '100vh', position: 'relative', overflowX: 'hidden' }}>
+    <div className="landing-root" style={{ background: 'var(--bg)', color: 'var(--text)', minHeight: '100vh', position: 'relative', overflowX: 'hidden', maxWidth: '100vw', contain: 'paint' }}>
       {/* Ambient glow (no grid technique: warm, soft, not "dev tool") */}
       <div style={{
         position: 'absolute', top: '-8%', left: '58%', transform: 'translateX(-50%)',
-        width: 900, height: 700, background: 'radial-gradient(circle, rgba(13,89,231,0.14) 0%, transparent 68%)',
+        width: 'min(900px, 100vw)', height: 700, background: 'radial-gradient(circle, rgba(13,89,231,0.14) 0%, transparent 68%)',
         pointerEvents: 'none',
       }} />
       <div style={{
         position: 'absolute', top: '6%', left: '2%',
-        width: 460, height: 460, background: 'radial-gradient(circle, rgba(243,156,18,0.08) 0%, transparent 70%)',
+        width: 'min(460px, 90vw)', height: 460, background: 'radial-gradient(circle, rgba(243,156,18,0.08) 0%, transparent 70%)',
         pointerEvents: 'none',
       }} />
 
