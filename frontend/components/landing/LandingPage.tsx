@@ -129,7 +129,7 @@ export default function LandingPage() {
               Vendé, facturá y controlá tu negocio, todo en un solo lugar
             </h1>
             <p style={{ fontSize: 16.5, color: 'var(--text2)', maxWidth: 480, marginBottom: 32, lineHeight: 1.6 }}>
-              ComarPOS junta punto de venta, factura electrónica con CAE real de AFIP, stock, caja y
+              ComarPOS junta punto de venta, factura electrónica con CAE de ARCA/AFIP, stock, caja y
               reportes. Pensado para el mostrador de tu local, no para una oficina de sistemas.
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 40 }}>
