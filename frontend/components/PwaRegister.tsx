@@ -10,8 +10,25 @@ interface BeforeInstallPromptEvent extends Event {
 
 const DISMISS_KEY = 'comarpos-pwa-install-dismissed';
 
+function isStandaloneDisplay() {
+  return (window.navigator as any).standalone === true
+    || window.matchMedia('(display-mode: standalone)').matches;
+}
+
+// Safari es el único navegador de iOS que puede instalar (agregar a Inicio);
+// Chrome/Firefox/etc en iPhone corren sobre WebKit y su user-agent también
+// dice "Safari", así que hay que descartar sus propios tokens (CriOS, FxiOS...)
+// para no ofrecerles instalar algo que no van a poder hacer.
+function isIosSafari() {
+  const ua = navigator.userAgent;
+  const isIos = /iphone|ipad|ipod/i.test(ua);
+  const isOtherBrowser = /crios|fxios|opios|edgios/i.test(ua);
+  return isIos && !isOtherBrowser;
+}
+
 export default function PwaRegister() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showIosBanner, setShowIosBanner] = useState(false);
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
@@ -25,6 +42,13 @@ export default function PwaRegister() {
 
     setDismissed(localStorage.getItem(DISMISS_KEY) === '1');
 
+    // Safari no dispara beforeinstallprompt (no soporta instalación
+    // programática): sin este chequeo, quien entra desde un iPhone nunca ve
+    // ningún aviso de que la app se puede instalar.
+    if (!isStandaloneDisplay() && isIosSafari()) {
+      setShowIosBanner(true);
+    }
+
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setInstallEvent(e as BeforeInstallPromptEvent);
@@ -33,7 +57,7 @@ export default function PwaRegister() {
     return () => window.removeEventListener('beforeinstallprompt', onPrompt);
   }, []);
 
-  if (!installEvent || dismissed) return null;
+  if (dismissed || (!installEvent && !showIosBanner)) return null;
 
   const dismiss = () => {
     localStorage.setItem(DISMISS_KEY, '1');
@@ -41,9 +65,13 @@ export default function PwaRegister() {
   };
 
   const install = async () => {
-    await installEvent.prompt();
-    await installEvent.userChoice;
-    setInstallEvent(null);
+    if (installEvent) {
+      await installEvent.prompt();
+      await installEvent.userChoice;
+      setInstallEvent(null);
+      return;
+    }
+    window.location.href = '/instalar';
   };
 
   return (
