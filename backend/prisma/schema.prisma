@@ -74,6 +74,12 @@ model Tenant {
   // falta redeployar para cambiar un precio.
   deliveryPricePerKm Float?
 
+  // Progreso de la guia de arranque para negocios nuevos (ver /guia en el
+  // frontend y onboarding.service.ts). Mapa { [stepId]: boolean }, null hasta
+  // que se marca el primer paso. Es del negocio, no de un usuario puntual:
+  // cualquier empleado que entre ve el mismo progreso.
+  onboardingChecklist Json?
+
   paymentLogs     TenantPaymentLog[]
   printboxDevices PrintboxDevice[]
   printJobs       PrintJob[]

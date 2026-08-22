@@ -4,6 +4,7 @@ import {
   OrdenesCompraIcon, ProveedoresIcon, ConteoStockIcon, FinanzasIcon, GastosRecurrentesIcon,
   TipoCambioIcon, CuentasCorrientesIcon, ReportesIcon, ObjetivosVentasIcon, PromocionesIcon,
   FidelidadIcon, UsuariosIcon, AuditoriaIcon, SucursalesIcon, ArcaIcon, EmpresaIcon, PrintboxIcon,
+  GuiaIcon,
   type ComarIconProps,
 } from '@/components/icons/ComarIcons';
 
@@ -11,6 +12,7 @@ export type NavIconComponent = (props: ComarIconProps) => React.JSX.Element;
 export type NavItem = { href: string; icon: NavIconComponent; label: string; color: string };
 
 export const NAV: NavItem[] = [
+  { href: '/guia',         icon: GuiaIcon,        label: 'Guía de arranque',   color: '#18C15E' },
   { href: '/pos',          icon: PosIcon,         label: 'POS — Ventas',       color: '#0D59E7' },
   { href: '/ventas',       icon: VentasIcon,      label: 'Historial Ventas',   color: '#0D59E7' },
   { href: '/productos',    icon: ProductosIcon,   label: 'Productos',          color: '#18C15E' },
