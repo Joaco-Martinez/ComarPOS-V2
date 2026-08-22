@@ -439,7 +439,15 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
 
 /* --- POS (mobile) --- */
 .pos-layout { display: flex; flex-direction: column; gap: 12px; }
-@media (max-width: 767px) { .pos-layout { padding-bottom: 84px; } }
+@media (max-width: 767px) {
+  /* +env(safe-area-inset-bottom) porque .bottom-nav crece con esa inset en
+     celulares con home indicator (ver mas abajo) - sin sumarla ahi, el
+     contenido reservaba siempre el mismo alto fijo y el ultimo tramo
+     (botones "Guardar", ultimo item de una lista) quedaba tapado por la
+     franja extra que la navbar ocupa en esos dispositivos. Se suma ademas
+     un margen visual (16px) por encima del alto exacto de la navbar. */
+  .pos-layout { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px) + 16px); }
+}
 @media (min-width: 768px) { .pos-layout { flex-direction: row; height: calc(100vh - 100px); overflow: hidden; } }
 
 .pos-products { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -577,8 +585,13 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
     padding: 6px max(6px, env(safe-area-inset-right, 6px)) max(6px, env(safe-area-inset-bottom, 6px)) max(6px, env(safe-area-inset-left, 6px));
     height: calc(60px + env(safe-area-inset-bottom, 0px));
   }
-  /* Content offset so the bottom nav never covers page content */
-  #main-content { padding-bottom: 76px; }
+  /* Content offset so the bottom nav never covers page content. Suma
+     env(safe-area-inset-bottom) porque .bottom-nav crece con esa inset en
+     celulares con home indicator - un padding fijo sin esto reservaba
+     menos espacio que el alto real de la navbar ahi, y el final del
+     contenido (botones de guardar, ultimo item de una lista/formulario)
+     quedaba tapado. Se suma ademas un margen visual (16px) de mas. */
+  #main-content { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px) + 16px); }
 }
 .bottom-nav-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
