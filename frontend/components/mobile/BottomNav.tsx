@@ -5,12 +5,12 @@ import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { NAV, ADMIN_NAV, BOTTOM_NAV_HREFS, type NavItem } from '@/lib/navConfig';
-import { Grid2x2, X } from 'lucide-react';
+import { Grid2x2, LogOut, X } from 'lucide-react';
 
 export default function BottomNav() {
   const pathname = usePathname();
   const params = useParams<{ tenant?: string }>();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const tenantSlug = params?.tenant || user?.tenantSlug || '';
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -81,6 +81,15 @@ export default function BottomNav() {
                 </Link>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="btn btn-ghost btn-sm"
+              style={{ width: '100%', justifyContent: 'flex-start', gap: 7, color: 'var(--danger)', marginTop: 14 }}
+            >
+              <LogOut size={14} />
+              Cerrar sesión
+            </button>
           </div>
         </div>
       )}
