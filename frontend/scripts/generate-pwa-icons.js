@@ -32,17 +32,17 @@ async function squareOnWhite(size, padPercent = 0) {
 async function main() {
   fs.mkdirSync(ICONS_DIR, { recursive: true });
 
-  const icon192 = await squareOnWhite(192, 0.06);
+  const icon192 = await squareOnWhite(192, 0.11);
   fs.writeFileSync(path.join(ICONS_DIR, 'icon-192.png'), icon192);
 
-  const icon512 = await squareOnWhite(512, 0.06);
+  const icon512 = await squareOnWhite(512, 0.11);
   fs.writeFileSync(path.join(ICONS_DIR, 'icon-512.png'), icon512);
 
   // Maskable needs a larger safe-zone (~20%) since OSes crop to a circle/rounded-square.
-  const maskable512 = await squareOnWhite(512, 0.16);
+  const maskable512 = await squareOnWhite(512, 0.20);
   fs.writeFileSync(path.join(ICONS_DIR, 'maskable-512.png'), maskable512);
 
-  const apple180 = await squareOnWhite(180, 0.07);
+  const apple180 = await squareOnWhite(180, 0.12);
   fs.writeFileSync(path.join(APP_DIR, 'apple-icon.png'), apple180);
 
   // Next's app/icon.png convention (favicon/tab icon) — regenerate at 512 for crisp scaling.
