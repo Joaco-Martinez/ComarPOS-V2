@@ -8,10 +8,21 @@ const SRC = path.join(__dirname, '..', 'public', 'brand', 'isologo.png');
 const ICONS_DIR = path.join(__dirname, '..', 'public', 'icons');
 const APP_DIR = path.join(__dirname, '..', 'app');
 
+// isologo.png tiene mucho blanco de sobra alrededor del isotipo real (viene
+// de un canvas de diseño más grande) - sin recortarlo primero, cualquier
+// padPercent queda aplicado sobre ese lienzo entero, no sobre el dibujo, y
+// el ícono termina viéndose chico dentro del cuadrado (ver /guia visual del
+// isotipo real vs. el archivo fuente). `.trim()` saca ese margen antes de
+// componer, así padPercent sí controla el margen real alrededor del dibujo.
+async function trimmedSource() {
+  return sharp(SRC).trim().toBuffer();
+}
+
 async function squareOnWhite(size, padPercent = 0) {
   const pad = Math.round(size * padPercent);
   const inner = size - pad * 2;
-  const logo = await sharp(SRC).resize(inner, inner, { fit: 'contain', background: '#FFFFFF' }).toBuffer();
+  const trimmed = await trimmedSource();
+  const logo = await sharp(trimmed).resize(inner, inner, { fit: 'contain', background: '#FFFFFF' }).toBuffer();
   return sharp({ create: { width: size, height: size, channels: 4, background: '#FFFFFF' } })
     .composite([{ input: logo, left: pad, top: pad }])
     .png()
