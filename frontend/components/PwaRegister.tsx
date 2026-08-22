@@ -65,6 +65,12 @@ export default function PwaRegister() {
   };
 
   const install = async () => {
+    // Se marca como descartado apenas se toca "Instalar", no solo con la X:
+    // sin esto, el banner volvía a aparecer en la siguiente carga de página
+    // (beforeinstallprompt se vuelve a disparar en Android, y en iOS
+    // navegar a /instalar recarga la página) aunque la persona ya haya
+    // iniciado la instalación.
+    dismiss();
     if (installEvent) {
       await installEvent.prompt();
       await installEvent.userChoice;
