@@ -188,7 +188,7 @@ void showStatus(DeviceStatus status, const String &detail = "") {
   static const char* API_HOST = "192.168.0.174";
   static const uint16_t API_PORT = 5000;
 #else
-  static const char* API_HOST = "api.comarpos.com.ar"; // TODO: confirmar dominio real de prod
+  static const char* API_HOST = "api.comarpos.com";
   static const uint16_t API_PORT = 443;
 #endif
 static const char* API_PAIR_PATH = "/printbox/pair";
