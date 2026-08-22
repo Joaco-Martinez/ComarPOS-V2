@@ -64,7 +64,11 @@ export function proxy(req: NextRequest) {
   const role = getRole(req);
   const isLogged = Boolean(role);
   const isStaff = role === 'ADMIN' || role === 'EMPLEADO';
-  const isLogin = pathname === '/login';
+  // /app es el entry point de la PWA (ver manifest.webmanifest): tiene que
+  // tratarse igual que /login (público, sin redirect server-side) para que
+  // la URL nunca cambie a /login en el momento de instalar el ícono - ver
+  // el comentario en app/app/page.tsx.
+  const isLogin = pathname === '/login' || pathname === '/app';
   // "/" es público: en el dominio de marketing sirve la landing de ventas; en
   // cualquier otro caso page.tsx redirige a /login (donde sí aplica el gate
   // de auth de más abajo).
