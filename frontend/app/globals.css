@@ -471,7 +471,12 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
   }
   .pos-cart-wrap.open { opacity: 1; pointer-events: auto; }
   .pos-cart-wrap .pos-cart {
-    width: 100%; max-height: 88vh; border-radius: var(--m-radius-lg, 20px) var(--m-radius-lg, 20px) 0 0;
+    /* dvh (con vh como fallback) en vez de vh a secas: en Safari mobile "vh"
+       se calcula contra el viewport grande (barra de Safari colapsada), no
+       contra el visible real - con la barra de Safari expandida, un sheet
+       en 88vh terminaba mas alto que el area visible y su parte de abajo
+       (footer, botones) quedaba tapada por esa barra del navegador. */
+    width: 100%; max-height: 88dvh; border-radius: var(--m-radius-lg, 20px) var(--m-radius-lg, 20px) 0 0;
     transform: translateY(100%); transition: transform 0.25s ease;
     box-shadow: 0 -24px 70px rgba(0,0,0,0.5);
   }
@@ -540,7 +545,14 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
 @media (max-width: 768px) {
   .modal {
     max-width: 100%; border-radius: var(--m-radius-lg) var(--m-radius-lg) 0 0;
-    position: fixed; bottom: 0; top: auto; max-height: 88vh;
+    /* dvh (con vh como fallback) en vez de vh a secas: en Safari mobile "vh"
+       se calcula contra el viewport grande (barra de Safari colapsada), no
+       contra el area visible real con la barra expandida - el modal se
+       armaba mas alto de lo que realmente se veia, y la barra de Safari
+       (o la bottom-nav de la app) terminaba tapando el footer con los
+       botones de guardar/confirmar, aunque el layout interno del modal
+       (header/footer fijos, ver mas arriba) ya estuviera bien resuelto. */
+    position: fixed; bottom: 0; top: auto; max-height: 88dvh;
     box-shadow: var(--m-shadow-lg);
   }
   .modal-overlay { align-items: flex-end; padding: 0; }
@@ -618,7 +630,8 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
   display: flex; align-items: flex-end; justify-content: center;
 }
 .more-sheet {
-  width: 100%; max-height: 78vh; overflow-y: auto;
+  /* dvh (con vh como fallback), mismo motivo que .modal mas arriba. */
+  width: 100%; max-height: 78dvh; overflow-y: auto;
   background: var(--surface);
   border-radius: var(--m-radius-lg) var(--m-radius-lg) 0 0;
   box-shadow: var(--m-shadow-lg);
