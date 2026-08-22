@@ -12,7 +12,7 @@ interface FilterBarProps {
 
 export default function FilterBar({ search, onSearchChange, searchPlaceholder = 'Buscar...', children }: FilterBarProps) {
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+    <div className="filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
       {onSearchChange && (
         <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 160 }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />

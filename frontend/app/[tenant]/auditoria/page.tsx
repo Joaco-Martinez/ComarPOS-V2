@@ -100,7 +100,7 @@ export default function AuditoriaPage() {
       }
     >
       {/* Filters */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+      <div className="filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
         <input
           value={entity}
           onChange={(e) => setEntity(e.target.value)}

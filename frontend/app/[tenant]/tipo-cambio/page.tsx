@@ -140,13 +140,13 @@ export default function TipoCambioPage() {
               value={convAmount}
               onChange={(e) => { setConvAmount(e.target.value); setConvResult(null); }}
               placeholder="Monto"
-              style={{ flex: 2 }}
+              style={{ flex: '2 1 140px' }}
             />
-            <select value={convFrom} onChange={(e) => { setConvFrom(e.target.value); setConvResult(null); }} style={{ flex: 1 }}>
+            <select value={convFrom} onChange={(e) => { setConvFrom(e.target.value); setConvResult(null); }} style={{ flex: '1 1 90px', minWidth: 90 }}>
               {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <button onClick={swapCurrencies} className="btn btn-ghost btn-xs" title="Intercambiar"><ArrowLeftRight size={13} /></button>
-            <select value={convTo} onChange={(e) => { setConvTo(e.target.value); setConvResult(null); }} style={{ flex: 1 }}>
+            <select value={convTo} onChange={(e) => { setConvTo(e.target.value); setConvResult(null); }} style={{ flex: '1 1 90px', minWidth: 90 }}>
               {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>

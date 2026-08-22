@@ -197,6 +197,18 @@ input, select, textarea {
   /* font-size >= 16px evita que iOS Safari haga zoom automático al enfocar
      un input (ej. el buscador del POS, que tiene autoFocus). */
   input, select, textarea { border-radius: 12px; padding: 11px 14px; background: var(--surface); border-color: var(--border); font-size: 16px; }
+
+  /* Las barras de filtros (buscador + selects/fechas) fijan anchos en px
+     por pagina (ej. 140-190px) pensados para desktop. En mobile, dos de
+     esos elementos compitiendo en la misma fila no alcanzan a mostrar su
+     propio texto completo (ej. "Todas las accio▾", "Ticket y Factur▾") -
+     se ven cortados. Se fuerza cada select/fecha a ocupar toda la fila
+     (apilados, uno debajo del otro) para que siempre se lea completo. */
+  .filter-bar select,
+  .filter-bar input[type="date"] {
+    width: 100% !important;
+    flex: 1 1 100%;
+  }
 }
 input:focus, select:focus, textarea:focus {
   border-color: var(--accent);
