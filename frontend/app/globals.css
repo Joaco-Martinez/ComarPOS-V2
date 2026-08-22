@@ -605,6 +605,27 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
      quedaba tapado. Se suma ademas un margen visual (16px) de mas. */
   #main-content { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px) + 16px); }
 }
+
+/* Con un modal abierto (.modal-overlay en el DOM en cualquier parte de la
+   pagina), la bottom-nav y el banner de instalar la PWA terminaban
+   pintandose ENCIMA del modal en mobile pese a tener z-index mas bajo -
+   hay algun stacking context intermedio (todavia no identificado del todo)
+   entre .modal-overlay y <body> que rompe la comparacion normal de
+   z-index contra estos elementos, que son hijos directos del layout raiz.
+   En vez de perseguir esa causa exacta reescribiendo cada uno de los ~30
+   usos de .modal-overlay para que rendericen via portal, se los oculta
+   directamente por CSS mientras haya un modal abierto: no pueden tapar
+   nada si no estan pintados. */
+body:has(.modal-overlay) .bottom-nav,
+body:has(.modal-overlay) .pos-mobile-bar {
+  display: none;
+}
+/* !important: PwaRegister fija su propio display:flex por estilo inline
+   (maxima especificidad posible), una regla de hoja de estilos comun no
+   alcanza para ganarle sin esto. */
+body:has(.modal-overlay) .pwa-install-banner {
+  display: none !important;
+}
 .bottom-nav-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px; flex: 1; min-width: 0; height: 48px; border-radius: 12px;

@@ -82,7 +82,7 @@ export default function PwaRegister() {
 
   return (
     <div
-      className="md:hidden"
+      className="pwa-install-banner md:hidden"
       style={{
         position: 'fixed', left: 12, right: 12,
         bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))',
