@@ -140,6 +140,19 @@ export function DevolucionesIcon(props: ComarIconProps) {
   );
 }
 
+export function GuiaIcon(props: ComarIconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="3" width="16" height="18" rx="2.5" />
+      <path d="M8 8L9.2 9.2L11.5 6.9" />
+      <path d="M13.5 8H17" />
+      <path d="M8 14L9.2 15.2L11.5 12.9" />
+      <path d="M13.5 14H17" />
+      <circle cx="8.3" cy="18.2" r="0.9" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
 export function DashboardIcon(props: ComarIconProps) {
   return (
     <Svg {...props}>

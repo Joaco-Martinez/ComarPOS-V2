@@ -52,6 +52,7 @@ import printboxRoutes from "./routes/printbox.routes";
 import platformAdminRoutes from "./routes/platformAdmin.routes";
 import trialSignupRoutes from "./routes/trialSignup.routes";
 import billingRoutes from "./routes/billing.routes";
+import onboardingRoutes from "./routes/onboarding.routes";
 dotenv.config();
 
 const app = express();
@@ -178,6 +179,7 @@ app.use("/arca-config", arcaConfigRoutes);
 // ⚠️ Alias deprecado: mantiene compatibilidad con clientes viejos. Usar /arca-config.
 app.use("/afip/configuracion", arcaConfigRoutes);
 app.use("/alerts", alertRoutes);
+app.use("/onboarding", onboardingRoutes);
 app.use("/product-stats", authMiddleware, productStatsRoutes);
 app.use("/afip", afipRoutes);
 app.use("/analytics", analyticsRoutes);
