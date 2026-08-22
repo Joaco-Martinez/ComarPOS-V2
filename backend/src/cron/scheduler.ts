@@ -50,6 +50,25 @@ export function startScheduler() {
     { timezone: "America/Argentina/Buenos_Aires" }
   );
 
+  // ── Guía de arranque pendiente ───────────────────────────────────────────────
+  // Corre a las 09:00 AR todos los días
+  cron.schedule(
+    "0 9 * * *", // 09:00 AR (la opción timezone de abajo ya interpreta la expresión en hora AR)
+    async () => {
+      console.log("[cron] Revisando guía de arranque pendiente...");
+      const tenants = await prisma.tenant.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+      for (const t of tenants) {
+        await safeRun("checkOnboarding", () =>
+          runWithTenant(t.id, () => notificationService.checkOnboarding())
+        );
+      }
+    },
+    { timezone: "America/Argentina/Buenos_Aires" }
+  );
+
   // ── Expiración de puntos de fidelización ────────────────────────────────────
   // Corre el día 1 de cada mes a las 03:00 AR
   cron.schedule(
@@ -69,5 +88,5 @@ export function startScheduler() {
     { timezone: "America/Argentina/Buenos_Aires" }
   );
 
-  console.log("⏰ Scheduler iniciado (gastos recurrentes, stock bajo, loyalty).");
+  console.log("⏰ Scheduler iniciado (gastos recurrentes, stock bajo, guía de arranque, loyalty).");
 }

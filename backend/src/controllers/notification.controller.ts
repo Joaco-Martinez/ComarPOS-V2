@@ -26,4 +26,6 @@ export const notificationController = {
   markAllRead: wrap(async (req) => notificationService.markAllRead(userId(req))),
 
   checkLowStock: wrap(async () => notificationService.checkLowStock()),
+
+  checkOnboarding: wrap(async () => notificationService.checkOnboarding()),
 };

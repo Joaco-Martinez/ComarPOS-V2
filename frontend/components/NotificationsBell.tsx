@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import api from '@/lib/api';
 import { normalizeArray, fmtDate } from '@/lib/helpers';
 import type { Notification } from '@/types';
-import { Bell, CheckCheck, AlertTriangle, Wallet, Target, Tag, Wallet as CashIcon, Info } from 'lucide-react';
+import { Bell, CheckCheck, AlertTriangle, Wallet, Target, Tag, Wallet as CashIcon, Info, Rocket } from 'lucide-react';
 
 const ICONS: Record<Notification['type'], typeof AlertTriangle> = {
   LOW_STOCK: AlertTriangle,
@@ -13,9 +14,12 @@ const ICONS: Record<Notification['type'], typeof AlertTriangle> = {
   PROMOTION_EXPIRING: Tag,
   CASH_SESSION_OPEN: CashIcon,
   SYSTEM: Info,
+  ONBOARDING_PENDING: Rocket,
 };
 
 export default function NotificationsBell() {
+  const router = useRouter();
+  const { tenant } = useParams<{ tenant: string }>();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
@@ -72,6 +76,15 @@ export default function NotificationsBell() {
     }
   };
 
+  const handleClick = (n: Notification) => {
+    if (!n.isRead) markRead(n.id);
+    const href = n.data?.href;
+    if (typeof href === 'string') {
+      setOpen(false);
+      router.push(`/${tenant}${href}`);
+    }
+  };
+
   const markAllRead = async () => {
     setItems((p) => p.map((n) => ({ ...n, isRead: true })));
     setUnread(0);
@@ -124,11 +137,11 @@ export default function NotificationsBell() {
                 return (
                   <button
                     key={n.id}
-                    onClick={() => !n.isRead && markRead(n.id)}
+                    onClick={() => handleClick(n)}
                     style={{
                       display: 'flex', gap: 10, width: '100%', textAlign: 'left', padding: '10px 14px',
                       borderBottom: '1px solid var(--border)', background: n.isRead ? 'transparent' : 'rgba(13,89,231,0.06)',
-                      cursor: n.isRead ? 'default' : 'pointer', border: 'none', borderBottomWidth: 1,
+                      cursor: 'pointer', border: 'none', borderBottomWidth: 1,
                     }}
                   >
                     <Icon size={14} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />

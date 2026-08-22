@@ -2,6 +2,7 @@ import prisma from "../prisma";
 import { NotificationType } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import onboardingService, { ONBOARDING_STEPS } from "./onboarding.service";
 
 export const notificationService = {
   async create(data: {
@@ -106,5 +107,48 @@ export const notificationService = {
       }
     }
     return { created };
+  },
+
+  // Recuerda a los admins que faltan pasos de la guía de arranque (/guia),
+  // por si no vieron el checklist del dashboard. No re-notifica a quien ya
+  // tiene un aviso sin leer, para no spamear en cada corrida del cron.
+  async checkOnboarding() {
+    const tenantId = currentTenantId();
+    if (!tenantId) return { created: 0 };
+
+    const checklist = await onboardingService.getChecklist();
+    const pendingCount = ONBOARDING_STEPS.filter((s) => !checklist[s]).length;
+    if (pendingCount === 0) return { created: 0 };
+
+    const admins = await prisma.user.findMany({
+      where: { role: "ADMIN", tenantId },
+      select: { id: true },
+    });
+    if (!admins.length) return { created: 0 };
+
+    const alreadyNotified = await prisma.notification.findMany({
+      where: {
+        type: "ONBOARDING_PENDING" as NotificationType,
+        isRead: false,
+        userId: { in: admins.map((u) => u.id) },
+        ...tenantScope(),
+      },
+      select: { userId: true },
+    });
+    const notifiedIds = new Set(alreadyNotified.map((n) => n.userId));
+    const targets = admins.filter((u) => !notifiedIds.has(u.id));
+    if (!targets.length) return { created: 0 };
+
+    await prisma.notification.createMany({
+      data: targets.map((u) => ({
+        userId: u.id,
+        type: "ONBOARDING_PENDING" as NotificationType,
+        title: "Te faltan pasos para arrancar",
+        body: `Tenés ${pendingCount} paso${pendingCount === 1 ? "" : "s"} pendiente${pendingCount === 1 ? "" : "s"} en la guía de arranque.`,
+        data: { href: "/guia" },
+        tenantId,
+      })),
+    });
+    return { created: targets.length };
   },
 };

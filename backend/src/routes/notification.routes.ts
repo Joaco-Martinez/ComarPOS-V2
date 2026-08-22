@@ -10,5 +10,6 @@ router.get("/unread-count", notificationController.getUnreadCount);
 router.post("/:id/read", notificationController.markRead);
 router.post("/read-all", notificationController.markAllRead);
 router.post("/check-stock", requireRole("ADMIN"), notificationController.checkLowStock);
+router.post("/check-onboarding", requireRole("ADMIN"), notificationController.checkOnboarding);
 
 export default router;
