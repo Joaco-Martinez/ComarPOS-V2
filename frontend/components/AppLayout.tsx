@@ -115,7 +115,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
           <div className="app-header-actions">
             {actions}
             <button
-              className="hidden md:flex btn btn-ghost btn-sm"
+              className="btn btn-ghost btn-sm"
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
               style={{ padding: 7 }}

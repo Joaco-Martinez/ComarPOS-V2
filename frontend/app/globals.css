@@ -88,9 +88,16 @@ html.light {
 .login-root .brand-logo-dark  { display: none; }
 .login-root .brand-logo-light { display: block; }
 
-/* --- Mobile: paleta clara/suave (fuerza look claro en mobile, dark o light) --- */
+/* --- Mobile: antes esto forzaba una paleta clara/suave sin importar el tema
+   (dark o light) - el toggle de tema no tenia ningun efecto visual en mobile.
+   Ahora los colores de mobile-claro solo se aplican bajo html.light (el tema
+   oscuro por defecto usa los valores dark de :root de mas arriba, iguales a
+   los de desktop). El "soft-card system" (radios/sombras/degrade, no son
+   colores de fondo/texto) se mantiene compartido entre ambos temas en
+   mobile: son solo tokens de forma, no dependen de si el tema es claro u
+   oscuro. --- */
 @media (max-width: 768px) {
-  :root, html.light {
+  html.light {
     --bg:        #F5F7FA;
     --surface:   #FFFFFF;
     --surface2:  #F0F3F9;
@@ -103,7 +110,9 @@ html.light {
     --accent-dim:   rgba(13, 89, 231, 0.10);
     --accent2-dim:  rgba(9, 60, 157, 0.10);
     --danger-dim:   rgba(239, 68, 68, 0.10);
+  }
 
+  :root, html.light {
     /* Soft-card system */
     --m-radius:     20px;
     --m-radius-lg:  28px;
@@ -134,17 +143,6 @@ html, body {
 .brand-logo-light { display: none; }
 html.light .brand-logo-dark  { display: none; }
 html.light .brand-logo-light { display: block; }
-@media (max-width: 768px) {
-  /* En mobile el fondo siempre es claro sin importar el tema elegido (ver
-     "Mobile: paleta clara/suave" mas abajo) - pero el swap de arriba elige
-     el logotipo segun html.light, ignorando ese forzado. Con tema "oscuro"
-     guardado, suscripcion/page.tsx y prueba-gratis/page.tsx terminaban
-     mostrando el logo "negativo" (texto blanco) sobre el fondo claro de
-     mobile, practicamente invisible. Se fuerza el logo claro (positivo,
-     texto oscuro) en mobile para que siempre haga juego con el fondo real. */
-  .brand-logo-dark  { display: none; }
-  .brand-logo-light { display: block; }
-}
 
 /* --- Animaciones --- */
 @keyframes fadeIn   { from { opacity: 0; transform: translateY(8px); }   to { opacity: 1; transform: translateY(0); } }
