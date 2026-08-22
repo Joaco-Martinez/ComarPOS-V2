@@ -3,28 +3,24 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import LoginPage from '../login/page';
 
 // Entry point para el ícono de la PWA (ver manifest.webmanifest: start_url).
-// No es una pantalla en si: solo decide a donde mandar segun haya sesion o
-// no, para no atar el ícono a "/login" (que visualmente es la pantalla de
-// login) ni a una ruta con tenant hardcodeado (multi-tenant, no hay un
-// "/pos" fijo).
+// A proposito NO redirige a /login cuando no hay sesion (renderiza el login
+// directo aca mismo) - si redirigiera, la URL visible pasaria a ser /login
+// justo en el momento en que alguien intenta instalar el icono (Compartir >
+// Agregar a Inicio en iOS toma la URL actual), y el icono quedaria apuntando
+// a /login de nuevo. Con sesion activa si navega a /pos, que es el resultado
+// esperado.
 export default function AppEntryPage() {
-  const { user, loading: sessionLoading, me } = useAuthStore();
+  const { user, loading: sessionLoading } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
-    if (sessionLoading) me();
-  }, [sessionLoading, me]);
-
-  useEffect(() => {
-    if (sessionLoading) return;
-    router.replace(user?.tenantSlug ? `/${user.tenantSlug}/pos` : '/login');
+    if (!sessionLoading && user?.tenantSlug) {
+      router.replace(`/${user.tenantSlug}/pos`);
+    }
   }, [user, sessionLoading, router]);
 
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-      <div className="spinner" />
-    </div>
-  );
+  return <LoginPage />;
 }
