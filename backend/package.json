@@ -17,7 +17,7 @@
     "cron:recurring": "ts-node -e \"require('./src/services/recurringExpense.service').recurringExpenseService.processDueNow().then(r=>console.log(r)).finally(()=>process.exit(0))\"",
     "cron:low-stock": "ts-node -e \"require('./src/services/notification.service').notificationService.checkLowStock().then(r=>console.log(r)).finally(()=>process.exit(0))\"",
     "cron:expire-loyalty": "ts-node -e \"require('./src/services/loyalty.service').loyaltyService.expireOldPoints().then(r=>console.log(r)).finally(()=>process.exit(0))\"",
-    "start": "node dist/index.js",
+    "start": "npx prisma migrate deploy && node dist/index.js",
     "prisma:studio": "npx prisma studio",
     "test": "jest",
     "test:watch": "jest --watch",

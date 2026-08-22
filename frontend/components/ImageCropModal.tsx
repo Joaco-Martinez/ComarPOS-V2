@@ -18,6 +18,11 @@ interface ImageCropModalProps {
   file: File | null;
   onClose: () => void;
   onCropped: (file: File) => void;
+  outputSize?: number;
+  aspect?: number;
+  title?: string;
+  description?: string;
+  fileNameFallback?: string;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -29,29 +34,36 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-async function cropToFile(imageUrl: string, area: Area, originalName: string): Promise<File> {
+async function cropToFile(imageUrl: string, area: Area, originalName: string, outputSize: number, fallbackName: string): Promise<File> {
   const image = await loadImage(imageUrl);
   const canvas = document.createElement('canvas');
-  canvas.width = PRODUCT_IMAGE_SIZE;
-  canvas.height = PRODUCT_IMAGE_SIZE;
+  canvas.width = outputSize;
+  canvas.height = outputSize;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('No se pudo procesar la imagen');
 
   ctx.drawImage(
     image,
     area.x, area.y, area.width, area.height,
-    0, 0, PRODUCT_IMAGE_SIZE, PRODUCT_IMAGE_SIZE
+    0, 0, outputSize, outputSize
   );
 
   const blob: Blob = await new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('No se pudo procesar la imagen'))), 'image/jpeg', 0.9);
   });
 
-  const baseName = originalName.replace(/\.[^./\\]+$/, '') || 'producto';
+  const baseName = originalName.replace(/\.[^./\\]+$/, '') || fallbackName;
   return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
 }
 
-export default function ImageCropModal({ open, file, onClose, onCropped }: ImageCropModalProps) {
+export default function ImageCropModal({
+  open, file, onClose, onCropped,
+  outputSize = PRODUCT_IMAGE_SIZE,
+  aspect = 1,
+  title = 'Ajustar imagen del producto',
+  description = `Todas las fotos de producto se guardan cuadradas (${PRODUCT_IMAGE_SIZE}×${PRODUCT_IMAGE_SIZE}px), para que se vean parejas en el POS y en el listado. Arrastrá para encuadrar y usá el zoom para acercar.`,
+  fileNameFallback = 'producto',
+}: ImageCropModalProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -81,7 +93,7 @@ export default function ImageCropModal({ open, file, onClose, onCropped }: Image
     setSaving(true);
     setError('');
     try {
-      const cropped = await cropToFile(imageUrl, croppedAreaPixels, file.name);
+      const cropped = await cropToFile(imageUrl, croppedAreaPixels, file.name, outputSize, fileNameFallback);
       onCropped(cropped);
     } catch {
       setError('No se pudo procesar la imagen. Probá con otra foto.');
@@ -96,13 +108,13 @@ export default function ImageCropModal({ open, file, onClose, onCropped }: Image
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span style={{ fontWeight: 700 }}>Ajustar imagen del producto</span>
+          <span style={{ fontWeight: 700 }}>{title}</span>
           <button onClick={onClose} className="btn btn-ghost btn-xs"><X size={14} /></button>
         </div>
 
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <p style={{ fontSize: 12, color: 'var(--text3)' }}>
-            Todas las fotos de producto se guardan cuadradas ({PRODUCT_IMAGE_SIZE}×{PRODUCT_IMAGE_SIZE}px), para que se vean parejas en el POS y en el listado. Arrastrá para encuadrar y usá el zoom para acercar.
+            {description}
           </p>
 
           <div style={{ position: 'relative', width: '100%', height: 320, borderRadius: 8, overflow: 'hidden', background: '#000' }}>
@@ -110,7 +122,7 @@ export default function ImageCropModal({ open, file, onClose, onCropped }: Image
               image={imageUrl}
               crop={crop}
               zoom={zoom}
-              aspect={1}
+              aspect={aspect}
               cropShape="rect"
               showGrid
               onCropChange={setCrop}

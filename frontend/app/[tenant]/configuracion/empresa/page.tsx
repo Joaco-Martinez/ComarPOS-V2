@@ -4,12 +4,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import ImageCropModal from '@/components/ImageCropModal';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { Building2, UploadCloud, Trash2, ImageOff, Save } from 'lucide-react';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
 const MAX_SIZE = 5 * 1024 * 1024;
+const LOGO_IMAGE_SIZE = 512;
 
 type TenantInfo = {
   ticketBusinessName: string | null;
@@ -40,6 +42,7 @@ export default function EmpresaPage() {
   const [deleting, setDeleting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState('');
+  const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [info, setInfo] = useState<TenantInfo>(emptyInfo);
@@ -145,11 +148,21 @@ export default function EmpresaPage() {
     }
   };
 
+  const pickFile = (file: File) => {
+    if (!validateFile(file)) return;
+    setCropSourceFile(file);
+  };
+
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) upload(file);
+    if (file) pickFile(file);
+  };
+
+  const handleCropped = (file: File) => {
+    setCropSourceFile(null);
+    upload(file);
   };
 
   return (
@@ -290,7 +303,7 @@ export default function EmpresaPage() {
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/jpg"
                 style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ''; }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickFile(f); e.target.value = ''; }}
               />
 
               {uploading ? (
@@ -315,6 +328,17 @@ export default function EmpresaPage() {
           </>
         )}
       </div>
+
+      <ImageCropModal
+        open={cropSourceFile !== null}
+        file={cropSourceFile}
+        onClose={() => setCropSourceFile(null)}
+        onCropped={handleCropped}
+        outputSize={LOGO_IMAGE_SIZE}
+        title="Ajustar logo de la empresa"
+        description={`El logo se guarda cuadrado (${LOGO_IMAGE_SIZE}×${LOGO_IMAGE_SIZE}px). Arrastrá para encuadrar y usá el zoom para acercar.`}
+        fileNameFallback="logo"
+      />
     </AppLayout>
   );
 }
