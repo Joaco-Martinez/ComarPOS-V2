@@ -69,6 +69,13 @@ export function proxy(req: NextRequest) {
   // cualquier otro caso page.tsx redirige a /login (donde sí aplica el gate
   // de auth de más abajo).
   const isRoot = pathname === '/';
+  // Página pública de instrucciones para instalar la PWA (paso a paso
+  // iPhone/Android) - tiene que verse sin estar logueado.
+  const isInstallGuide = pathname === '/instalar';
+
+  if (isInstallGuide) {
+    return NextResponse.next();
+  }
 
   if (isLogin) {
     // No hay forma de saber el slug del tenant acá (el JWT solo trae
