@@ -2203,13 +2203,14 @@ bool ok = sendChunked(
   return ok;
 }
 
-#if PRINTBOX_TEST_PRINT_ON_BOOT
-
 // Arma a mano un payload con la MISMA forma que manda ticket.service.ts
 // (ver buildTicketPayload en el backend) para poder probar el formato real
 // sin depender de una venta ni del backend estar levantado. business.cuit
 // y el CAE son todo ceros/de relleno a proposito, para que no se pueda
-// confundir con un comprobante fiscal de verdad.
+// confundir con un comprobante fiscal de verdad. Definida siempre (no
+// atras de PRINTBOX_TEST_PRINT_ON_BOOT) porque tambien la dispara el
+// doble click del boton de factory reset -- ver checkFactoryResetButton()
+// mas abajo.
 void buildTestTicketPayload(
   JsonDocument &doc,
   const char* letra,        // "A", "B", "C" o "" (no fiscal)
@@ -2305,14 +2306,16 @@ void buildTestTicketPayload(
   }
 }
 
-// Se llama una unica vez, apenas el device queda READY (ver loop()) --
-// imprime Factura A, B, C y un comprobante no fiscal, uno atras del otro,
-// para poder chequear formato + corte de una sin hacer 4 ventas de prueba
-// a mano desde el POS.
+// Imprime Factura A, B, C y un comprobante no fiscal, uno atras del otro,
+// para poder chequear formato + corte contra la impresora real sin hacer
+// 4 ventas de prueba a mano desde el POS. Dos disparadores posibles: una
+// vez por boot si PRINTBOX_TEST_PRINT_ON_BOOT esta en 1 (ver loop()), o en
+// cualquier momento con un doble click del boton de factory reset (ver
+// checkFactoryResetButton()) -- este ultimo no gasta flasheo de nuevo
+// cada vez que se quiere probar algo.
 void printBootTestTickets() {
   Serial.println("================================");
-  Serial.println("TEST DE BOOT: imprimiendo 4 tickets de prueba");
-  Serial.println("(A, B, C y no fiscal -- PRINTBOX_TEST_PRINT_ON_BOOT)");
+  Serial.println("Imprimiendo 4 tickets de prueba (A, B, C y no fiscal)");
   Serial.println("================================");
 
   JsonDocument doc;
@@ -2331,8 +2334,6 @@ void printBootTestTickets() {
 
   Serial.println("TEST DE BOOT: listo.");
 }
-
-#endif
 
 // ================= DIAGNOSTICO SPI CRUDO DEL W5500 =================
 // Ethernet.hardwareStatus() a veces dice "no hardware" por cosas de la
@@ -2512,6 +2513,16 @@ void setup() {
 unsigned long lastWifiRetryAt = 0;
 
 unsigned long factoryResetHeldSince = 0;
+bool factoryResetButtonWasPressed = false;
+unsigned long lastShortTapAt = 0;
+
+// Un tap se cuenta para el doble click solo si se suelta antes de esto --
+// bien por debajo de FACTORY_RESET_HOLD_MS (5s), para no pisarse con el
+// arranque de un hold de reset que se cancela sosteniendolo poco.
+#define SHORT_TAP_MAX_MS 500UL
+// Separacion maxima entre el primer y el segundo tap para que cuente como
+// doble click.
+#define DOUBLE_TAP_WINDOW_MS 600UL
 
 // Se llama en cada vuelta de loop(), pairing o no -- asi el boton sirve
 // hasta para desatascar un device que quedo mal emparejado, no solo
@@ -2525,13 +2536,37 @@ unsigned long factoryResetHeldSince = 0;
 // segundo -- 5 parpadeos = los 5 segundos que hay que aguantar, y el reset
 // se dispara justo al completarse el 5to. Pisa lo que haya escrito
 // updateStatusLeds() ese mismo ciclo (se llama antes, en loop()).
+//
+// Doble click (dos taps cortos seguidos, sin llegar a los 5s de hold):
+// imprime los 4 tickets de prueba (Factura A/B/C + no fiscal, ver
+// printBootTestTickets()) -- para poder probar el formato/corte contra la
+// impresora real en cualquier momento, sin flashear con
+// PRINTBOX_TEST_PRINT_ON_BOOT en 1 cada vez que se quiere revisar algo.
 void checkFactoryResetButton() {
   bool pressed = (digitalRead(FACTORY_RESET_PIN) == LOW);
 
   if (!pressed) {
+    // Flanco de soltar (una sola vez, no en cada vuelta de loop() con el
+    // boton ya suelto) -- si fue un tap corto, cuenta para el doble click.
+    if (factoryResetButtonWasPressed) {
+      unsigned long heldFor = millis() - factoryResetHeldSince;
+      if (heldFor < SHORT_TAP_MAX_MS) {
+        if (lastShortTapAt != 0 && millis() - lastShortTapAt < DOUBLE_TAP_WINDOW_MS) {
+          lastShortTapAt = 0;
+          printBootTestTickets();
+        } else {
+          lastShortTapAt = millis();
+        }
+      } else {
+        lastShortTapAt = 0; // hold largo cancelado antes de los 5s -- no cuenta como tap
+      }
+    }
+    factoryResetButtonWasPressed = false;
     factoryResetHeldSince = 0;
     return;
   }
+
+  factoryResetButtonWasPressed = true;
 
   if (factoryResetHeldSince == 0) {
     factoryResetHeldSince = millis();
