@@ -109,15 +109,17 @@ intervalo. A la escala de unos pocos locales ninguna de las dos cosas
 (conexiones colgadas, réplicas) es un problema real; con miles de PrintBox
 activos sí conviene revisar esto de nuevo.
 
-**Trade-off aceptado**: todo esto corre en el `loop()` principal del
+**Trade-off, ya resuelto**: todo esto corre en el `loop()` principal del
 ESP32, sin un task/hilo aparte — mientras `pollForPrintJob()` espera la
-respuesta del backend (hasta `POLL_RESPONSE_TIMEOUT_MS`, 12s), el resto
-del dispositivo (botón de factory reset, refresco del OLED) queda
-congelado hasta por ese tiempo. El reset en sí sigue funcionando bien
-(mide con `millis()` real, no por vueltas de loop), pero el feedback
-visual puede tardar unos segundos de más en reaccionar. Ver los
-comentarios en `POLL_MAX_WAIT_MS`/`POLL_RESPONSE_TIMEOUT_MS` si hace falta
-ajustar ese balance.
+respuesta del backend (hasta `POLL_RESPONSE_TIMEOUT_MS`, 12s), `loop()`
+no vuelve a pasar por su propio tope hasta que esa función termina. Al
+principio esto dejaba el botón de factory reset/doble-click totalmente
+sin leer durante toda la espera (bug real: "después del pairing no anda
+el botón") — ahora `pollForPrintJob()`, `ackPrintJob()` y `sendHeartbeat()`
+llaman a `checkFactoryResetButton()`/`updateStatusLeds()` cada ~50ms desde
+adentro de su propio `while` de espera, así que el botón (hold de 5s o
+doble-click corto) y el refresco del OLED quedan responsive aunque el
+device esté en medio de una espera larga de red.
 
 ## Seguridad: firma HMAC (no TLS)
 
@@ -264,16 +266,6 @@ prueba generado para esta corrida — regenerarla antes de ir a producción.
   tiene UI de edición en el panel. Se dejó la columna en la DB en vez de
   migrarla para no tocar el schema de prod sin necesidad; se puede quitar
   del todo en una migración dedicada si en algún momento molesta.
-- **`pollForPrintJob()`/`ackPrintJob()` corren en el `loop()` principal
-  del ESP32, sin task/hilo aparte** — mientras esperan respuesta del
-  backend (hasta `POLL_RESPONSE_TIMEOUT_MS`, 12s), el botón de factory
-  reset y el refresco del OLED quedan sin atender hasta por ese tiempo
-  (el reset en sí sigue siendo correcto porque mide con `millis()` real,
-  no por vueltas de loop — ver "Por qué pull y no push"). Si en algún
-  momento esto molesta en la práctica, la solución es mover el poll a un
-  segundo task de FreeRTOS (el ESP32-S3 tiene los dos núcleos para eso),
-  no bajar el timeout — bajarlo demasiado solo cambia el problema por
-  reconectar TLS todo el tiempo.
 - **Si el PrintBox está apagado o sin internet en el momento de la
   venta, el ticket se queda esperando en la cola** (`PrintJob.status =
   QUEUED`) hasta que el device vuelve a conectarse y hace poll — no hay

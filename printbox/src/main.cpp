@@ -708,19 +708,21 @@ void handleWifiPairingServer() {
 // otra mitad de esto).
 bool printTicketFromPayload(JsonDocument &doc);
 
+// Declarada mas abajo (junto al resto de la logica del boton) -- hace
+// falta acá porque ackPrintJob()/pollForPrintJob()/sendHeartbeat() la
+// llaman desde adentro de sus esperas bloqueantes, ver esos while mas abajo.
+void checkFactoryResetButton();
+
 // Cuanto esperamos por la respuesta de /poll antes de darla por perdida --
 // tiene que ser mayor al POLL_MAX_WAIT_MS del backend (hoy 8s, ver
 // printbox.service.ts) porque esa request se mantiene abierta ahi adentro
 // esperando un job; este margen extra cubre la latencia de red/TLS de ida
-// y vuelta. Nada de esto corre en un task aparte -- loop() se queda
-// bloqueado hasta POLL_RESPONSE_TIMEOUT_MS por vuelta cuando no hay nada
-// para imprimir, asi que el boton de factory reset y el refresco del OLED
-// quedan congelados hasta por ese tiempo (funcionalmente el reset sigue
-// andando bien -- checkFactoryResetButton() mide con millis() real, no por
-// cantidad de vueltas de loop() -- pero el feedback visual/tactil puede
-// tardar unos segundos de mas en reaccionar). POLL_MAX_WAIT_MS mas chico
-// en el backend hace esto mas responsive a costa de reconectar TLS mas
-// seguido; este es el trade-off elegido, ver comentario ahi.
+// y vuelta. Antes esto dejaba el boton de factory reset/doble-click
+// completamente sin leer mientras durara la espera (bug real reportado:
+// "despues del pairing no anda el boton") -- ahora pollForPrintJob()
+// (y ackPrintJob()/sendHeartbeat(), esperas mas cortas pero mismo
+// problema) llaman a checkFactoryResetButton() cada ~50ms desde adentro
+// de su propio while, ver esos comentarios mas abajo.
 #define POLL_RESPONSE_TIMEOUT_MS 12000UL
 
 void ackPrintJob(const String &jobId, bool ok, const String &errorMsg) {
@@ -749,8 +751,16 @@ void ackPrintJob(const String &jobId, bool ok, const String &errorMsg) {
   apiClient.print(body);
 
   unsigned long start = millis();
+  unsigned long lastHousekeepingAt = 0;
   while (apiClient.connected() && millis() - start < 5000) {
     if (apiClient.available()) apiClient.read(); // descartamos la respuesta, solo nos importa que salio
+    // Mismo motivo que en pollForPrintJob() -- sin esto el boton queda sin
+    // leer mientras dura esta espera (acá hasta 5s, menos grave pero mismo bug).
+    if (millis() - lastHousekeepingAt >= 50) {
+      lastHousekeepingAt = millis();
+      updateStatusLeds();
+      checkFactoryResetButton();
+    }
   }
   apiClient.stop();
 }
@@ -838,8 +848,26 @@ void pollForPrintJob() {
   // por el primer "\r\n\r\n" es indiferente a cuantos headers manden.
   unsigned long start = millis();
   String raw;
+  unsigned long lastHousekeepingAt = 0;
   while ((apiClient.connected() || apiClient.available()) && millis() - start < POLL_RESPONSE_TIMEOUT_MS) {
     if (apiClient.available()) raw += (char)apiClient.read();
+
+    // Sin esto, mientras esta funcion espera al backend (hasta
+    // POLL_RESPONSE_TIMEOUT_MS, 12s) el boton de factory reset/doble-click
+    // queda completamente sin leer -- loop() no vuelve a llamar a
+    // checkFactoryResetButton() hasta que ESTA funcion termine, asi que un
+    // tap corto (ventana de 600ms) o incluso el hold completo de 5s podian
+    // pasar enteros sin que el firmware los viera nunca (bug reportado:
+    // "despues del pairing no anda el boton ni para imprimir el ticket de
+    // prueba ni para reiniciar la config" -- justo lo que pasa una vez que
+    // el device empieza a hacer poll en vez de solo esperar conexiones).
+    // Muestrear cada ~50ms adentro de este mismo while alcanza para que
+    // los dos gestos se detecten bien de nuevo.
+    if (millis() - lastHousekeepingAt >= 50) {
+      lastHousekeepingAt = millis();
+      updateStatusLeds();
+      checkFactoryResetButton();
+    }
   }
   apiClient.stop();
 
@@ -2646,8 +2674,16 @@ void sendHeartbeat() {
   apiClient.print("Connection: close\r\n\r\n");
 
   unsigned long start = millis();
+  unsigned long lastHousekeepingAt = 0;
   while (apiClient.connected() && millis() - start < 5000) {
     if (apiClient.available()) apiClient.read(); // descartamos la respuesta, solo nos importa que salio
+    // Mismo motivo que en pollForPrintJob() -- sin esto el boton queda sin
+    // leer mientras dura esta espera (acá hasta 5s, menos grave pero mismo bug).
+    if (millis() - lastHousekeepingAt >= 50) {
+      lastHousekeepingAt = millis();
+      updateStatusLeds();
+      checkFactoryResetButton();
+    }
   }
   apiClient.stop();
 }
