@@ -65,6 +65,7 @@ export default function VentasPage() {
   const [toast, setToast] = useState('');
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [quotingId, setQuotingId] = useState<string | null>(null);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   const [paymentsSale, setPaymentsSale] = useState<Sale | null>(null);
@@ -145,6 +146,27 @@ export default function VentasPage() {
       showToast('No se pudo generar la cotización');
     } finally {
       setQuotingId(null);
+    }
+  };
+
+  // Regenera el PDF de la factura al vuelo (no depende de que ya este
+  // cacheado en Cloudinary desde el momento de facturar, ver
+  // factura-pdf.service.ts#obtenerFacturaPDFPathService) -- funciona igual
+  // para Factura A, B o C, la letra sale sola del invoiceAfip de la venta.
+  const downloadFacturaPdf = async (s: Sale) => {
+    setDownloadingInvoiceId(s.id);
+    try {
+      const res = await api.get(`/factura-pdf/${s.id}/descargar`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `factura-${s.invoiceAfip?.cae ?? s.id.slice(-8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast('No se pudo descargar la factura');
+    } finally {
+      setDownloadingInvoiceId(null);
     }
   };
 
@@ -541,11 +563,15 @@ export default function VentasPage() {
                   show: !isInvoiced(actionsSale) && actionsSale.status !== 'CANCELLED', icon: <Send size={16} />, label: 'Facturar en ARCA', sub: 'Generar CAE y comprobante fiscal', primary: true,
                   onClick: () => { openInvoice(actionsSale); setActionsSale(null); },
                 },
+                {
+                  show: isInvoiced(actionsSale), icon: downloadingInvoiceId === actionsSale.id ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <Download size={16} />, label: 'Descargar factura', sub: `PDF de la factura ${actionsSale.receiptType || ''} con CAE`,
+                  onClick: () => downloadFacturaPdf(actionsSale),
+                },
               ].filter((a) => a.show).map((a) => (
                 <button
                   key={a.label}
                   onClick={a.onClick}
-                  disabled={updatingStatusId === actionsSale.id || printingId === actionsSale.id || quotingId === actionsSale.id}
+                  disabled={updatingStatusId === actionsSale.id || printingId === actionsSale.id || quotingId === actionsSale.id || downloadingInvoiceId === actionsSale.id}
                   className="btn btn-secondary"
                   style={{
                     justifyContent: 'flex-start', gap: 12, padding: '12px 14px', textAlign: 'left', height: 'auto',
