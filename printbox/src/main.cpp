@@ -785,48 +785,36 @@ void pollForPrintJob() {
   apiClient.print("X-Pos-Signature: " + signature + "\r\n");
   apiClient.print("Connection: close\r\n\r\n");
 
-  // OJO: (apiClient.connected() || apiClient.available()), NO connected()
-  // a secas -- con "Connection: close" el backend puede cerrar el socket
-  // apenas termina de escribir la respuesta, antes de que el ESP32 llegue
-  // a leer los bytes que ya estan en el buffer local. Con solo connected()
-  // estos dos loops cortaban de una en cuanto el server cerraba, dejando
-  // el body truncado (menos bytes que Content-Length) -- eso empujaba
-  // silenciosamente al "no hay nada para imprimir" de mas abajo aunque el
-  // backend hubiera mandado el job entero. Mismo bug, mismo fix, que ya
-  // habia aparecido antes en pairWithBackend() (ver el comentario ahi) --
-  // se me paso reusarlo acá cuando escribi esta funcion.
+  // Leemos TODO (headers + body) hasta que cierra la conexion, en vez de
+  // parsear Content-Length linea por linea -- mismo patron ya probado en
+  // pairWithBackend() (ver el comentario ahi sobre connected()||available()).
+  // Se abandono el parseo manual de headers porque Railway/Cloudflare le
+  // agregan ~30 headers de seguridad/tracing (CSP, HSTS, x-railway-*,
+  // cf-*, etc. -- confirmado pegandole al endpoint a mano) y el parser
+  // linea-por-linea se desalineaba con ese volumen sin que se pudiera
+  // aislar bien la causa exacta sin acceso al hardware. Leer todo y cortar
+  // por el primer "\r\n\r\n" es indiferente a cuantos headers manden.
   unsigned long start = millis();
-  String statusLine = apiClient.readStringUntil('\n');
-  Serial.println("Poll: status=\"" + statusLine + "\" (connected=" + String(apiClient.connected()) + " available=" + String(apiClient.available()) + ")");
-
-  int contentLength = 0;
-  int headerCount = 0;
-  String header;
-  while ((apiClient.connected() || apiClient.available()) && millis() - start < POLL_RESPONSE_TIMEOUT_MS &&
-         (header = apiClient.readStringUntil('\n')) != "\r") {
-    headerCount++;
-    if (header.startsWith("Content-Length:")) contentLength = header.substring(16).toInt();
-    if (header.length() <= 1) break;
-  }
-  Serial.println("Poll: " + String(headerCount) + " headers leidos, contentLength=" + String(contentLength));
-
-  String body;
-  body.reserve(contentLength);
-  while ((int)body.length() < contentLength && (apiClient.connected() || apiClient.available()) &&
-         millis() - start < POLL_RESPONSE_TIMEOUT_MS) {
-    if (apiClient.available()) body += (char)apiClient.read();
+  String raw;
+  while ((apiClient.connected() || apiClient.available()) && millis() - start < POLL_RESPONSE_TIMEOUT_MS) {
+    if (apiClient.available()) raw += (char)apiClient.read();
   }
   apiClient.stop();
 
+  int firstLineEnd = raw.indexOf('\n');
+  String statusLine = firstLineEnd >= 0 ? raw.substring(0, firstLineEnd) : raw;
+
   // 204 (nada para imprimir): nada que hacer, volvemos a preguntar en el
-  // proximo loop(). Body incompleto/vacio en cambio es un caso raro que no
-  // deberia pasar mas con el fix de arriba -- si vuelve a pasar, mejor que
-  // quede en el log en vez de tragarselo en silencio como antes.
+  // proximo loop().
   if (statusLine.indexOf("204") >= 0) {
     return;
   }
-  if ((int)body.length() < contentLength || body.length() == 0) {
-    Serial.println("Poll: body incompleto (" + String(body.length()) + "/" + String(contentLength) + " bytes), lo descarto.");
+
+  int headerEnd = raw.indexOf("\r\n\r\n");
+  String body = headerEnd >= 0 ? raw.substring(headerEnd + 4) : "";
+
+  if (body.length() == 0) {
+    Serial.println("Poll: body vacio (raw=" + String(raw.length()) + " bytes, status=\"" + statusLine + "\"), lo descarto.");
     return;
   }
 
