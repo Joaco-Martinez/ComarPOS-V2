@@ -1979,7 +1979,14 @@ bool ok = sendChunked(
   // ---- Cliente: "CONSUMIDOR FINAL" solo si la venta no tiene un cliente
   // asociado -- client.name ya viene resuelto asi desde ticket.service.ts
   // (getNombreCliente).
-  t += "\x1B\x61\x00"; // izquierda
+  // t.concat(cstr, len) con el largo EXPLICITO, no "+=" -- el operador +=
+  // de String infiere el largo con strlen(), que corta en el primer byte
+  // 0x00 y se comia justo el parametro de este comando (alinear a la
+  // izquierda), dejando "ESC a" sin su "n" -- la impresora entonces
+  // interpretaba el proximo byte real (la primera letra del nombre del
+  // cliente) como ese parametro faltante en vez de imprimirlo. Sintoma
+  // real: "Consumidor Final" salia "onsumidor Final".
+  t.concat("\x1B\x61\x00", 3); // izquierda
   t += utf8ToAscii(String((const char*)(doc["client"]["name"] | "CONSUMIDOR FINAL"))) + "\n";
   t += String((const char*)(doc["saleId"] | "")) + "\n";
   const char* seller = doc["sellerName"] | "";
@@ -2076,7 +2083,12 @@ bool ok = sendChunked(
     // vez de la forma vieja de 1 parametro "GS V 0" -- la TP450S (clon
     // ESC/POS) no reconoce esa forma vieja y se queda esperando el
     // segundo byte que nunca llega, asi que nunca corta.
-    footerBrand += "\x1D\x56\x42\x00"; // corte total
+    // Mismo bug que el align-izquierda de mas arriba: "+=" corta en el
+    // primer 0x00 (strlen), asi que esto en realidad solo mandaba "GS V
+    // 66" sin su "n" -- funcionaba de pura casualidad porque el "empujon"
+    // de abajo le daba un byte cualquiera para completar el comando.
+    // concat(cstr, len) manda los 4 bytes de verdad.
+    footerBrand.concat("\x1D\x56\x42\x00", 4); // corte total
     // "Empujon" post-corte: en la TP450S el corte queda en cola y recien
     // se ejecuta cuando le llega el SIGUIENTE byte de datos (bug de
     // firmware de la placa clon, procesa el comando N al recibir el N+1)
