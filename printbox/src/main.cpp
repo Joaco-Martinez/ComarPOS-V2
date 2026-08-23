@@ -755,6 +755,48 @@ void ackPrintJob(const String &jobId, bool ok, const String &errorMsg) {
   apiClient.stop();
 }
 
+// Railway/Cloudflare le meten "Transfer-Encoding: chunked" a la respuesta
+// del poll (confirmado pegandole al endpoint a mano con curl/openssl) --
+// el body real viene envuelto en el framing de chunked-encoding en vez de
+// como texto plano: "<tamaño en hex>\r\n<datos>\r\n0\r\n\r\n" (uno o mas
+// chunks, terminados por uno de tamaño 0). Si el body ya viene plano
+// (empieza con "{", caso no observado hoy pero por las dudas -- ej. si
+// algun dia cambia el proxy de por medio), se devuelve tal cual.
+String dechunkHttpBody(const String &raw) {
+  if (raw.length() == 0 || raw.charAt(0) == '{') return raw;
+
+  String result;
+  int pos = 0;
+  while (pos < (int)raw.length()) {
+    int lineEnd = raw.indexOf("\r\n", pos);
+    if (lineEnd < 0) break;
+
+    String sizeToken = raw.substring(pos, lineEnd);
+    int semicolon = sizeToken.indexOf(';'); // extensiones de chunk (raras), se ignoran
+    if (semicolon >= 0) sizeToken = sizeToken.substring(0, semicolon);
+    sizeToken.trim();
+
+    char *endPtr = nullptr;
+    long chunkSize = strtol(sizeToken.c_str(), &endPtr, 16);
+    if (endPtr == sizeToken.c_str() || chunkSize < 0) break; // no era un tamaño hex valido -- frenamos
+
+    if (chunkSize == 0) break; // chunk final, no queda nada mas util
+
+    int dataStart = lineEnd + 2;
+    int dataEnd = dataStart + chunkSize;
+    if (dataEnd > (int)raw.length()) {
+      // chunk incompleto (se corto la conexion a mitad de un chunk) -- nos
+      // quedamos con lo que hay, mejor eso que nada.
+      result += raw.substring(dataStart);
+      break;
+    }
+
+    result += raw.substring(dataStart, dataEnd);
+    pos = dataEnd + 2; // +2 para saltar el "\r\n" que cierra este chunk
+  }
+  return result;
+}
+
 // Se llama en cada vuelta de loop() (ver mas abajo) -- abre una conexion,
 // pregunta, y si el backend contesta con un job lo imprime y lo confirma
 // (ackPrintJob). Si no hay nada, vuelve enseguida (el backend ya esperó
@@ -811,7 +853,7 @@ void pollForPrintJob() {
   }
 
   int headerEnd = raw.indexOf("\r\n\r\n");
-  String body = headerEnd >= 0 ? raw.substring(headerEnd + 4) : "";
+  String body = headerEnd >= 0 ? dechunkHttpBody(raw.substring(headerEnd + 4)) : "";
 
   if (body.length() == 0) {
     Serial.println("Poll: body vacio (raw=" + String(raw.length()) + " bytes, status=\"" + statusLine + "\"), lo descarto.");
