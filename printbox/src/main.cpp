@@ -819,8 +819,11 @@ void pollForPrintJob() {
   }
 
   JsonDocument pollDoc;
-  if (deserializeJson(pollDoc, body)) {
-    Serial.println("Poll: respuesta invalida, la descarto.");
+  DeserializationError pollErr = deserializeJson(pollDoc, body);
+  if (pollErr) {
+    Serial.println("Poll: JSON invalido (" + String(pollErr.c_str()) + "), raw=" + String(raw.length()) +
+                    " body=" + String(body.length()) + " bytes. Primeros 60: [" + body.substring(0, 60) +
+                    "] Ultimos 60: [" + body.substring(body.length() > 60 ? body.length() - 60 : 0) + "]");
     return;
   }
 
