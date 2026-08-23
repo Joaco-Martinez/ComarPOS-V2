@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
+import SearchableSelect from '@/components/SearchableSelect';
 import api from '@/lib/api';
 import type { Product, ProductCategory, StockMovement } from '@/types';
 import { categoryName, fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
@@ -28,24 +29,41 @@ export default function StockPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [movFrom, setMovFrom] = useState('');
+  const [movTo, setMovTo] = useState('');
+  const [movLoading, setMovLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [pr, cr, mr] = await Promise.all([
+      const [pr, cr] = await Promise.all([
         api.get('/products', { params: { limit: 500, isActive: true } }),
         api.get('/categories'),
-        api.get('/products/movements', { params: { limit: 100 } }).catch(() => null),
       ]);
       setProducts(normalizeArray<Product>(pr.data));
       setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
-      if (mr) setMovements(normalizeArray<StockMovement>(mr.data));
     } finally {
       setLoading(false);
     }
   };
 
+  const loadMovements = async () => {
+    setMovLoading(true);
+    try {
+      const { data } = await api.get('/products/movements', {
+        params: { fromDate: movFrom || undefined, toDate: movTo || undefined },
+      });
+      setMovements(normalizeArray<StockMovement>(data));
+    } catch {
+      // sin toast de error puntual acá -- el resto de la page tampoco lo hace para sus fetches
+    } finally {
+      setMovLoading(false);
+    }
+  };
+
   useEffect(() => { load(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadMovements(); }, [movFrom, movTo]);
 
   const filtered = useMemo(() => {
     let p = products.filter((x) => x.isService !== true);
@@ -137,10 +155,13 @@ export default function StockPage() {
               <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar producto..." style={{ paddingLeft: 30, fontSize: 13 }} />
             </div>
-            <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} style={{ fontSize: 13, width: 180 }}>
-              <option value="">Todas las categorías</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={catFilter}
+              onChange={setCatFilter}
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+              placeholder="Todas las categorías"
+              style={{ width: 220 }}
+            />
             <button onClick={() => setScannerOpen(true)} className="btn btn-secondary btn-sm" style={{ gap: 6 }} title="Escanear SKU con la cámara">
               <ScanBarcode size={13} /> Escanear
             </button>
@@ -278,7 +299,22 @@ export default function StockPage() {
       )}
 
       {tab === 'movements' && (
-        <div className="card">
+        <>
+          <div className="filter-bar" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+            <input type="date" value={movFrom} onChange={(e) => setMovFrom(e.target.value)} style={{ fontSize: 13, width: 150 }} />
+            <input type="date" value={movTo} onChange={(e) => setMovTo(e.target.value)} style={{ fontSize: 13, width: 150 }} />
+            {(movFrom || movTo) && (
+              <button onClick={() => { setMovFrom(''); setMovTo(''); }} className="btn btn-ghost btn-sm" style={{ color: 'var(--text3)' }}>
+                <X size={13} /> Limpiar
+              </button>
+            )}
+            <button onClick={loadMovements} className="btn btn-ghost btn-sm" title="Refrescar"><RefreshCcw size={13} /></button>
+          </div>
+
+          <div className="card">
+            {movLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>
+            ) : (
           <ResponsiveTable
             data={movements}
             keyFor={(m) => m.id}
@@ -322,7 +358,9 @@ export default function StockPage() {
               </div>
             )}
           />
-        </div>
+            )}
+          </div>
+        </>
       )}
 
       <SkuScannerModal

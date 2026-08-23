@@ -327,7 +327,7 @@ export default function VentasPage() {
 
       {/* Filters */}
       <div style={{ marginBottom: 16 }}>
-        <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Buscar...">
+        <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Buscar..." collapsible>
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150, fontSize: 13 }} />
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150, fontSize: 13 }} />
           <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 140, fontSize: 13 }}>

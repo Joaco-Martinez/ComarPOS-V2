@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import Sidebar from './Sidebar';
@@ -32,10 +32,31 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
   });
   const { toasts } = useToast();
   const { theme, toggle: toggleTheme } = useTheme();
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(56);
 
   useEffect(() => {
     if (loading) me();
   }, [loading, me]);
+
+  // El header es position:fixed (ver .app-header en globals.css) para que
+  // quede clavado arriba pase lo que pase con el scroll de cada page -- eso
+  // lo saca del flujo normal, asi que el <main> necesita un padding-top
+  // exacto para no quedar tapado. Se mide con ResizeObserver en vez de un
+  // valor fijo a mano porque en mobile el header puede pasar a 2 lineas
+  // (title+actions largos, ver @media max-width:640px en globals.css) -- un
+  // numero fijo se hubiera desincronizado en ese caso.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height;
+      if (height) setHeaderHeight(Math.ceil(height));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -87,14 +108,16 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
         <style>{`
           @media (min-width: 768px) {
             #main-content { margin-left: ${sidebarW}px; width: calc(100% - ${sidebarW}px); }
+            .app-header { left: ${sidebarW}px; }
           }
           @media (max-width: 767px) {
             #main-content { margin-left: 0; width: 100%; }
+            .app-header { left: 0; }
           }
         `}</style>
 
         {/* Topbar */}
-        <header className="app-header">
+        <header ref={headerRef} className="app-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             {(title || subtitle) && (
               <div style={{ minWidth: 0 }}>
@@ -130,7 +153,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
         {/* Page content */}
         <main
           className="animate-fade-opacity"
-          style={{ flex: 1, padding: '22px 20px', maxWidth: 1440, width: '100%', margin: '0 auto' }}
+          style={{ flex: 1, padding: `${headerHeight + 22}px 20px 22px`, maxWidth: 1440, width: '100%', margin: '0 auto' }}
         >
           {children}
         </main>

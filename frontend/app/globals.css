@@ -467,6 +467,13 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
 
 .pos-products-grid { display: grid; }
 @media (min-width: 768px) { .pos-products-grid { flex: 1; overflow-y: auto; } }
+/* 3 por fila a pedido explicito en mobile -- !important porque la page
+   (pos/page.tsx) fija gridTemplateColumns inline (auto-fill minmax(160px,
+   1fr)), pensado para desktop/tablet, y un estilo inline le gana a una
+   regla de clase normal aunque este en un media query mas especifico. */
+@media (max-width: 767px) {
+  .pos-products-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 6px !important; }
+}
 
 .pos-cart-wrap { }
 @media (max-width: 767px) {
@@ -540,8 +547,19 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
 @media (min-width: 768px) { .pos-mobile-bar { display: none; } }
 
 /* --- App header (responsive) --- */
+/* position:fixed (no solo sticky) a pedido explicito: el header tiene que
+   quedar clavado arriba en TODAS las pantallas, sin depender de que el
+   contexto de scroll de cada page no rompa el sticky. left/right se fijan
+   desde AppLayout (inline <style>, ver ahi) porque dependen del ancho del
+   sidebar (colapsado o no) -- lo mismo que ya hace #main-content con su
+   margin-left. El padding-top que compensa la altura real del header (que
+   puede crecer a 2 lineas en mobile con title+actions largos) lo pone
+   AppLayout via --app-header-height, medido con ResizeObserver -- un valor
+   fijo a mano se hubiera desincronizado en ese caso (hueco o superposicion
+   segun para que lado se equivoque la altura estimada).
+   */
 .app-header {
-  position: sticky; top: 0; z-index: 30;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 30;
   background: var(--bg); backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   padding: 0 20px; height: 56px;
@@ -564,10 +582,27 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
        (o la bottom-nav de la app) terminaba tapando el footer con los
        botones de guardar/confirmar, aunque el layout interno del modal
        (header/footer fijos, ver mas arriba) ya estuviera bien resuelto. */
-    position: fixed; bottom: 0; top: auto; max-height: 88dvh;
-    box-shadow: var(--m-shadow-lg);
+    position: fixed; top: auto; box-shadow: var(--m-shadow-lg);
+    /* --keyboard-inset (ver KeyboardInsetWatcher, seteado en <html>) sube el
+       modal y le resta esa misma altura al limite -- sin esto, con el
+       teclado abierto el input activo y el footer con los botones de accion
+       quedaban tapados detras del teclado, sin forma de llegar a ellos
+       (el layout viewport contra el que se posiciona position:fixed no se
+       achica solo cuando aparece el teclado en la mayoria de los navegadores). */
+    bottom: var(--keyboard-inset, 0px);
+    max-height: calc(88dvh - var(--keyboard-inset, 0px));
+    /* Slide-up en vez del fadeIn generico (que es un translateY de 8px nomas,
+       pensado para un modal centrado en desktop) -- en mobile el modal ya es
+       un bottom-sheet pegado abajo, así que entra desde afuera de la
+       pantalla en vez de solo desvanecerse. */
+    animation: modalSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .modal-overlay { align-items: flex-end; padding: 0; }
+}
+
+@keyframes modalSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
 /* --- mobile-batch-A: tabla en desktop / lista de tarjetas en mobile --- */

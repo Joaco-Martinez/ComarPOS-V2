@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import PwaRegister from '@/components/PwaRegister';
+import KeyboardInsetWatcher from '@/components/KeyboardInsetWatcher';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <PwaRegister />
+        <KeyboardInsetWatcher />
       </body>
     </html>
   );
