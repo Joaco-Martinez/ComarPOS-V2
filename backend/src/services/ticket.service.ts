@@ -266,8 +266,12 @@ function buildTicketPayload(sale: any, tenant: any, arcaConfig: any) {
     invoiceAfip?.cae
       ? {
           letra: cbteTipoLabel(invoiceAfip.tipoComprobante),
+          // Codigo AFIP del tipo de comprobante (6 = Factura B, etc), tal
+          // cual pedido en el formato de ticket de referencia ("Cod. 006").
+          codigo: String(invoiceAfip.tipoComprobante).padStart(3, "0"),
           numero: buildNumeroComprobante(invoiceAfip.puntoVenta, invoiceAfip.numero),
           cae: invoiceAfip.cae,
+          caeVto: invoiceAfip.caeVto ? formatFechaCorta(invoiceAfip.caeVto) : "",
           qrUrl: invoiceAfip.urlQR || "",
         }
       : null;
@@ -276,6 +280,15 @@ function buildTicketPayload(sale: any, tenant: any, arcaConfig: any) {
     saleId: `TICKET-${String(sale.id).slice(0, 8).toUpperCase()}`,
     receiptType: invoice ? `FACTURA ${invoice.letra}` : "COMPROBANTE NO FISCAL",
     paymentMethod: getMetodoPago(sale),
+    // Version estructurada de paymentMethod (que ya viene como un string
+    // armado tipo "EFECTIVO: 2.600,00 | TRANSFERENCIA: 400,00") -- el
+    // firmware la necesita separada por metodo/monto para imprimir cada
+    // linea de pago prolija (ver printTicketFromPayload en main.cpp),
+    // parsear ese string de vuelta hubiera sido fragil.
+    payments:
+      sale.payments && sale.payments.length > 0
+        ? sale.payments.map((p: any) => ({ method: String(p.method), amount: numberOrZero(p.amount) }))
+        : [{ method: sale.paymentMethod || "EFECTIVO", amount: total }],
     createdAt: formatFechaTicket(sale.createdAt ?? new Date()),
 
     sellerName,
@@ -323,6 +336,13 @@ function buildTicketPayload(sale: any, tenant: any, arcaConfig: any) {
     client: {
       name: getNombreCliente(sale.client),
       dni: sale.client?.dni ? String(sale.client.dni) : "",
+      // El Client no tiene un campo "cuit" separado -- el mismo dni
+      // guarda un CUIT/CUIL cuando el cliente es un responsable inscripto
+      // (11 digitos, mismo criterio de deteccion que ya usa AFIP al
+      // facturar, ver detectarTipoDocumento en afipMappers.ts). El ticket
+      // usa esto para el label ("CUIT Cliente" vs "DNI Cliente") en
+      // Factura A, donde el CUIT del comprador es obligatorio.
+      docLabel: /^\d{11}$/.test(String(sale.client?.dni ?? "").replace(/\D/g, "")) ? "CUIT" : sale.client?.dni ? "DNI" : "",
       phone: getClientPhone(sale.client) ? String(getClientPhone(sale.client)) : "",
 
       addressStreet: stringOrEmpty(sale.client?.addressStreet),

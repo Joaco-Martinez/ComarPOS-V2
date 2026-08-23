@@ -1028,6 +1028,22 @@ String formatMoneyAR(double value, int decimals) {
   return negative ? ("-" + result) : result;
 }
 
+// Ancho de linea de la impresora con la fuente default (Font A, ver los
+// separadores "----" ya existentes mas abajo, todos de 42 caracteres).
+// Arma "left" pegado a la izquierda y "right" pegado a la derecha con
+// espacios en el medio -- ej. para lineas tipo "TOTAL         $2.600,00".
+// Si no entran los dos en el ancho, no trunca (se deja pasar mas largo
+// antes que cortar un monto a la mitad).
+#define TICKET_LINE_WIDTH 42
+String padLine(const String &left, const String &right, int width = TICKET_LINE_WIDTH) {
+  int spaces = width - (int)left.length() - (int)right.length();
+  if (spaces < 1) spaces = 1;
+  String out = left;
+  for (int i = 0; i < spaces; i++) out += ' ';
+  out += right;
+  return out;
+}
+
 bool sendChunked(
   const uint8_t* data,
   size_t len,
@@ -1935,18 +1951,53 @@ bool ok = sendChunked(
 
   String t;
 
-  // ---- Encabezado: letra+numero de factura si esta facturada, o el
-  // aviso de "no fiscal" si no -- nunca los dos.
+  // ---- Datos del negocio (encabezado -- quien emite, primero).
   t += "\x1B\x61\x01"; // centrado
+  t += escPrintMode(true, false, false);
+  t += utf8ToAscii(String((const char*)(doc["business"]["name"] | ""))) + "\n";
+  t += escPrintMode(false, false, false);
+
+  const char* ivaCondition = doc["business"]["ivaCondition"] | "";
+  if (strlen(ivaCondition)) t += utf8ToAscii(String(ivaCondition)) + "\n";
+  const char* cuit = doc["business"]["cuit"] | "";
+  if (strlen(cuit)) t += "CUIT: " + String(cuit) + "\n";
+  const char* iibb = doc["business"]["iibb"] | "";
+  if (strlen(iibb)) t += "IIBB: " + String(iibb) + "\n";
+  const char* address = doc["business"]["address"] | "";
+  if (strlen(address)) t += "Dir.: " + utf8ToAscii(String(address)) + "\n";
+  const char* activityStart = doc["business"]["activityStart"] | "";
+  if (strlen(activityStart)) t += "Inicio Act.: " + String(activityStart) + "\n";
+  const char* phone = doc["business"]["phone"] | "";
+  if (strlen(phone)) t += "Tel: " + String(phone) + "\n";
+  t += "------------------------------------------\n";
+
+  // ---- Tipo de comprobante: letra+codigo+numero de factura si esta
+  // facturada, o el aviso de "no fiscal" si no -- nunca los dos.
   if (isInvoiced) {
     t += escPrintMode(true, true, true); // bold + doble alto + doble ancho, solo para la letra
     t += String((const char*)(invoice["letra"] | "")) + "\n";
     t += escPrintMode(false, false, false);
-    t += "Factura " + String((const char*)(invoice["letra"] | "")) + "-" + String((const char*)(invoice["numero"] | "")) + "\n";
+    const char* codigo = invoice["codigo"] | "";
+    t += "FACTURA " + String((const char*)(invoice["letra"] | ""));
+    if (strlen(codigo)) t += "   Cod. " + String(codigo);
+    t += "\n";
   } else {
     t += escPrintMode(true, false, false);
     t += "COMPROBANTE NO FISCAL\n";
     t += escPrintMode(false, false, false);
+  }
+
+  // t.concat(cstr, len) con el largo EXPLICITO, no "+=" -- el operador +=
+  // de String infiere el largo con strlen(), que corta en el primer byte
+  // 0x00 y se comia justo el parametro de este comando (alinear a la
+  // izquierda), dejando "ESC a" sin su "n" -- la impresora entonces
+  // interpretaba el proximo byte real como ese parametro faltante en vez
+  // de imprimirlo. Sintoma real: "Consumidor Final" salia "onsumidor Final".
+  t.concat("\x1B\x61\x00", 3); // izquierda
+  if (isInvoiced) {
+    t += "Nro. comprobante: " + String((const char*)(invoice["numero"] | "")) + "\n";
+  } else {
+    t += "N. ticket: " + String((const char*)(doc["saleId"] | "")) + "\n";
   }
   // utf8ToAscii() acá tambien -- el formato de fecha en es-AR mete un
   // espacio angosto especial (U+202F, 3 bytes en UTF-8) entre "p." y "m."
@@ -1955,90 +2006,115 @@ bool ok = sendChunked(
   // los tickets reales -- este campo se habia quedado afuera de la
   // conversion que ya se le aplica a todo el resto del texto.
   t += "Fecha: " + utf8ToAscii(String((const char*)(doc["createdAt"] | ""))) + "\n";
+  // "CONSUMIDOR FINAL" solo si la venta no tiene un cliente asociado --
+  // client.name ya viene resuelto asi desde ticket.service.ts (getNombreCliente).
+  t += "Cliente: " + utf8ToAscii(String((const char*)(doc["client"]["name"] | "CONSUMIDOR FINAL"))) + "\n";
+  // CUIT/DNI del cliente -- obligatorio en Factura A (el comprador, otro
+  // responsable inscripto, lo necesita para tomarse el credito fiscal),
+  // se muestra igual en B/C si esta cargado (no molesta, y evita otro
+  // branch mas solo para esto).
+  const char* clientDoc = doc["client"]["dni"] | "";
+  const char* clientDocLabel = doc["client"]["docLabel"] | "";
+  if (strlen(clientDoc) && strlen(clientDocLabel)) {
+    t += String(clientDocLabel) + " Cliente: " + String(clientDoc) + "\n";
+  }
   t += "------------------------------------------\n";
 
-  // ---- Datos del negocio.
-  t += escPrintMode(true, false, false);
-  t += utf8ToAscii(String((const char*)(doc["business"]["name"] | ""))) + "\n";
-  t += escPrintMode(false, false, false);
-
-  const char* address = doc["business"]["address"] | "";
-  if (strlen(address)) t += utf8ToAscii(String(address)) + "\n";
-  const char* ivaCondition = doc["business"]["ivaCondition"] | "";
-  if (strlen(ivaCondition)) t += utf8ToAscii(String(ivaCondition)) + "\n";
-  const char* cuit = doc["business"]["cuit"] | "";
-  if (strlen(cuit)) t += "CUIT: " + String(cuit) + "\n";
-  const char* iibb = doc["business"]["iibb"] | "";
-  if (strlen(iibb)) t += "Ingresos Brutos: " + String(iibb) + "\n";
-  const char* activityStart = doc["business"]["activityStart"] | "";
-  if (strlen(activityStart)) t += "Inicio de actividades: " + String(activityStart) + "\n";
-  const char* phone = doc["business"]["phone"] | "";
-  if (strlen(phone)) t += "Tel: " + String(phone) + "\n";
-  t += "------------------------------------------\n";
-
-  // ---- Cliente: "CONSUMIDOR FINAL" solo si la venta no tiene un cliente
-  // asociado -- client.name ya viene resuelto asi desde ticket.service.ts
-  // (getNombreCliente).
-  // t.concat(cstr, len) con el largo EXPLICITO, no "+=" -- el operador +=
-  // de String infiere el largo con strlen(), que corta en el primer byte
-  // 0x00 y se comia justo el parametro de este comando (alinear a la
-  // izquierda), dejando "ESC a" sin su "n" -- la impresora entonces
-  // interpretaba el proximo byte real (la primera letra del nombre del
-  // cliente) como ese parametro faltante en vez de imprimirlo. Sintoma
-  // real: "Consumidor Final" salia "onsumidor Final".
-  t.concat("\x1B\x61\x00", 3); // izquierda
-  t += utf8ToAscii(String((const char*)(doc["client"]["name"] | "CONSUMIDOR FINAL"))) + "\n";
-  t += String((const char*)(doc["saleId"] | "")) + "\n";
-  const char* seller = doc["sellerName"] | "";
-  if (strlen(seller)) t += "Cajero: " + utf8ToAscii(String(seller)) + "\n";
-  t += "------------------------------------------\n";
-
+  // ---- Detalle: nombre del producto en su propia linea (asi no hay que
+  // pelear con el ancho fijo si es largo), y "cant x precio unit." a la
+  // izquierda con el importe de esa linea a la derecha en el mismo renglon.
+  t += padLine("Producto", "Importe") + "\n";
+  long totalUnidades = 0;
   for (JsonObject item : doc["items"].as<JsonArray>()) {
     String name = utf8ToAscii(String((const char*)(item["name"] | "Producto")));
     float subtotalItem = item["subtotal"] | 0.0f;
+    float unitPrice = item["price"] | 0.0f;
 
     // Productos vendidos por peso mandan quantityKg ademas de quantity
     // (quantity ahi es un Int que no representa el peso real, ver
     // SaleItem.quantity/quantityKg en schema.prisma) -- si esta presente
-    // hay que mostrar ESE valor con decimales, no el entero.
+    // hay que mostrar ESE valor con decimales, no el entero. Para
+    // "Cantidad de items" un pesable cuenta como 1 renglon (sumarle kg a
+    // una cuenta de unidades no tendria sentido).
     String qtyStr;
     if (!item["quantityKg"].isNull()) {
       float kg = item["quantityKg"] | 0.0f;
       qtyStr = formatMoneyAR(kg, 3) + " kg";
+      totalUnidades += 1;
     } else {
       long qty = item["quantity"] | 0;
       qtyStr = String(qty);
+      totalUnidades += qty;
     }
 
-    t += qtyStr + " x " + name + "  $" + formatMoneyAR(subtotalItem, 2) + "\n";
+    t += name + "\n";
+    t += padLine("  " + qtyStr + " x $" + formatMoneyAR(unitPrice, 2), "$" + formatMoneyAR(subtotalItem, 2)) + "\n";
   }
-
   t += "------------------------------------------\n";
-
-  // ---- Subtotal sin IVA + IVA por alicuota (siempre, facturado o no --
-  // pedido explicito: el ticket tiene que mostrar el IVA igual).
-  t += "Subtotal (sin IVA): $" + formatMoneyAR(doc["netoSum"] | 0.0f, 2) + "\n";
-  for (JsonObject ivaEntry : doc["ivaBreakdown"].as<JsonArray>()) {
-    float rate = ivaEntry["rate"] | 0.0f;
-    float amount = ivaEntry["amount"] | 0.0f;
-    String rateStr = String(rate, 1);
-    rateStr.replace(".", ",");
-    t += "IVA " + rateStr + "%: $" + formatMoneyAR(amount, 2) + "\n";
-  }
+  t += "Cantidad de items: " + String(totalUnidades) + "\n";
 
   float discount = doc["discount"] | 0.0f;
   if (discount > 0.01f) {
-    t += "Descuento: -$" + formatMoneyAR(discount, 2) + "\n";
+    t += padLine("Descuento", "-$" + formatMoneyAR(discount, 2)) + "\n";
   }
 
-  t += escPrintMode(true, false, false);
-  t += "TOTAL: $" + formatMoneyAR(doc["total"] | 0.0f, 2) + "\n";
-  t += escPrintMode(false, false, false);
+  // ---- Factura A discrimina el IVA por alicuota (el comprador es otro
+  // responsable inscripto y se lo toma como credito fiscal) -- B/C y el
+  // no fiscal muestran un solo monto de "Transparencia Fiscal" (el IVA ya
+  // esta adentro del precio final, no se puede descontar). Nunca los dos
+  // a la vez: son dos regimenes de AFIP distintos, no una preferencia
+  // visual.
+  bool isFacturaA = isInvoiced && String((const char*)(invoice["letra"] | "")) == "A";
+
+  if (isFacturaA) {
+    t += padLine("Subtotal:", "$" + formatMoneyAR(doc["netoSum"] | 0.0f, 2)) + "\n";
+    for (JsonObject ivaEntry : doc["ivaBreakdown"].as<JsonArray>()) {
+      float rate = ivaEntry["rate"] | 0.0f;
+      float amount = ivaEntry["amount"] | 0.0f;
+      String rateStr = String(rate, 1);
+      rateStr.replace(".", ",");
+      t += padLine("IVA " + rateStr + "%:", "$" + formatMoneyAR(amount, 2)) + "\n";
+    }
+    t += "------------------------------------------\n";
+    t += escPrintMode(true, false, false);
+    t += padLine("IMPORTE TOTAL:", "$" + formatMoneyAR(doc["total"] | 0.0f, 2)) + "\n";
+    t += escPrintMode(false, false, false);
+  } else {
+    t += escPrintMode(true, false, false);
+    t += padLine("TOTAL", "$" + formatMoneyAR(doc["total"] | 0.0f, 2)) + "\n";
+    t += escPrintMode(false, false, false);
+    t += "------------------------------------------\n";
+
+    float ivaTotal = 0.0f;
+    for (JsonObject ivaEntry : doc["ivaBreakdown"].as<JsonArray>()) {
+      ivaTotal += (float)(ivaEntry["amount"] | 0.0f);
+    }
+    t += "TRANSPARENCIA FISCAL\n";
+    t += padLine("IVA Contenido:", "$" + formatMoneyAR(ivaTotal, 2)) + "\n";
+  }
   t += "------------------------------------------\n";
-  t += "Pago: " + utf8ToAscii(String((const char*)(doc["paymentMethod"] | ""))) + "\n";
+
+  // ---- Pago: una linea por metodo (cubre pago dividido) + "Cambio" solo
+  // para efectivo -- siempre $0,00 hoy porque el sistema no registra un
+  // "monto recibido" separado del total cobrado (no hay vuelto real
+  // todavia, ver payments en ticket.service.ts#buildTicketPayload).
+  for (JsonObject payment : doc["payments"].as<JsonArray>()) {
+    String method = utf8ToAscii(String((const char*)(payment["method"] | "")));
+    float amount = payment["amount"] | 0.0f;
+    t += padLine(method, "$" + formatMoneyAR(amount, 2)) + "\n";
+    if (method == "EFECTIVO") {
+      t += padLine("Cambio", "$" + formatMoneyAR(0.0f, 2)) + "\n";
+    }
+  }
+  t += "------------------------------------------\n";
+
+  const char* seller = doc["sellerName"] | "";
+  if (strlen(seller)) t += "Cajero: " + utf8ToAscii(String(seller)) + "\n";
 
   if (isInvoiced) {
     t += "CAE: " + String((const char*)(invoice["cae"] | "")) + "\n";
+    const char* caeVto = invoice["caeVto"] | "";
+    if (strlen(caeVto)) t += "Vto. CAE: " + String(caeVto) + "\n";
   }
 
   t += "\x1B\x61\x01";
@@ -2151,6 +2227,18 @@ void buildTestTicketPayload(
   doc["paymentMethod"] = String(paymentMethod);
   doc["sellerName"] = String(sellerName);
 
+  // payments[] estructurado (ver el mismo campo en ticket.service.ts) --
+  // paymentMethod ahi arriba viene pre-armado tipo "TARJETA: 25.300,00"
+  // solo para mostrarlo en algun lado legacy; acá se separa el nombre del
+  // metodo antes de los ":" para el array nuevo.
+  String methodName = String(paymentMethod);
+  int colonIdx = methodName.indexOf(':');
+  if (colonIdx > 0) methodName = methodName.substring(0, colonIdx);
+  JsonArray payments = doc["payments"].to<JsonArray>();
+  JsonObject payment1 = payments.add<JsonObject>();
+  payment1["method"] = methodName;
+  payment1["amount"] = 25300.0;
+
   doc["business"]["name"] = "PRINTBOX - TICKET DE PRUEBA";
   doc["business"]["address"] = "Autotest de boot -- no es una venta real";
   doc["business"]["ivaCondition"] = "IVA Responsable Inscripto";
@@ -2163,6 +2251,13 @@ void buildTestTicketPayload(
   // arriba en printTicketFromPayload).
 
   doc["client"]["name"] = String(clientName);
+  // CUIT de prueba solo para la Factura A -- es la unica donde el ticket
+  // realmente necesita/muestra el documento del comprador (ver el branch
+  // isFacturaA en printTicketFromPayload).
+  if (invoiced && String(letra) == "A") {
+    doc["client"]["dni"] = "30712345678";
+    doc["client"]["docLabel"] = "CUIT";
+  }
 
   JsonArray items = doc["items"].to<JsonArray>();
 
@@ -2199,8 +2294,10 @@ void buildTestTicketPayload(
 
   if (invoiced) {
     doc["invoice"]["letra"] = String(letra);
+    doc["invoice"]["codigo"] = String(letra) == "A" ? "001" : String(letra) == "B" ? "006" : "011";
     doc["invoice"]["numero"] = String(numero);
     doc["invoice"]["cae"] = "00000000000000";
+    doc["invoice"]["caeVto"] = "15/09/2026";
     doc["invoice"]["qrUrl"] = "https://comarpos.com.ar/test-ticket";
     doc["footer"] = "Gracias por su compra";
   } else {
