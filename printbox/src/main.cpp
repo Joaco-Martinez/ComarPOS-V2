@@ -2040,15 +2040,18 @@ bool ok = sendChunked(
   t += utf8ToAscii(String(footer)) + "\n";
   t += "\n";
 
-  // Chunks mas chicos y mas separados que antes (era 64/40) -- el ticket
-  // real de la ultima prueba seguia perdiendo bytes sueltos en medio de la
-  // transmision (letras iniciales de algunas palabras comidas), asi que
-  // esto le da mas margen al buffer de la impresora.
+  // Chunks mas chicos y mas separados (32/60, igual que footerBrand mas
+  // abajo) -- el valor anterior de esta llamada (128/5) contradecia el
+  // comentario que tenia al lado (decia "mas chicos y mas separados que
+  // antes (era 64/40)" pero en realidad dejaba chunks MAS GRANDES y con
+  // MENOS delay que el 64/40 con el que comparaba) y coincide exacto con
+  // el sintoma reportado en un ticket real: se comia la primera letra de
+  // alguna palabra (ej. "Consumidor Final" salio "onsumidor Final").
  ok = ok && sendChunked(
   (const uint8_t*)t.c_str(),
   t.length(),
-  128,
-  5
+  32,
+  60
 );
 
   // QR nativo, solo si esta facturada de verdad (nunca en un ticket no
