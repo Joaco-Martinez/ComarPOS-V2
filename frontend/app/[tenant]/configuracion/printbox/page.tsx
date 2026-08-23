@@ -40,7 +40,6 @@ export default function PrintboxPage() {
   const [editing, setEditing] = useState<PrintboxDevice | null>(null);
   const [editName, setEditName] = useState('');
   const [editPrinterIp, setEditPrinterIp] = useState('');
-  const [editRemoteHost, setEditRemoteHost] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -106,7 +105,6 @@ export default function PrintboxPage() {
     setEditing(d);
     setEditName(d.name);
     setEditPrinterIp(d.printerIp ?? '');
-    setEditRemoteHost(d.remoteHost ?? '');
   };
 
   const save = async () => {
@@ -116,7 +114,6 @@ export default function PrintboxPage() {
       await api.patch(`/printbox/devices/${editing.id}`, {
         name: editName.trim(),
         printerIp: editPrinterIp.trim() || null,
-        remoteHost: editRemoteHost.trim() || null,
       });
       showToast('PrintBox actualizado');
       setEditing(null);
@@ -239,11 +236,6 @@ export default function PrintboxPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Wifi size={11} /> {d.printerIp || 'Sin IP de impresora'}
                     </div>
-                    {d.remoteHost && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Wifi size={11} /> {d.remoteHost} <span style={{ fontSize: 10, opacity: 0.7 }}>(host remoto)</span>
-                      </div>
-                    )}
                     <div>
                       Última conexión: {d.lastSeenAt ? formatDateTimeAR(d.lastSeenAt) : 'nunca'}
                     </div>
@@ -316,13 +308,6 @@ export default function PrintboxPage() {
                 <input value={editPrinterIp} onChange={(e) => setEditPrinterIp(e.target.value)} placeholder="192.168.1.100" />
                 <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
                   Referencia nomás — la IP real que usa el dispositivo es la que se cargó durante el pairing físico.
-                </p>
-              </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Host remoto (opcional)</label>
-                <input value={editRemoteHost} onChange={(e) => setEditRemoteHost(e.target.value)} placeholder="printbox-caja1.tudominio.com" />
-                <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-                  Si le pusiste DNS + port-forwarding propio al PrintBox, cargalo acá (con puerto si no es el 80, ej. <code>host:8080</code>) — el backend le va a pegar ahí en vez de a la IP local automática. Dejalo vacío para usar la IP de LAN de siempre.
                 </p>
               </div>
             </div>

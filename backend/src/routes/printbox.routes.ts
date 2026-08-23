@@ -9,6 +9,8 @@ const router = Router();
 // periodico (la prueba es el token que devolvió el pairing).
 router.post("/pair", printboxController.pair);
 router.post("/devices/:id/heartbeat", printboxController.heartbeat);
+router.get("/devices/:id/poll", printboxController.poll);
+router.post("/devices/:id/jobs/:jobId/ack", printboxController.ackJob);
 
 router.use(authMiddleware);
 

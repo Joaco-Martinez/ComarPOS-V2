@@ -170,7 +170,7 @@ void showStatus(DeviceStatus status, const String &detail = "") {
 #define FACTORY_RESET_HOLD_MS 5000UL
 
 
-#define PRINTBOX_LOCAL_DEV 1
+#define PRINTBOX_LOCAL_DEV 0
 
 #define PRINTBOX_PRINT_TENANT_LOGO 1
 
@@ -695,120 +695,171 @@ void handleWifiPairingServer() {
   handlePairingRequest(wifiPairingServer.available());
 }
 
-// ================= SERVER HTTP DE IMPRESION =================
-// El backend le pega directo a este ESP32 por HTTP (POST /print/ticket,
-// mismo contrato que el viejo agente local de Windows -- ver
-// backend/src/services/ticket.service.ts y printbox/README.md) en vez de
-// que el ESP32 este suscripto a un broker. Reusa el mismo WiFiServer que
-// sirve la pagina de pairing (wifiPairingServer, puerto 80) -- los dos
-// roles son mutuamente excluyentes en el tiempo (pairing = todavia no
-// cfg.valid, print-server = ya cfg.valid), asi que no hace falta un
-// segundo puerto.
+// ================= POLL DE IMPRESION (pull, no push) =================
+// El ESP32 le pregunta AL BACKEND si hay algo para imprimir (long-poll a
+// GET /printbox/devices/:id/poll), en vez de que el backend le pegue
+// directo por HTTP a este device. Cambio a proposito respecto de la
+// version anterior (WiFiServer propio escuchando POST /print/ticket): un
+// backend en Railway no puede abrir una conexion entrante hacia un ESP32
+// detras de NAT en la LAN de un cliente sin port-forwarding, y eso no es
+// viable para instalar en locales de terceros sin acceso al router -- ver
+// "Por que pull y no push" en printbox/README.md y
+// backend/src/services/printbox/printbox.service.ts#pollForPrintJob (la
+// otra mitad de esto).
 bool printTicketFromPayload(JsonDocument &doc);
 
-template <typename ClientT>
-void sendJsonResponse(ClientT &client, int statusCode, const String &body) {
-  client.print("HTTP/1.1 ");
-  client.print(statusCode);
-  client.println(statusCode == 200 ? " OK" : " Error");
-  client.println("Content-Type: application/json");
-  client.print("Content-Length: ");
-  client.println(body.length());
-  client.println("Connection: close");
-  client.println();
-  client.print(body);
-  client.flush();
-}
+// Cuanto esperamos por la respuesta de /poll antes de darla por perdida --
+// tiene que ser mayor al POLL_MAX_WAIT_MS del backend (hoy 8s, ver
+// printbox.service.ts) porque esa request se mantiene abierta ahi adentro
+// esperando un job; este margen extra cubre la latencia de red/TLS de ida
+// y vuelta. Nada de esto corre en un task aparte -- loop() se queda
+// bloqueado hasta POLL_RESPONSE_TIMEOUT_MS por vuelta cuando no hay nada
+// para imprimir, asi que el boton de factory reset y el refresco del OLED
+// quedan congelados hasta por ese tiempo (funcionalmente el reset sigue
+// andando bien -- checkFactoryResetButton() mide con millis() real, no por
+// cantidad de vueltas de loop() -- pero el feedback visual/tactil puede
+// tardar unos segundos de mas en reaccionar). POLL_MAX_WAIT_MS mas chico
+// en el backend hace esto mas responsive a costa de reconectar TLS mas
+// seguido; este es el trade-off elegido, ver comentario ahi.
+#define POLL_RESPONSE_TIMEOUT_MS 12000UL
 
-template <typename ClientT>
-void handlePrintRequest(ClientT client) {
-  if (!client) return;
-
-  String requestLine = client.readStringUntil('\n');
-  int contentLength = 0;
-  String reqTimestamp;
-  String reqSignature;
-  String header;
-  while (client.connected() && (header = client.readStringUntil('\n')) != "\r") {
-    if (header.startsWith("Content-Length:")) {
-      contentLength = header.substring(16).toInt();
-    }
-    // Los nombres de header llegan tal cual los manda el cliente -- HTTP
-    // no distingue mayus/minus en headers, asi que comparamos las dos formas.
-    if (header.startsWith("X-Pos-Timestamp:") || header.startsWith("x-pos-timestamp:")) {
-      reqTimestamp = header.substring(header.indexOf(':') + 1);
-      reqTimestamp.trim();
-    }
-    if (header.startsWith("X-Pos-Signature:") || header.startsWith("x-pos-signature:")) {
-      reqSignature = header.substring(header.indexOf(':') + 1);
-      reqSignature.trim();
-    }
-    if (header.length() <= 1) break;
+void ackPrintJob(const String &jobId, bool ok, const String &errorMsg) {
+  if (!apiClient.connect(API_HOST, API_PORT)) {
+    Serial.println("Ack: no se pudo conectar al backend.");
+    return;
   }
 
-  if (!requestLine.startsWith("POST /print/ticket")) {
-    sendJsonResponse(client, 404, "{\"ok\":false,\"message\":\"not found\"}");
-    client.stop();
+  String path = "/printbox/devices/" + cfg.deviceId + "/jobs/" + jobId + "/ack";
+  String timestamp = currentTimestampSec();
+  String signature = signRequest(cfg.token, "POST", path, timestamp, "");
+
+  // ok/error van SIN firmar a proposito (ver comentario espejo en
+  // printbox.service.ts#ackPrintJob) -- errorMsg es siempre un literal
+  // nuestro (nunca texto que venga de afuera), asi que no hace falta
+  // escapar comillas/backslashes para armar este JSON a mano.
+  String body = String("{\"ok\":") + (ok ? "true" : "false") + ",\"error\":\"" + errorMsg + "\"}";
+
+  apiClient.print(String("POST ") + path + " HTTP/1.1\r\n");
+  apiClient.print(String("Host: ") + API_HOST + "\r\n");
+  apiClient.print("X-Pos-Timestamp: " + timestamp + "\r\n");
+  apiClient.print("X-Pos-Signature: " + signature + "\r\n");
+  apiClient.print("Content-Type: application/json\r\n");
+  apiClient.print("Content-Length: " + String(body.length()) + "\r\n");
+  apiClient.print("Connection: close\r\n\r\n");
+  apiClient.print(body);
+
+  unsigned long start = millis();
+  while (apiClient.connected() && millis() - start < 5000) {
+    if (apiClient.available()) apiClient.read(); // descartamos la respuesta, solo nos importa que salio
+  }
+  apiClient.stop();
+}
+
+// Se llama en cada vuelta de loop() (ver mas abajo) -- abre una conexion,
+// pregunta, y si el backend contesta con un job lo imprime y lo confirma
+// (ackPrintJob). Si no hay nada, vuelve enseguida (el backend ya esperó
+// hasta POLL_MAX_WAIT_MS de su lado antes de contestar vacio) y el proximo
+// loop() vuelve a preguntar -- efectivamente esto es un long-poll
+// encadenado sin pausa entre pregunta y pregunta.
+void pollForPrintJob() {
+  if (!apiClient.connect(API_HOST, API_PORT)) {
+    Serial.println("Poll: no se pudo conectar al backend.");
+    delay(1000); // evita un loop caliente reintentando conexion sin parar si el backend esta caido
     return;
+  }
+
+  // Default de Stream (1s) es mucho menor a lo que puede tardar el backend
+  // en contestar (mantiene la conexion abierta hasta POLL_MAX_WAIT_MS de su
+  // lado esperando un job) -- sin esto, readStringUntil() de mas abajo
+  // corta la espera antes de tiempo y la tratamos como "nada para
+  // imprimir" aunque el backend todavia este esperando.
+  apiClient.setTimeout(POLL_RESPONSE_TIMEOUT_MS);
+
+  String path = "/printbox/devices/" + cfg.deviceId + "/poll";
+  String timestamp = currentTimestampSec();
+  String signature = signRequest(cfg.token, "GET", path, timestamp, "");
+
+  apiClient.print(String("GET ") + path + " HTTP/1.1\r\n");
+  apiClient.print(String("Host: ") + API_HOST + "\r\n");
+  apiClient.print("X-Pos-Timestamp: " + timestamp + "\r\n");
+  apiClient.print("X-Pos-Signature: " + signature + "\r\n");
+  apiClient.print("Connection: close\r\n\r\n");
+
+  unsigned long start = millis();
+  String statusLine = apiClient.readStringUntil('\n');
+  int contentLength = 0;
+  String header;
+  while (apiClient.connected() && millis() - start < POLL_RESPONSE_TIMEOUT_MS &&
+         (header = apiClient.readStringUntil('\n')) != "\r") {
+    if (header.startsWith("Content-Length:")) contentLength = header.substring(16).toInt();
+    if (header.length() <= 1) break;
   }
 
   String body;
   body.reserve(contentLength);
-  unsigned long start = millis();
-  while ((int)body.length() < contentLength && client.connected() && millis() - start < 8000) {
-    if (client.available()) body += (char)client.read();
+  while ((int)body.length() < contentLength && apiClient.connected() && millis() - start < POLL_RESPONSE_TIMEOUT_MS) {
+    if (apiClient.available()) body += (char)apiClient.read();
   }
+  apiClient.stop();
 
-  // Firma HMAC en vez de un token plano en el header -- ver la seccion
-  // "SEGURIDAD" mas arriba y printbox.hmac.ts del lado del backend. El
-  // timestamp lo puso el backend; acá no hace falta tener el reloj
-  // sincronizado para RECALCULAR la firma (se reusa tal cual llego), pero
-  // si ya tenemos NTP sincronizado aprovechamos para rechazar requests
-  // viejas (proteccion de replay) -- si todavia no sincronizo, se salta
-  // ese chequeo puntual para no bloquear la impresion por eso.
-  if (cfg.token.length() == 0 || reqTimestamp.length() == 0 || reqSignature.length() == 0) {
-    Serial.println("Print request sin firma, la rechazo.");
-    sendJsonResponse(client, 401, "{\"ok\":false,\"message\":\"missing signature\"}");
-    client.stop();
+  // 204 (nada para imprimir) o body vacio/incompleto: no hay nada que
+  // hacer, volvemos a preguntar en el proximo loop().
+  if (statusLine.indexOf("204") >= 0 || (int)body.length() < contentLength || body.length() == 0) {
     return;
   }
 
+  JsonDocument pollDoc;
+  if (deserializeJson(pollDoc, body)) {
+    Serial.println("Poll: respuesta invalida, la descarto.");
+    return;
+  }
+
+  String jobId = pollDoc["jobId"] | "";
+  String jobBody = pollDoc["body"] | "";
+  String jobTimestamp = pollDoc["timestamp"] | "";
+  String jobSignature = pollDoc["signature"] | "";
+
+  if (jobId.length() == 0 || jobBody.length() == 0) {
+    Serial.println("Poll: respuesta sin jobId/body, la descarto.");
+    return;
+  }
+
+  // Misma verificacion que antes hacia handlePrintRequest() contra un push
+  // entrante -- el contrato de firma (method/path fijos "POST"
+  // "/print/ticket") no cambio, solo cambio el transporte que la trae.
   if (ntpSynced) {
-    long diffSec = labs((long)time(nullptr) - (long)reqTimestamp.toInt());
+    long diffSec = labs((long)time(nullptr) - (long)jobTimestamp.toInt());
     if (diffSec > 300) { // 5 min, mismo margen que verifyRequest() en el backend
-      Serial.println("Print request con timestamp fuera de rango, la rechazo.");
-      sendJsonResponse(client, 401, "{\"ok\":false,\"message\":\"timestamp out of range\"}");
-      client.stop();
+      Serial.println("Job con timestamp fuera de rango, lo rechazo.");
+      ackPrintJob(jobId, false, "timestamp out of range");
       return;
     }
   }
 
-  String expectedSignature = signRequest(cfg.token, "POST", "/print/ticket", reqTimestamp, body);
-  if (expectedSignature != reqSignature) {
-    Serial.println("Print request con firma invalida, la rechazo.");
-    sendJsonResponse(client, 401, "{\"ok\":false,\"message\":\"invalid signature\"}");
-    client.stop();
+  String expectedSignature = signRequest(cfg.token, "POST", "/print/ticket", jobTimestamp, jobBody);
+  if (expectedSignature != jobSignature) {
+    Serial.println("Job con firma invalida, lo rechazo.");
+    ackPrintJob(jobId, false, "invalid signature");
     return;
   }
 
-  JsonDocument doc;
-  if (deserializeJson(doc, body)) {
-    sendJsonResponse(client, 400, "{\"ok\":false,\"message\":\"invalid json\"}");
-    client.stop();
+  JsonDocument ticketDoc;
+  if (deserializeJson(ticketDoc, jobBody)) {
+    ackPrintJob(jobId, false, "invalid json");
     return;
   }
 
-  String saleId = doc["saleId"] | "";
+  String saleId = ticketDoc["saleId"] | "";
   Serial.println("Job recibido: " + saleId);
 
   showStatus(DeviceStatus::PRINTING, saleId);
-  bool ok = printTicketFromPayload(doc);
+  bool ok = printTicketFromPayload(ticketDoc);
 
   if (ok) {
-    // doc["invoice"] solo esta presente si la venta esta facturada de
+    // ticketDoc["invoice"] solo esta presente si la venta esta facturada de
     // verdad por AFIP (ver isInvoiced en printTicketFromPayload) -- mismo
     // criterio para contar como facturado/no facturado.
-    bool wasInvoiced = !doc["invoice"].as<JsonObject>().isNull();
+    bool wasInvoiced = !ticketDoc["invoice"].as<JsonObject>().isNull();
     ticketsTotal++;
     if (wasInvoiced) ticketsFacturados++; else ticketsNoFacturados++;
     saveTicketCounters();
@@ -816,18 +867,7 @@ void handlePrintRequest(ClientT client) {
 
   showStatus(ok ? DeviceStatus::READY : DeviceStatus::ERROR_, ok ? cfg.tenantId : "No se pudo imprimir");
 
-  if (ok) {
-    sendJsonResponse(client, 200, "{\"ok\":true}");
-  } else {
-    sendJsonResponse(client, 500, "{\"ok\":false,\"message\":\"print failed\"}");
-  }
-
-  delay(1);
-  client.stop();
-}
-
-void handlePrintServer() {
-  handlePrintRequest(wifiPairingServer.available());
+  ackPrintJob(jobId, ok, ok ? "" : "print failed");
 }
 
 // ================= IMPRESION =================
@@ -2295,10 +2335,10 @@ void setup() {
       Serial.println("W5500 OK pero el link esta OFF -- revisar que el cable a la impresora este bien conectado de los dos lados y que la impresora este prendida.");
     }
 
-    // Mismo WiFiServer que en modo pairing (puerto 80), ahora sirviendo
-    // POST /print/ticket en vez de la pagina de config -- ver el
-    // comentario en la seccion "SERVER HTTP DE IMPRESION" mas arriba.
-    wifiPairingServer.begin();
+    // A diferencia del modo pairing, acá NO se levanta wifiPairingServer --
+    // ya emparejado, el ESP32 no acepta conexiones entrantes para nada: la
+    // impresion funciona por poll saliente (pollForPrintJob() en loop()),
+    // ver "POLL DE IMPRESION" mas arriba.
   }
 }
 
@@ -2450,5 +2490,5 @@ void loop() {
 #endif
 
   sendHeartbeat();
-  handlePrintServer();
+  pollForPrintJob();
 }

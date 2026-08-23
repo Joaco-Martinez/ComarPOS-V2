@@ -175,4 +175,57 @@ export const printboxController = {
       next(err);
     }
   },
+
+  // Público — long-poll del ESP32 preguntando si hay un ticket para
+  // imprimir (auth por firma HMAC, ver printbox.service.ts#pollForPrintJob).
+  // Reemplaza al viejo esquema donde el backend le pegaba directo por HTTP
+  // a la IP del device -- ver "Por que pull y no push" en printbox/README.md.
+  async poll(req: Request, res: Response, next: any) {
+    try {
+      const id = getParamAsString(req.params.id, "id");
+      const timestamp = String(req.headers["x-pos-timestamp"] || "");
+      const signature = String(req.headers["x-pos-signature"] || "");
+
+      if (!timestamp || !signature) {
+        throw new AppError("MISSING_SIGNATURE", "Faltan los headers X-Pos-Timestamp/X-Pos-Signature.", 401);
+      }
+
+      const path = `/printbox/devices/${id}/poll`;
+      const job = await printboxService.pollForPrintJob(id, timestamp, signature, path);
+
+      if (!job) {
+        res.status(204).end();
+        return;
+      }
+
+      res.json({ ok: true, ...job });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // Público — el ESP32 avisa acá si pudo imprimir o no el job que le llegó
+  // por /poll (auth por firma HMAC, mismo esquema que heartbeat).
+  async ackJob(req: Request, res: Response, next: any) {
+    try {
+      const id = getParamAsString(req.params.id, "id");
+      const jobId = getParamAsString(req.params.jobId, "jobId");
+      const timestamp = String(req.headers["x-pos-timestamp"] || "");
+      const signature = String(req.headers["x-pos-signature"] || "");
+
+      if (!timestamp || !signature) {
+        throw new AppError("MISSING_SIGNATURE", "Faltan los headers X-Pos-Timestamp/X-Pos-Signature.", 401);
+      }
+
+      const ok = req.body?.ok !== false;
+      const errorMessage = req.body?.error ? String(req.body.error).slice(0, 500) : undefined;
+      const path = `/printbox/devices/${id}/jobs/${jobId}/ack`;
+
+      await printboxService.ackPrintJob(id, jobId, timestamp, signature, path, ok, errorMessage);
+
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
 };
