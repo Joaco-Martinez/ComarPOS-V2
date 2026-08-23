@@ -797,13 +797,18 @@ void pollForPrintJob() {
   // se me paso reusarlo acá cuando escribi esta funcion.
   unsigned long start = millis();
   String statusLine = apiClient.readStringUntil('\n');
+  Serial.println("Poll: status=\"" + statusLine + "\" (connected=" + String(apiClient.connected()) + " available=" + String(apiClient.available()) + ")");
+
   int contentLength = 0;
+  int headerCount = 0;
   String header;
   while ((apiClient.connected() || apiClient.available()) && millis() - start < POLL_RESPONSE_TIMEOUT_MS &&
          (header = apiClient.readStringUntil('\n')) != "\r") {
+    headerCount++;
     if (header.startsWith("Content-Length:")) contentLength = header.substring(16).toInt();
     if (header.length() <= 1) break;
   }
+  Serial.println("Poll: " + String(headerCount) + " headers leidos, contentLength=" + String(contentLength));
 
   String body;
   body.reserve(contentLength);
