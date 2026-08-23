@@ -785,11 +785,21 @@ void pollForPrintJob() {
   apiClient.print("X-Pos-Signature: " + signature + "\r\n");
   apiClient.print("Connection: close\r\n\r\n");
 
+  // OJO: (apiClient.connected() || apiClient.available()), NO connected()
+  // a secas -- con "Connection: close" el backend puede cerrar el socket
+  // apenas termina de escribir la respuesta, antes de que el ESP32 llegue
+  // a leer los bytes que ya estan en el buffer local. Con solo connected()
+  // estos dos loops cortaban de una en cuanto el server cerraba, dejando
+  // el body truncado (menos bytes que Content-Length) -- eso empujaba
+  // silenciosamente al "no hay nada para imprimir" de mas abajo aunque el
+  // backend hubiera mandado el job entero. Mismo bug, mismo fix, que ya
+  // habia aparecido antes en pairWithBackend() (ver el comentario ahi) --
+  // se me paso reusarlo acá cuando escribi esta funcion.
   unsigned long start = millis();
   String statusLine = apiClient.readStringUntil('\n');
   int contentLength = 0;
   String header;
-  while (apiClient.connected() && millis() - start < POLL_RESPONSE_TIMEOUT_MS &&
+  while ((apiClient.connected() || apiClient.available()) && millis() - start < POLL_RESPONSE_TIMEOUT_MS &&
          (header = apiClient.readStringUntil('\n')) != "\r") {
     if (header.startsWith("Content-Length:")) contentLength = header.substring(16).toInt();
     if (header.length() <= 1) break;
@@ -797,14 +807,21 @@ void pollForPrintJob() {
 
   String body;
   body.reserve(contentLength);
-  while ((int)body.length() < contentLength && apiClient.connected() && millis() - start < POLL_RESPONSE_TIMEOUT_MS) {
+  while ((int)body.length() < contentLength && (apiClient.connected() || apiClient.available()) &&
+         millis() - start < POLL_RESPONSE_TIMEOUT_MS) {
     if (apiClient.available()) body += (char)apiClient.read();
   }
   apiClient.stop();
 
-  // 204 (nada para imprimir) o body vacio/incompleto: no hay nada que
-  // hacer, volvemos a preguntar en el proximo loop().
-  if (statusLine.indexOf("204") >= 0 || (int)body.length() < contentLength || body.length() == 0) {
+  // 204 (nada para imprimir): nada que hacer, volvemos a preguntar en el
+  // proximo loop(). Body incompleto/vacio en cambio es un caso raro que no
+  // deberia pasar mas con el fix de arriba -- si vuelve a pasar, mejor que
+  // quede en el log en vez de tragarselo en silencio como antes.
+  if (statusLine.indexOf("204") >= 0) {
+    return;
+  }
+  if ((int)body.length() < contentLength || body.length() == 0) {
+    Serial.println("Poll: body incompleto (" + String(body.length()) + "/" + String(contentLength) + " bytes), lo descarto.");
     return;
   }
 
