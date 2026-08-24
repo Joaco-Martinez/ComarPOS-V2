@@ -357,3 +357,13 @@ export function PrintboxIcon(props: ComarIconProps) {
     </Svg>
   );
 }
+
+export function AyudaIcon(props: ComarIconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 20.5C16.7 20.5 20.5 17.1 20.5 12.8C20.5 8.5 16.7 5 12 5C7.3 5 3.5 8.5 3.5 12.8C3.5 14.3 3.97 15.7 4.8 16.9L4 20.5L7.8 19.6C8.9 20.1 10.4 20.5 12 20.5Z" />
+      <path d="M10.3 10.6C10.3 9.5 11.1 8.7 12.1 8.7C13.1 8.7 13.9 9.4 13.9 10.4C13.9 11.7 12.1 11.9 12.1 13.4" />
+      <circle cx="12.1" cy="15.8" r="0.9" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}

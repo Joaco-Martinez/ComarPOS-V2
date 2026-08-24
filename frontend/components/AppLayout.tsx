@@ -11,6 +11,7 @@ import HelpCenter from './HelpCenter';
 import { useToast } from '@/hooks/useToast';
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { initPushNotifications } from '@/lib/push';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -62,6 +63,15 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
     if (!loading && !user) router.replace('/login');
   }, [user, loading, router]);
 
+  // Solo hace algo dentro del shell nativo de Capacitor (ver lib/push.ts) --
+  // en la PWA/web de escritorio es un no-op. Se dispara una vez que hay
+  // usuario logueado porque recien ahi tiene sentido pedir el permiso y
+  // registrar el token contra /notifications/push-token.
+  useEffect(() => {
+    if (loading || !user || !params?.tenant) return;
+    initPushNotifications((href) => router.push(`/${params.tenant}${href}`));
+  }, [loading, user, params?.tenant, router]);
+
   // La URL siempre lleva el slug del negocio (ej. /grupo-vj/pos), como en Mi
   // Taller Ya, para que quede claro en qué empresa estás parado. Si el slug
   // de la URL no coincide con el tenant real del usuario logueado (URL vieja
@@ -97,7 +107,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', ['--app-header-height' as string]: `${headerHeight}px` }}>
       <Sidebar />
 
       <div

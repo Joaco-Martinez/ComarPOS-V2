@@ -22,13 +22,16 @@ const PERKS = [
 ];
 
 type Mode = 'trial' | 'direct';
-type Plan = { name: string; priceArs: number; currency: string; tagline: string };
+type Plan = { id: string; name: string; priceArs: number; currency: string; tagline: string };
+
+const DEFAULT_PLAN_ID = 'profesional';
 
 export default function PruebaGratisPage() {
   const router = useRouter();
   const { setUser } = useAuthStore();
 
   const [mode, setMode] = useState<Mode>('trial');
+  const [planId, setPlanId] = useState(DEFAULT_PLAN_ID);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [showPass, setShowPass] = useState(false);
@@ -36,11 +39,18 @@ export default function PruebaGratisPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let selectedPlanId = DEFAULT_PLAN_ID;
     if (typeof window !== 'undefined') {
-      const initialMode = new URLSearchParams(window.location.search).get('plan') === 'directo' ? 'direct' : 'trial';
+      const params = new URLSearchParams(window.location.search);
+      const initialMode = params.get('plan') === 'directo' ? 'direct' : 'trial';
       setMode(initialMode);
+      selectedPlanId = params.get('planId') || DEFAULT_PLAN_ID;
+      setPlanId(selectedPlanId);
     }
-    api.get('/billing/plan').then(({ data }) => setPlan(data.content ?? data)).catch(() => {});
+    api.get('/billing/plans').then(({ data }) => {
+      const plans: Plan[] = (data.content ?? data)?.plans ?? [];
+      setPlan(plans.find((p) => p.id === selectedPlanId) ?? plans.find((p) => p.id === DEFAULT_PLAN_ID) ?? null);
+    }).catch(() => {});
   }, []);
 
   const f = (k: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -61,7 +71,7 @@ export default function PruebaGratisPage() {
     setError('');
 
     try {
-      await api.post('/trial-signup', form);
+      await api.post('/trial-signup', { ...form, planId });
 
       const { data } = await api.post('/auth/login', {
         email: form.adminEmail.trim().toLowerCase(),

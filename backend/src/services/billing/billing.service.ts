@@ -13,7 +13,7 @@
  */
 import prisma from "../../prisma";
 import { invalidateTenantCache } from "../../middleware/tenant";
-import { PLAN } from "../../config/billing";
+import { PLANS, getPlan, LAUNCH_PRICE_ENDS_AT } from "../../config/billing";
 import { mercadoPagoClient } from "./mercadoPago.service";
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/login$/, "").replace(/\/$/, "");
@@ -25,7 +25,8 @@ function addOneMonth(date: Date): Date {
 }
 
 export const billingService = {
-  plan: PLAN,
+  plans: PLANS,
+  launchPriceEndsAt: LAUNCH_PRICE_ENDS_AT,
 
   async getStatus(tenantId: string) {
     const tenant = await prisma.tenant.findUnique({
@@ -38,24 +39,37 @@ export const billingService = {
         suspendedAt: true,
         mpPreapprovalId: true,
         mpSubscriptionAmount: true,
+        planId: true,
       },
     });
 
     if (!tenant) throw new Error("Tenant no encontrado");
 
-    return { ...tenant, plan: PLAN };
+    return { ...tenant, plan: getPlan(tenant.planId) };
   },
 
-  async createCheckout(tenantId: string, payerEmail: string) {
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  /**
+   * planId es opcional: si se pasa (ej. el visitante eligió un plan
+   * distinto al que ya tenía guardado desde /trial-signup), pisa
+   * Tenant.planId ANTES de armar el checkout, para que el monto cobrado
+   * corresponda al plan que realmente eligió.
+   */
+  async createCheckout(tenantId: string, payerEmail: string, planId?: string) {
+    let tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new Error("Tenant no encontrado");
+
+    if (planId && planId !== tenant.planId) {
+      tenant = await prisma.tenant.update({ where: { id: tenantId }, data: { planId } });
+    }
+
+    const plan = getPlan(tenant.planId);
 
     const preapproval = await mercadoPagoClient.createPreapproval({
       tenantId,
       payerEmail,
       backUrl: `${FRONTEND_URL}/suscripcion?estado=procesando`,
-      reason: `${PLAN.name} - suscripción mensual`,
-      amount: tenant.mpSubscriptionAmount ?? PLAN.priceArs,
+      reason: `${plan.name} - suscripción mensual`,
+      amount: tenant.mpSubscriptionAmount ?? plan.priceArs,
     });
 
     await prisma.tenant.update({
@@ -112,9 +126,9 @@ export const billingService = {
           paidUntil,
           suspendedAt: null,
           // Precio de lanzamiento fijo "de por vida": solo se graba en el
-          // primer pago acreditado, un cambio futuro de PLAN.priceArs no
-          // debe pisarlo en las renovaciones siguientes.
-          mpSubscriptionAmount: tenant.mpSubscriptionAmount ?? payment.transaction_amount ?? PLAN.priceArs,
+          // primer pago acreditado, un cambio futuro del precio de listado
+          // no debe pisarlo en las renovaciones siguientes.
+          mpSubscriptionAmount: tenant.mpSubscriptionAmount ?? payment.transaction_amount ?? getPlan(tenant.planId).priceArs,
         },
       }),
       prisma.tenantPaymentLog.create({

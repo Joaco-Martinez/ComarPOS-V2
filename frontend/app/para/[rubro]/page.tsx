@@ -23,13 +23,18 @@ async function isMarketingHost() {
 type Props = { params: Promise<{ rubro: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  if (!(await isMarketingHost())) return {};
+  if (!(await isMarketingHost())) return { robots: { index: false, follow: false } };
   const { rubro } = await params;
   const vertical = getVerticalBySlug(rubro);
   if (!vertical) return {};
+  const title = `ComarPOS para ${vertical.label} — Sistema de gestión`;
+  const description = vertical.heroDescription;
   return {
-    title: `ComarPOS para ${vertical.label} — Sistema de gestión`,
-    description: vertical.heroDescription,
+    title,
+    description,
+    alternates: { canonical: `/para/${vertical.slug}` },
+    openGraph: { title, description, url: `https://comarpos.com.ar/para/${vertical.slug}` },
+    twitter: { title, description },
   };
 }
 

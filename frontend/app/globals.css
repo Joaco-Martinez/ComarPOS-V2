@@ -170,6 +170,10 @@ html.light .brand-logo-light { display: block; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(13,89,231,0); }
   50%       { box-shadow: 0 0 20px 4px rgba(13,89,231,0.2); }
 }
+@keyframes chatTypingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30%           { transform: translateY(-4px); opacity: 1; }
+}
 
 .animate-fade  { animation: fadeIn  0.3s ease both; }
 /* No transform here on purpose: this is used on <main>, and a lingering (even identity)
@@ -486,9 +490,26 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
 /* 3 por fila a pedido explicito en mobile -- !important porque la page
    (pos/page.tsx) fija gridTemplateColumns inline (auto-fill minmax(160px,
    1fr)), pensado para desktop/tablet, y un estilo inline le gana a una
-   regla de clase normal aunque este en un media query mas especifico. */
+   regla de clase normal aunque este en un media query mas especifico.
+   minmax(0, 1fr) y no 1fr a secas: un track "1fr" tiene un minimo implicito
+   = min-content de su contenido (no 0), asi que si la tarjeta no entra en
+   1/3 del ancho (con "Mayorista"/"Minorista" sin espacios, no puede
+   partirse en mas de una linea) el grid entero se desborda en vez de
+   encoger las columnas -- se veian las tarjetas cortadas a la derecha en
+   mobile. Con minmax(0, 1fr) las columnas se fuerzan a 1/3 real, pero eso
+   solo evita que el layout se rompa -- el precio en si seguia quedando
+   ilegible (ver .pos-price-grid/.pos-price-btn mas abajo). */
 @media (max-width: 767px) {
-  .pos-products-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 6px !important; }
+  .pos-products-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 6px !important; }
+
+  /* Con 3 columnas, la tarjeta mide ~110px -- ahi adentro, Minorista y
+     Mayorista lado a lado (la disposicion normal en desktop/tablet, ver
+     pos-price-grid inline en pos/page.tsx) le dejaban a cada precio ~35px
+     reales, y numeros como "$ 1.500" (bold, mono, 12px) no entran: se
+     superponian con el boton de al lado. Apilados, cada boton usa el
+     ancho completo de la tarjeta (~90px) y el precio entra sin achicarse. */
+  .pos-price-grid { grid-template-columns: 1fr !important; gap: 4px !important; }
+  .pos-price-btn { padding: 4px 6px !important; }
 }
 
 .pos-cart-wrap { }
@@ -568,11 +589,17 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
    contexto de scroll de cada page no rompa el sticky. left/right se fijan
    desde AppLayout (inline <style>, ver ahi) porque dependen del ancho del
    sidebar (colapsado o no) -- lo mismo que ya hace #main-content con su
-   margin-left. El padding-top que compensa la altura real del header (que
-   puede crecer a 2 lineas en mobile con title+actions largos) lo pone
-   AppLayout via --app-header-height, medido con ResizeObserver -- un valor
-   fijo a mano se hubiera desincronizado en ese caso (hueco o superposicion
-   segun para que lado se equivoque la altura estimada).
+   margin-left. El padding-top de <main> que compensa la altura real del
+   header (que puede crecer a 2 lineas en mobile con title+actions largos)
+   lo pone AppLayout inline con el headerHeight medido via ResizeObserver --
+   un valor fijo a mano se hubiera desincronizado en ese caso (hueco o
+   superposicion segun para que lado se equivoque la altura estimada). Ese
+   mismo headerHeight se expone tambien como var CSS --app-header-height en
+   el div raiz de AppLayout/PlatformAdminLayout, para que los toasts locales
+   de cada page (fixed, "debajo" del header) puedan ubicarse con
+   calc(var(--app-header-height) + Npx) en vez de un "top" fijo -- con un
+   top fijo, un header de 2 lineas en mobile terminaba tapando/superponiendo
+   el toast.
    */
 .app-header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 30;
@@ -969,3 +996,4 @@ body:has(.modal-overlay) .pwa-install-banner {
 .progress-ring { transform: rotate(-90deg); }
 .progress-ring-track { fill: none; stroke: var(--border2); }
 .progress-ring-value { fill: none; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; }
+

@@ -27,6 +27,7 @@ export const ticketController = {
       return res.status(500).json({
         ok: false,
         error: err.message || "No se pudo imprimir el ticket.",
+        code: err.code,
       });
     }
   },

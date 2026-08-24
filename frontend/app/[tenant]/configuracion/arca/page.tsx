@@ -85,13 +85,33 @@ function toDateInput(v?: string | null) {
   return toDateInputAR(v);
 }
 
-function normalizeCuit(v: string) { return v.replace(/\D/g, ''); }
-
-function parseCbteTypes(v: string) {
-  return v.split(',').map(s => Number(s.trim())).filter(n => Number.isFinite(n));
-}
+// slice(0, 11) va DESPUES de sacar los guiones/espacios -- si el limite de
+// largo se aplicara antes (ej. maxLength en el input) un CUIT pegado con
+// guiones tipo "30-71938650-0" (13 caracteres) se cortaba a los 11
+// caracteres crudos y perdia digitos reales antes de poder limpiarlos.
+function normalizeCuit(v: string) { return v.replace(/\D/g, '').slice(0, 11); }
 
 const NOW_TS = new Date().getTime();
+
+// Codigos AFIP de comprobante (ver backend/src/afip/ivaCondition.ts para
+// los de Factura -- 1/6/11 -- mas las Notas de Credito equivalentes que
+// hacen falta para devoluciones: 3/8/13). Antes se cargaban a mano como
+// texto separado por coma ("1,6,11,3,8,13"); ahora es un checklist.
+const CBTE_TYPE_OPTIONS: { code: number; label: string }[] = [
+  { code: 1, label: 'Factura A' },
+  { code: 6, label: 'Factura B' },
+  { code: 11, label: 'Factura C' },
+  { code: 3, label: 'Nota de Crédito A' },
+  { code: 8, label: 'Nota de Crédito B' },
+  { code: 13, label: 'Nota de Crédito C' },
+];
+
+function cbteTypesLabel(codes?: number[] | null) {
+  if (!codes || !codes.length) return '—';
+  return codes
+    .map((c) => CBTE_TYPE_OPTIONS.find((o) => o.code === c)?.label ?? `Cód. ${c}`)
+    .join(', ');
+}
 
 // ─── Static data ─────────────────────────────────────────────────────────────
 
@@ -135,7 +155,7 @@ const emptyFiscal = {
 
 const emptyPoint = {
   id: '', number: '', description: '', enabled: true, isDefault: true,
-  enabledCbteTypes: '1,6,11,3,8,13',
+  enabledCbteTypes: [1, 6, 11, 3, 8, 13] as number[],
 };
 
 const emptyRemitoCai = {
@@ -427,7 +447,7 @@ export default function ArcaPage() {
         description: pointForm.description || null,
         enabled: pointForm.enabled,
         isDefault: pointForm.isDefault,
-        enabledCbteTypes: parseCbteTypes(pointForm.enabledCbteTypes),
+        enabledCbteTypes: pointForm.enabledCbteTypes,
       });
       setPointForm(emptyPoint);
       const { data } = await api.get('/arca-config/puntos-venta');
@@ -586,10 +606,10 @@ export default function ArcaPage() {
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 14 }}>
               <HelpField label="Razón social *" help="Nombre legal o razón social que se imprime en los comprobantes.">
-                <input value={fiscalForm.businessName} onChange={e => fp('businessName', e.target.value)} placeholder="Grupo VJ" />
+                <input value={fiscalForm.businessName} onChange={e => fp('businessName', e.target.value)} placeholder="Mi Negocio S.R.L." />
               </HelpField>
-              <HelpField label="CUIT *" help="11 dígitos sin guiones. Ej: 30719386500">
-                <input value={fiscalForm.cuit} onChange={e => fp('cuit', normalizeCuit(e.target.value))} placeholder="30719386500" maxLength={11} />
+              <HelpField label="CUIT *" help="Podés pegarlo con guiones (ej: 30-71938650-0), se limpia solo.">
+                <input value={fiscalForm.cuit} onChange={e => fp('cuit', normalizeCuit(e.target.value))} placeholder="30719386500" />
               </HelpField>
               <HelpField label="Condición IVA" help="Condición fiscal exacta para evitar errores en comprobantes.">
                 <select value={fiscalForm.ivaCondition} onChange={e => fp('ivaCondition', e.target.value)}>
@@ -699,7 +719,7 @@ export default function ArcaPage() {
             icon={<FileText size={18} color="var(--accent3)" />}
           >
             <div style={{ background: 'rgba(13,89,231,0.07)', border: '1px solid rgba(13,89,231,0.18)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.6 }}>
-              <strong>¿Qué es un punto de venta?</strong> Es el número que ARCA asigna para emitir comprobantes. El punto <strong>0001</strong> se carga como <strong>1</strong>. Tipos comunes: <strong>1,6,11,3,8,13</strong> = Facturas A/B/C y Notas de Crédito A/B/C.
+              <strong>¿Qué es un punto de venta?</strong> Es el número que ARCA asigna para emitir comprobantes. El punto <strong>0001</strong> se carga como <strong>1</strong>. Elegí abajo qué tipos de comprobante puede emitir.
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 14, marginBottom: 14 }}>
               <HelpField label="Número de PV" help="El número dado de alta en ARCA. Si aparece como 0001, cargá 1.">
@@ -707,9 +727,6 @@ export default function ArcaPage() {
               </HelpField>
               <HelpField label="Descripción" help="Referencia interna. Ej: Local principal, Caja 1.">
                 <input value={pointForm.description} onChange={e => pp('description', e.target.value)} placeholder="Local principal" />
-              </HelpField>
-              <HelpField label="Tipos habilitados" help="Códigos separados por coma. Ej: 1,6,11,3,8,13">
-                <input value={pointForm.enabledCbteTypes} onChange={e => pp('enabledCbteTypes', e.target.value)} placeholder="1,6,11,3,8,13" />
               </HelpField>
               <div style={{ display: 'grid', gap: 10, alignContent: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer' }}>
@@ -722,6 +739,37 @@ export default function ArcaPage() {
                 </label>
               </div>
             </div>
+            <HelpField label="Tipos de comprobante habilitados" help="Qué puede emitir este punto de venta.">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: 8, marginBottom: 14 }}>
+                {CBTE_TYPE_OPTIONS.map(({ code, label }) => {
+                  const checked = pointForm.enabledCbteTypes.includes(code);
+                  return (
+                    <label
+                      key={code}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer',
+                        border: `1px solid ${checked ? 'var(--accent)' : 'var(--border2)'}`,
+                        background: checked ? 'var(--accent-dim)' : 'transparent',
+                        borderRadius: 8, padding: '8px 10px',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => pp(
+                          'enabledCbteTypes',
+                          e.target.checked
+                            ? [...pointForm.enabledCbteTypes, code]
+                            : pointForm.enabledCbteTypes.filter((c) => c !== code)
+                        )}
+                        style={{ width: 14, height: 14 }}
+                      />
+                      {label}
+                    </label>
+                  );
+                })}
+              </div>
+            </HelpField>
             <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
               <button onClick={handleSavePoint} disabled={saving} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
                 {saving ? <span className="spinner" style={{ width: 13, height: 13 }} /> : pointForm.id ? <Save size={13} /> : <Plus size={13} />}
@@ -738,7 +786,7 @@ export default function ArcaPage() {
               columns={[
                 { key: 'pv', header: 'PV', render: (pv) => <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{String(pv.number).padStart(4, '0')}</span> },
                 { key: 'descripcion', header: 'Descripción', render: (pv) => <>{pv.description ?? '—'}</> },
-                { key: 'tipos', header: 'Tipos', render: (pv) => <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{pv.enabledCbteTypes?.join(', ') ?? '—'}</span> },
+                { key: 'tipos', header: 'Tipos', render: (pv) => <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{cbteTypesLabel(pv.enabledCbteTypes)}</span> },
                 {
                   key: 'estado', header: 'Estado', render: (pv) => (
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -750,7 +798,7 @@ export default function ArcaPage() {
                 {
                   key: 'acciones', header: '', render: (pv) => (
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button onClick={() => setPointForm({ id: pv.id, number: String(pv.number), description: pv.description ?? '', enabled: pv.enabled, isDefault: pv.isDefault, enabledCbteTypes: pv.enabledCbteTypes?.join(',') ?? '' })} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
+                      <button onClick={() => setPointForm({ id: pv.id, number: String(pv.number), description: pv.description ?? '', enabled: pv.enabled, isDefault: pv.isDefault, enabledCbteTypes: pv.enabledCbteTypes ?? [] })} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
                       <button onClick={() => askDeletePoint(pv.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                     </div>
                   ),
@@ -771,10 +819,10 @@ export default function ArcaPage() {
                   </div>
                   <div className="mobile-card-row">
                     <span>Tipos</span>
-                    <span style={{ fontFamily: 'var(--mono)' }}>{pv.enabledCbteTypes?.join(', ') ?? '—'}</span>
+                    <span style={{ fontFamily: 'var(--mono)' }}>{cbteTypesLabel(pv.enabledCbteTypes)}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                    <button onClick={(e) => { e.stopPropagation(); setPointForm({ id: pv.id, number: String(pv.number), description: pv.description ?? '', enabled: pv.enabled, isDefault: pv.isDefault, enabledCbteTypes: pv.enabledCbteTypes?.join(',') ?? '' }); }} className="btn btn-ghost btn-xs" style={{ gap: 4 }}>
+                    <button onClick={(e) => { e.stopPropagation(); setPointForm({ id: pv.id, number: String(pv.number), description: pv.description ?? '', enabled: pv.enabled, isDefault: pv.isDefault, enabledCbteTypes: pv.enabledCbteTypes ?? [] }); }} className="btn btn-ghost btn-xs" style={{ gap: 4 }}>
                       <Edit2 size={12} /> Editar
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); askDeletePoint(pv.id); }} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', gap: 4 }}>

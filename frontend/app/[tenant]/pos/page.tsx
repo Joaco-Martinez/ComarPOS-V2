@@ -476,7 +476,7 @@ export default function PosPage() {
     <AppLayout title="POS — Punto de Venta">
       {successMsg && (
         <div style={{
-          position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 200,
+          position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', left: '50%', transform: 'translateX(-50%)', zIndex: 200,
           background: 'rgba(24,193,94,0.15)', border: '1px solid rgba(24,193,94,0.4)',
           color: 'var(--success)', borderRadius: 8, padding: '10px 22px',
           fontSize: 14, fontWeight: 600, animation: 'fadeIn 0.3s ease',
@@ -602,11 +602,22 @@ export default function PosPage() {
                         {categoryName(p).slice(0, 8)}
                       </span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                    {/* minmax(0, 1fr) y no 1fr: un track "1fr" no encoge por
+                        debajo del min-content de su contenido, y en la
+                        grilla mobile de 3 columnas (ver .pos-products-grid)
+                        la tarjeta es angosta -- por eso se desbordaba.
+                        Ademas, en mobile (ver .pos-price-grid/.pos-price-btn
+                        en globals.css) los dos botones pasan de lado-a-lado
+                        a apilados: aun con el ancho ya corregido, dos
+                        precios uno al lado del otro en una tarjeta de ~114px
+                        quedaban tan comprimidos que se superponian/pisaban
+                        -- apilados, cada uno usa el ancho completo de la
+                        tarjeta y el precio entra comodo. */}
+                    <div className="pos-price-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 5 }}>
                       <button
                         onClick={() => addToCart(p, 'price')}
                         disabled={noStock}
-                        className="btn btn-secondary"
+                        className="btn btn-secondary pos-price-btn"
                         style={{ flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
                         title="Agregar con precio minorista"
                       >
@@ -618,7 +629,7 @@ export default function PosPage() {
                       <button
                         onClick={() => addToCart(p, 'wholesalePrice')}
                         disabled={noStock}
-                        className="btn btn-cyan"
+                        className="btn btn-cyan pos-price-btn"
                         style={{ flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
                         title="Agregar con precio mayorista"
                       >

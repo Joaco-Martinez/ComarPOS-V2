@@ -5,11 +5,7 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { fmtDate } from '@/lib/helpers';
 import { CheckCircle2, CreditCard, LogOut, MessageCircle, RefreshCcw } from 'lucide-react';
-
-// Mismo numero que components/landing/LandingPage.tsx.
-// TODO: reemplazar por el numero real (con codigo de pais, sin +, ej: 5493511234567)
-const WHATSAPP_NUMBER = '5490000000000';
-const waLink = (extra: string) => `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(extra)}`;
+import { waLink } from '@/components/landing/siteConfig';
 
 type BillingStatus = {
   subscriptionStatus: 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED';

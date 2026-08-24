@@ -80,8 +80,14 @@ export function proxy(req: NextRequest) {
   // rubro (/para/<slug>) - son parte del sitio de marketing, públicas.
   const isSignup = pathname === '/prueba-gratis';
   const isVerticalLanding = pathname.startsWith('/para/');
+  // Legales (footer del sitio, y requisito de las tiendas de apps) y la
+  // imagen OG que genera app/opengraph-image.tsx (sin extension en la URL,
+  // asi que el matcher de mas abajo no la excluye sola como si hace con
+  // .png/.jpg reales) - todas publicas, sin login.
+  const isLegal = pathname === '/terminos' || pathname === '/privacidad';
+  const isOgImage = pathname === '/opengraph-image';
 
-  if (isInstallGuide || isSignup || isVerticalLanding) {
+  if (isInstallGuide || isSignup || isVerticalLanding || isLegal || isOgImage) {
     return NextResponse.next();
   }
 

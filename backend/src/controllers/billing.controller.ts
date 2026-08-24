@@ -5,10 +5,11 @@ import { mercadoPagoClient } from "../services/billing/mercadoPago.service";
 
 export const billingController = {
   // Publico, sin auth: lo usa la landing y /prueba-gratis para mostrar
-  // nombre/precio del plan sin hardcodearlo por duplicado en el frontend.
-  async plan(_req: Request, res: Response, next: NextFunction) {
+  // los 3 planes (nombre/precio/limites) sin hardcodearlos por duplicado
+  // en el frontend.
+  async plans(_req: Request, res: Response, next: NextFunction) {
     try {
-      res.json({ ok: true, content: billingService.plan });
+      res.json({ ok: true, content: { plans: billingService.plans, launchPriceEndsAt: billingService.launchPriceEndsAt } });
     } catch (err) {
       next(err);
     }
@@ -37,7 +38,8 @@ export const billingController = {
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
       if (!user) return res.status(404).json({ ok: false, message: "Usuario no encontrado" });
 
-      const { initPoint } = await billingService.createCheckout(tenantId, user.email);
+      const planId = typeof req.body?.planId === "string" ? req.body.planId : undefined;
+      const { initPoint } = await billingService.createCheckout(tenantId, user.email, planId);
       res.json({ ok: true, content: { initPoint } });
     } catch (err) {
       next(err);

@@ -126,7 +126,10 @@ export default function VentasPage() {
       await api.post(`/tickets/sale/${s.id}/print`);
       showToast('Ticket enviado a impresión');
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'No se pudo imprimir el ticket');
+      // El backend devuelve el mensaje en .error, no en .message (ver
+      // ticket.controller.ts) -- sin este fallback nunca se veia el
+      // mensaje real (ej. "no tenés ninguna impresora conectada").
+      showToast(err?.response?.data?.error ?? err?.response?.data?.message ?? 'No se pudo imprimir el ticket');
     } finally {
       setPrintingId(null);
     }
@@ -343,7 +346,7 @@ export default function VentasPage() {
       }
     >
       {toast && (
-        <div style={{ position: 'fixed', top: 70, right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
+        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
       )}
 
       {/* Filters */}

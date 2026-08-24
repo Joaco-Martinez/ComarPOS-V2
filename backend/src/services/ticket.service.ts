@@ -3,6 +3,7 @@ import prisma from "../prisma";
 import { tenantScope } from "../utils/tenantScope";
 import { printboxService } from "./printbox";
 import { arcaConfigService } from "./arcaConfig.service";
+import { notificationService } from "./notification.service";
 import { cbteTipoLabel } from "../afip/ivaCondition";
 import { buildNumeroComprobante } from "./facturaPdfGenerator/format";
 
@@ -417,12 +418,45 @@ async function enviarTicketAlPOSLocal(payload: any) {
   return response.data;
 }
 
+// No re-notifica si ya hay un aviso de este tipo sin leer (mismo criterio
+// que notificationService.checkOnboarding) -- si no, cada venta sin
+// impresora configurada dispara una notificacion nueva.
+async function notifyMissingPrinter(tenantId: string) {
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", tenantId },
+    select: { id: true },
+  });
+  if (!admins.length) return;
+
+  const alreadyNotified = await prisma.notification.findFirst({
+    where: {
+      tenantId,
+      type: "PRINTER_NOT_CONFIGURED",
+      isRead: false,
+      userId: { in: admins.map((u) => u.id) },
+    },
+  });
+  if (alreadyNotified) return;
+
+  await notificationService.broadcast({
+    userIds: admins.map((u) => u.id),
+    type: "PRINTER_NOT_CONFIGURED",
+    title: "No tenés ninguna impresora conectada",
+    body: "Para imprimir tickets necesitás una PrintBox. Escribinos y coordinamos el envío.",
+    data: { href: "/ayuda" },
+  });
+}
+
 export const ticketService = {
   /**
    * deviceId es opcional: si el tenant ya migró a printbox y solo tiene una
-   * caja, se resuelve solo. Si el tenant todavía no tiene ningún
-   * PrintboxDevice ACTIVE (caso de grupo-vj hoy), cae al bridge HTTP viejo
-   * (POS_LOCAL_URL) para no romper impresión que ya funciona en producción.
+   * caja, se resuelve solo. Si el tenant no tiene ningún PrintboxDevice
+   * pareado, el bridge HTTP viejo (POS_LOCAL_URL) SOLO se usa si
+   * tenant.legacyLocalPrinterEnabled -- hoy nada mas grupo-vj, que es quien
+   * realmente tiene ese bridge armado en su red. Para cualquier tenant
+   * nuevo sin PrintboxDevice, no se imprime nada (no tiene sentido pegarle
+   * al bridge de otro negocio) y en cambio se le avisa, in-app, que puede
+   * pedir su propia PrintBox -- ver notifyMissingPrinter arriba.
    */
   async printSaleTicket(saleId: string, deviceId?: string) {
     const sale = await prisma.sale.findFirst({
@@ -472,6 +506,15 @@ export const ticketService = {
         });
 
         return { payload, printJobId: job.id, via: "printbox" };
+      }
+
+      if (!sale.tenant?.legacyLocalPrinterEnabled) {
+        await notifyMissingPrinter(sale.tenantId);
+        const err: any = new Error(
+          "No tenés ninguna impresora conectada. Te avisamos dentro del sistema para que puedas pedir tu PrintBox."
+        );
+        err.code = "PRINTER_NOT_CONFIGURED";
+        throw err;
       }
     }
 

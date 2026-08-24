@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import api from '@/lib/api';
 import { normalizeArray, fmtDate } from '@/lib/helpers';
 import type { Notification } from '@/types';
-import { Bell, CheckCheck, AlertTriangle, Wallet, Target, Tag, Wallet as CashIcon, Info, Rocket } from 'lucide-react';
+import { Bell, CheckCheck, AlertTriangle, Wallet, Target, Tag, Wallet as CashIcon, Info, Rocket, Printer } from 'lucide-react';
 
 const ICONS: Record<Notification['type'], typeof AlertTriangle> = {
   LOW_STOCK: AlertTriangle,
@@ -15,6 +15,7 @@ const ICONS: Record<Notification['type'], typeof AlertTriangle> = {
   CASH_SESSION_OPEN: CashIcon,
   SYSTEM: Info,
   ONBOARDING_PENDING: Rocket,
+  PRINTER_NOT_CONFIGURED: Printer,
 };
 
 export default function NotificationsBell() {

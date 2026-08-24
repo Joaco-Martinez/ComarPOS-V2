@@ -4,8 +4,8 @@ import { authMiddleware } from "../middleware/auth";
 
 const router = Router();
 
-// Publico, sin auth: nombre/precio del plan para la landing y /prueba-gratis.
-router.get("/plan", billingController.plan);
+// Publico, sin auth: nombre/precio/limites de los 3 planes para la landing y /prueba-gratis.
+router.get("/plans", billingController.plans);
 
 // Autenticadas, pero eximidas del bloqueo por tenant suspendido/prueba
 // vencida (ver middleware/tenant.ts, isSuspensionExempt) - si no, un tenant

@@ -4,7 +4,7 @@ import {
   OrdenesCompraIcon, ProveedoresIcon, ConteoStockIcon, FinanzasIcon, GastosRecurrentesIcon,
   TipoCambioIcon, CuentasCorrientesIcon, ReportesIcon, ObjetivosVentasIcon, PromocionesIcon,
   FidelidadIcon, UsuariosIcon, AuditoriaIcon, SucursalesIcon, ArcaIcon, EmpresaIcon, PrintboxIcon,
-  GuiaIcon,
+  GuiaIcon, AyudaIcon,
   type ComarIconProps,
 } from '@/components/icons/ComarIcons';
 
@@ -24,6 +24,7 @@ export const NAV: NavItem[] = [
   { href: '/remitos',      icon: RemitosIcon,     label: 'Remitos',            color: '#00B4DB' },
   { href: '/facturacion',  icon: FacturacionIcon, label: 'AFIP / Facturas',    color: '#00B4DB' },
   { href: '/devoluciones', icon: DevolucionesIcon,label: 'Devoluciones',       color: '#F39C12' },
+  { href: '/ayuda',        icon: AyudaIcon,       label: 'Ayuda y contacto',   color: '#6474BB' },
 ];
 
 export const ADMIN_NAV: NavItem[] = [

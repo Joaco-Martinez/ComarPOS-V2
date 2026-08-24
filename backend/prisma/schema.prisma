@@ -28,6 +28,13 @@ model Tenant {
   // el ESP32 no decodifica PNG/JPEG arbitrario, necesita el bitmap ya
   // convertido y listo para mandarle a la impresora tal cual.
   logoEscposRasterBase64 String?  @db.Text
+  // Bridge HTTP viejo (POS_LOCAL_URL, ver ticket.service.ts) para imprimir
+  // sin tener ningun PrintboxDevice pareado -- pensado unicamente para el
+  // setup fisico on-prem de grupo-vj (unico backfill=true, ver migracion).
+  // Un tenant nuevo sin PrintboxDevice pareado NO debe caer a este bridge
+  // (le pegaria a la red local de grupo-vj, no a la suya): en cambio recibe
+  // una notificacion invitandolo a pedir su propia PrintBox.
+  legacyLocalPrinterEnabled Boolean @default(false)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
@@ -59,6 +66,13 @@ model Tenant {
   // adelante para nuevos suscriptores.
   mpPreapprovalId      String? @unique
   mpSubscriptionAmount Float?
+  // Id de uno de los PLANS en config/billing.ts ("esencial" | "profesional"
+  // | "multisucursal") -- default al plan recomendado (el que era el unico
+  // plan antes de tener 3), asi los tenants existentes no quedan en un
+  // plan mas chico del que ya venian usando de hecho (sucursales/usuarios
+  // sin limite). Determina el precio de checkout (billing.service.ts) y
+  // los topes de sucursales/productos/usuarios (planLimits.service.ts).
+  planId String @default("profesional")
 
   // Datos de cabecera para tickets/documentos impresos (printbox). Si son
   // null, ticket.service.ts cae a `name` para no dejar el ticket en blanco.
@@ -83,6 +97,7 @@ model Tenant {
   paymentLogs     TenantPaymentLog[]
   printboxDevices PrintboxDevice[]
   printJobs       PrintJob[]
+  pushTokens      PushToken[]
 
   users             User[]
   clients           Client[]
@@ -178,6 +193,7 @@ model User {
   notifications        Notification[]
   auditLogs            AuditLog[]
   returns              Return[]
+  pushTokens           PushToken[]
 
   @@unique([email])
   @@index([role])
@@ -1323,6 +1339,31 @@ model Notification {
   @@index([createdAt])
 }
 
+enum PushPlatform {
+  ANDROID
+  IOS
+}
+
+// Token de push nativo (FCM) de la app envuelta en Capacitor para
+// Play Store/App Store -- un usuario puede tener varios (varios
+// celulares/reinstalaciones), y un mismo token se reasigna al user que
+// lo registro ultimo si el dispositivo se reutiliza con otra cuenta
+// (ver push.service.ts#registerToken, upsert por token).
+model PushToken {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId  String?
+  tenant    Tenant?      @relation(fields: [tenantId], references: [id])
+  token     String       @unique
+  platform  PushPlatform
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([tenantId])
+}
+
 model LoyaltyAccount {
   id            String   @id @default(uuid())
   tenantId      String?
@@ -1624,4 +1665,5 @@ enum NotificationType {
   CASH_SESSION_OPEN
   SYSTEM
   ONBOARDING_PENDING
+  PRINTER_NOT_CONFIGURED
 }

@@ -20,7 +20,7 @@ export type PromotionType = 'PRODUCT_DISCOUNT' | 'CATEGORY_DISCOUNT' | 'CART_DIS
 export type PurchaseOrderStatus = 'DRAFT' | 'SENT' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED';
 export type GoalMetric = 'REVENUE' | 'GROSS_PROFIT' | 'UNITS_SOLD' | 'SALES_COUNT';
 export type StockCountStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-export type NotificationType = 'LOW_STOCK' | 'DEBT_ALERT' | 'GOAL_REACHED' | 'PROMOTION_EXPIRING' | 'CASH_SESSION_OPEN' | 'SYSTEM' | 'ONBOARDING_PENDING';
+export type NotificationType = 'LOW_STOCK' | 'DEBT_ALERT' | 'GOAL_REACHED' | 'PROMOTION_EXPIRING' | 'CASH_SESSION_OPEN' | 'SYSTEM' | 'ONBOARDING_PENDING' | 'PRINTER_NOT_CONFIGURED';
 
 export interface QuickAccessFolder {
   id: string;

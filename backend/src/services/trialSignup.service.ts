@@ -11,6 +11,7 @@ import prisma from "../prisma";
 import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { invalidateTenantCache } from "../middleware/tenant";
+import { PLANS, DEFAULT_PLAN_ID } from "../config/billing";
 
 export const TRIAL_DAYS = 7;
 
@@ -44,12 +45,15 @@ export const trialSignupService = {
     adminEmail: string;
     adminPassword: string;
     phone: string;
+    planId?: string;
   }) {
     const businessName = String(data.businessName || "").trim();
     const adminName = String(data.adminName || "").trim();
     const adminEmail = String(data.adminEmail || "").trim().toLowerCase();
     const adminPassword = String(data.adminPassword || "");
     const phone = String(data.phone || "").trim();
+    // Plan invalido/ausente -> el recomendado, nunca rechaza el alta por esto.
+    const planId = PLANS.some((p) => p.id === data.planId) ? (data.planId as string) : DEFAULT_PLAN_ID;
 
     if (!businessName) throw new Error("El nombre del negocio es obligatorio");
     if (!adminName) throw new Error("Tu nombre es obligatorio");
@@ -77,6 +81,7 @@ export const trialSignupService = {
           subscriptionStatus: "TRIAL",
           trialEndsAt,
           contactPhone: phone,
+          planId,
           notes: "Alta por prueba gratis.",
         },
       });

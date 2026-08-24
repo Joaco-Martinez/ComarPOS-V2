@@ -4,6 +4,7 @@ import { CategoryClient, Role } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { startOfDayAR, endOfDayAR } from "../utils/dateAR";
+import { planLimitsService } from "./planLimits.service";
 
 type ClientCategory = "Price" | "Cliente" | "Mayorista";
 
@@ -461,6 +462,9 @@ export const userService = {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     if (role !== Role.CLIENTE) {
+      const limitCheck = await planLimitsService.checkLimit(currentTenantId(), "users");
+      if (!limitCheck.ok) throw new Error(limitCheck.message);
+
       return prisma.user.create({
         data: {
           email,

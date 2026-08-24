@@ -3,6 +3,7 @@ import { NotificationType } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import onboardingService, { ONBOARDING_STEPS } from "./onboarding.service";
+import { pushService } from "./push.service";
 
 export const notificationService = {
   async create(data: {
@@ -12,7 +13,7 @@ export const notificationService = {
     body: string;
     data?: object;
   }) {
-    return prisma.notification.create({
+    const notif = await prisma.notification.create({
       data: {
         userId: data.userId,
         type: data.type,
@@ -22,6 +23,8 @@ export const notificationService = {
         tenantId: currentTenantId(),
       },
     });
+    await pushService.sendToUsers([data.userId], { title: data.title, body: data.body, data: data.data });
+    return notif;
   },
 
   async broadcast(data: {
@@ -31,7 +34,7 @@ export const notificationService = {
     body: string;
     data?: object;
   }) {
-    return prisma.notification.createMany({
+    const result = await prisma.notification.createMany({
       data: data.userIds.map((userId) => ({
         userId,
         type: data.type,
@@ -41,6 +44,8 @@ export const notificationService = {
         tenantId: currentTenantId(),
       })),
     });
+    await pushService.sendToUsers(data.userIds, { title: data.title, body: data.body, data: data.data });
+    return result;
   },
 
   async getForUser(userId: string, onlyUnread = false) {
@@ -112,14 +117,11 @@ export const notificationService = {
         if (min == null || Number(min) <= 0) continue;
         if (qty > Number(min)) continue;
 
-        await prisma.notification.createMany({
-          data: admins.map((u) => ({
-            userId: u.id,
-            type: "LOW_STOCK" as NotificationType,
-            title: "Stock bajo",
-            body: `${product.name}${product.sku ? ` (SKU: ${product.sku})` : ""} tiene ${qty} ${isKg ? "kg" : "unidades"} en "${row.businessLocation.name}" (mínimo: ${min}).`,
-            tenantId,
-          })),
+        await this.broadcast({
+          userIds: admins.map((u) => u.id),
+          type: "LOW_STOCK" as NotificationType,
+          title: "Stock bajo",
+          body: `${product.name}${product.sku ? ` (SKU: ${product.sku})` : ""} tiene ${qty} ${isKg ? "kg" : "unidades"} en "${row.businessLocation.name}" (mínimo: ${min}).`,
         });
         created += admins.length;
       }
@@ -157,15 +159,12 @@ export const notificationService = {
     const targets = admins.filter((u) => !notifiedIds.has(u.id));
     if (!targets.length) return { created: 0 };
 
-    await prisma.notification.createMany({
-      data: targets.map((u) => ({
-        userId: u.id,
-        type: "ONBOARDING_PENDING" as NotificationType,
-        title: "Te faltan pasos para arrancar",
-        body: `Tenés ${pendingCount} paso${pendingCount === 1 ? "" : "s"} pendiente${pendingCount === 1 ? "" : "s"} en la guía de arranque.`,
-        data: { href: "/guia" },
-        tenantId,
-      })),
+    await this.broadcast({
+      userIds: targets.map((u) => u.id),
+      type: "ONBOARDING_PENDING" as NotificationType,
+      title: "Te faltan pasos para arrancar",
+      body: `Tenés ${pendingCount} paso${pendingCount === 1 ? "" : "s"} pendiente${pendingCount === 1 ? "" : "s"} en la guía de arranque.`,
+      data: { href: "/guia" },
     });
     return { created: targets.length };
   },

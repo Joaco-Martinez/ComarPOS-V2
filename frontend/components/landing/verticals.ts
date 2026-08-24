@@ -1,6 +1,6 @@
 import {
-  ShoppingBag, PawPrint, Wrench, Cpu, Candy, Shirt, Hammer, Truck, Pill, BookOpen, Wine, Sparkles,
-  Barcode, Bell, Zap, Layers, Wallet, MapPin, ClipboardList, FileText, Clock, Boxes, CreditCard,
+  ShoppingBag, PawPrint, Cpu, Candy, Shirt, Hammer, Truck, Pill, BookOpen, Wine, Sparkles,
+  Barcode, Bell, Zap, Layers, Wallet, MapPin, FileText, Boxes, CreditCard,
   TrendingUp, Gift, Percent, Tag,
   type LucideIcon,
 } from 'lucide-react';
@@ -55,22 +55,6 @@ export const VERTICALS: Vertical[] = [
       { icon: Wallet, title: 'Cuenta corriente de clientes', desc: 'Llevás el saldo de tus clientes frecuentes sin usar una libreta aparte.' },
       { icon: Bell, title: 'Alertas de stock', desc: 'Te avisa cuándo reponer antes de quedarte sin lo que más se vende.' },
       { icon: MapPin, title: 'Multi-sucursal', desc: 'Si tenés más de un local, cada uno con su propio stock y caja.' },
-    ],
-  },
-  {
-    slug: 'talleres-mecanicos',
-    icon: Wrench,
-    label: 'Talleres mecánicos',
-    headline: 'taller',
-    heroDescription: 'ComarPOS arma el presupuesto con repuestos y mano de obra, factura el trabajo terminado y guarda el historial de cada cliente.',
-    problemTitle: 'Pensado para talleres mecánicos',
-    problemDescription: 'Cada trabajo mezcla repuestos, mano de obra y, muchas veces, la promesa de "te lo facturo cuando lo retirás". ComarPOS arma el presupuesto, lo convierte en factura cuando el auto sale del taller y guarda el historial de cada cliente para la próxima visita.',
-    tags: ['Presupuestos', 'Factura al entregar', 'Historial por cliente', 'Cuenta corriente'],
-    features: [
-      { icon: ClipboardList, title: 'Presupuestos', desc: 'Armás el presupuesto con repuestos y mano de obra antes de arrancar el trabajo.' },
-      { icon: FileText, title: 'Factura al entregar', desc: 'Convertís el presupuesto en factura en el momento en que el auto sale del taller.' },
-      { icon: Clock, title: 'Historial por cliente', desc: 'Guardás cada trabajo hecho, para saber qué se le hizo a cada auto y cuándo.' },
-      { icon: Wallet, title: 'Cuenta corriente', desc: 'Para los clientes que pagan cuando retiran, sin perder el registro.' },
     ],
   },
   {

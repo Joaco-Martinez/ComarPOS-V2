@@ -2,6 +2,7 @@ import prisma from "../prisma";
 import { BusinessLocationType } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import { planLimitsService } from "./planLimits.service";
 
 function cleanString(value?: string | null) {
   const text = String(value || "").trim();
@@ -101,6 +102,9 @@ export const businessLocationService = {
     if (!name) {
       throw new Error("El nombre de la sucursal/depósito es obligatorio");
     }
+
+    const limitCheck = await planLimitsService.checkLimit(currentTenantId(), "businessLocations");
+    if (!limitCheck.ok) throw new Error(limitCheck.message);
 
     validateCoordinates(data.latitude, data.longitude);
 

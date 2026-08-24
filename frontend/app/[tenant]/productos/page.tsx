@@ -174,7 +174,7 @@ export default function ProductosPage() {
       }
     >
       {toast && (
-        <div style={{ position: 'fixed', top: 70, right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
           {toast}
         </div>
       )}

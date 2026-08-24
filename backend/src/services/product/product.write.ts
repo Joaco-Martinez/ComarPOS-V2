@@ -9,6 +9,7 @@ import cloudinary from "../../config/cloudinary";
 import alertService from "../alert.service";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
+import { planLimitsService } from "../planLimits.service";
 import {
   normalizeSku,
   toNumberOrNull,
@@ -37,6 +38,12 @@ export async function create(data: CreateProductInput) {
 
   if (!sku) {
     return { statusCode: 400, message: "El SKU no puede quedar vacío" };
+  }
+
+  const limitCheck = await planLimitsService.checkLimit(currentTenantId(), "products");
+  if (!limitCheck.ok) {
+    safeDeleteLocalFile(data.file?.path);
+    return { statusCode: 403, message: limitCheck.message };
   }
 
   const type: ProductType = (data.type as ProductType) ?? ProductType.SIMPLE;

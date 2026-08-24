@@ -51,7 +51,7 @@ export default function PlatformAdminLayout({ children, title, subtitle, actions
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', ['--app-header-height' as string]: `${headerHeight}px` }}>
       <header ref={headerRef} className="app-header">
         <Link href="/platform-admin" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'var(--text)', minWidth: 0, overflow: 'hidden' }}>
           <ShieldCheck size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />

@@ -7,13 +7,11 @@ import TiltCard from './TiltCard';
 import Reveal from './Reveal';
 import LandingFade from './LandingFade';
 import RubroPill from './RubroPill';
+import SiteFooter from './SiteFooter';
+import LandingChatWidget from './LandingChatWidget';
+import { waLink } from './siteConfig';
 import { VERTICALS, type Vertical } from './verticals';
-
-// TODO: reemplazar por el número real (con código de país, sin +, ej: 5493511234567)
-const WHATSAPP_NUMBER = '5490000000000';
-const WHATSAPP_MESSAGE = '¡Hola! Quiero conocer más sobre ComarPOS para mi negocio.';
-const waLink = (extra?: string) =>
-  `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(extra ?? WHATSAPP_MESSAGE)}`;
+import { PLANS, LAUNCH_PRICE_ENDS_LABEL } from './plans';
 
 const CTA_LABEL = 'Pedir una demo por WhatsApp';
 
@@ -22,14 +20,6 @@ const NAV_LINKS = [
   { href: '#rubros', label: 'Rubros' },
   { href: '#planes', label: 'Planes' },
   { href: '#preguntas', label: 'Preguntas frecuentes' },
-];
-
-// Mantener en sync con backend/src/config/billing.ts (PLAN.priceArs).
-const PLAN_PRICE_ARS = 35000;
-const PLAN_PERKS = [
-  'Punto de venta, facturación AFIP, stock, caja y reportes incluidos',
-  'Usuarios y sucursales sin límite',
-  'Precio de lanzamiento fijo de por vida, por tiempo limitado',
 ];
 
 const ALL_BUSINESS_TYPES: Array<{ slug: string | null; icon: typeof Store; label: string }> = [
@@ -71,6 +61,7 @@ function Eyebrow({ children, align = 'center' }: { children: React.ReactNode; al
 
 export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) {
   return (
+    <>
     <LandingFade className="landing-root" style={{ background: 'var(--bg)', color: 'var(--text)', minHeight: '100vh', position: 'relative', overflowX: 'hidden', maxWidth: '100vw', contain: 'paint' }}>
       {/* Ambient glow (no grid technique: warm, soft, not "dev tool") */}
       <div style={{
@@ -287,50 +278,79 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
       <Section id="planes" style={{ padding: '0 24px 96px' }}>
         <Eyebrow>PLANES</Eyebrow>
         <h2 style={{ fontSize: 28, fontWeight: 800, textAlign: 'center', marginBottom: 12, letterSpacing: '-0.01em' }}>
-          Un plan simple, para cualquier rubro
+          Un plan para cada tamaño de negocio
         </h2>
-        <p style={{ fontSize: 14.5, color: 'var(--text3)', textAlign: 'center', marginBottom: 40, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
-          Sin planes escalonados ni letra chica: un solo precio con todo incluido. Probalo gratis
-          o suscribite directamente si ya lo tenés decidido.
+        <p style={{ fontSize: 14.5, color: 'var(--text3)', textAlign: 'center', marginBottom: 12, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
+          Probalo gratis 7 días con cualquier plan, o suscribite directamente si ya lo tenés decidido.
         </p>
-        <Reveal>
-          <TiltCard className="card" style={{
-            maxWidth: 460, margin: '0 auto', padding: '36px 32px', textAlign: 'center',
-            background: 'linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%)',
-          }}>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700,
-              color: 'var(--accent)', background: 'var(--accent-dim)', border: '1px solid var(--border2)',
-              borderRadius: 999, padding: '5px 12px', marginBottom: 18, fontFamily: 'var(--mono)',
-            }}>
-              PRECIO DE LANZAMIENTO
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 6, marginBottom: 6 }}>
-              <span style={{ fontSize: 42, fontWeight: 800, letterSpacing: '-0.02em', fontFamily: 'var(--mono)' }}>
-                ${PLAN_PRICE_ARS.toLocaleString('es-AR')}
-              </span>
-              <span style={{ fontSize: 15, color: 'var(--text3)', fontWeight: 600 }}>/mes</span>
-            </div>
-            <p style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 24 }}>
-              Fijo de por vida para quien se suscribe ahora, por tiempo limitado
-            </p>
-            <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left', marginBottom: 28 }}>
-              {PLAN_PERKS.map((p) => (
-                <li key={p} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.5 }}>
-                  <CheckCircle2 size={16} style={{ color: 'var(--success)', flexShrink: 0, marginTop: 1 }} /> {p}
-                </li>
-              ))}
-            </ul>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-              <a href="/prueba-gratis" className="btn btn-primary btn-lg" style={{ gap: 8, flex: '1 1 auto' }}>
-                Probar gratis 7 días <ArrowRight size={16} />
-              </a>
-              <a href="/prueba-gratis?plan=directo" className="btn btn-secondary btn-lg" style={{ flex: '1 1 auto' }}>
-                Elegir este plan ahora
-              </a>
-            </div>
-          </TiltCard>
-        </Reveal>
+        <p style={{ fontSize: 12.5, color: 'var(--accent)', fontWeight: 700, textAlign: 'center', marginBottom: 40, fontFamily: 'var(--mono)' }}>
+          Precio de lanzamiento válido hasta el {LAUNCH_PRICE_ENDS_LABEL} — después pasa al precio de lista
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, alignItems: 'start', maxWidth: 1000, margin: '0 auto' }}>
+          {PLANS.map((plan, i) => (
+            <Reveal key={plan.id} delay={i * 0.06}>
+              <TiltCard className="card" style={{
+                padding: '32px 26px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column',
+                position: 'relative',
+                ...(plan.highlighted
+                  ? { border: '1.5px solid var(--accent)', background: 'linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%)', transform: 'scale(1.03)', boxShadow: '0 16px 40px rgba(13,89,231,0.18)' }
+                  : {}),
+              }}>
+                {plan.highlighted && (
+                  <div style={{
+                    position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)',
+                    background: 'var(--accent)', color: '#fff', fontSize: 10.5, fontWeight: 800,
+                    letterSpacing: 0.5, padding: '5px 14px', borderRadius: 999, fontFamily: 'var(--mono)',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    ⭐ EL MÁS ELEGIDO
+                  </div>
+                )}
+
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 4, marginTop: plan.highlighted ? 6 : 0 }}>
+                  {plan.name}
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 18, minHeight: 32 }}>{plan.tagline}</p>
+
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 7, marginBottom: 2 }}>
+                  <span style={{ fontSize: 14, color: 'var(--text3)', textDecoration: 'line-through', fontFamily: 'var(--mono)' }}>
+                    ${plan.regularPriceArs.toLocaleString('es-AR')}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', fontFamily: 'var(--mono)', color: 'var(--text)' }}>
+                    ${plan.priceArs.toLocaleString('es-AR')}
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}>/mes</span>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 22 }}>
+                  Precio de lanzamiento, fijo de por vida
+                </p>
+
+                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9, textAlign: 'left', marginBottom: 24, flex: 1 }}>
+                  {plan.perks.map((p) => (
+                    <li key={p} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--text2)', lineHeight: 1.5 }}>
+                      <CheckCircle2 size={15} style={{ color: 'var(--success)', flexShrink: 0, marginTop: 1 }} /> {p}
+                    </li>
+                  ))}
+                </ul>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <a
+                    href={`/prueba-gratis?planId=${plan.id}`}
+                    className={plan.highlighted ? 'btn btn-primary' : 'btn btn-secondary'}
+                    style={{ gap: 8, justifyContent: 'center' }}
+                  >
+                    Probar gratis 7 días <ArrowRight size={14} />
+                  </a>
+                  <a href={`/prueba-gratis?planId=${plan.id}&plan=directo`} className="btn btn-ghost btn-sm" style={{ justifyContent: 'center' }}>
+                    Elegir este plan ahora
+                  </a>
+                </div>
+              </TiltCard>
+            </Reveal>
+          ))}
+        </div>
       </Section>
 
       {/* FAQ */}
@@ -406,43 +426,18 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
         </Reveal>
       </Section>
 
-      {/* Footer */}
-      <footer style={{ borderTop: '1px solid var(--border)', padding: '40px 24px 24px', position: 'relative' }}>
-        <Section style={{ display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
-          <div style={{ maxWidth: 280 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 14 }}>
-              <img src="/brand/isologo.png" alt="ComarPOS" width={40} height={40} style={{ objectFit: 'contain' }} />
-              <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.6, color: 'var(--text)' }}>
-                omar<span style={{ color: 'var(--accent)' }}>POS</span>
-              </span>
-            </div>
-            <p style={{ fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.6 }}>
-              Sistema de gestión (ERP + punto de venta) para comercios de cualquier rubro,
-              con facturación electrónica AFIP integrada.
-            </p>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: 1, marginBottom: 10, fontFamily: 'var(--mono)' }}>PRODUCTO</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {NAV_LINKS.map((l) => (
-                <a key={l.href} href={l.href} style={{ fontSize: 13, color: 'var(--text2)' }}>{l.label}</a>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: 1, marginBottom: 10, fontFamily: 'var(--mono)' }}>CONTACTO</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <a href={waLink()} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: 'var(--text2)' }}>WhatsApp</a>
-              <a href="/login" style={{ fontSize: 13, color: 'var(--text2)' }}>Ya soy cliente, iniciar sesión</a>
-            </div>
-          </div>
-        </Section>
-        <Section style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-          <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
-            © {new Date().getFullYear()} ComarPOS · Sistema de gestión para comercios
-          </span>
-        </Section>
-      </footer>
+      <SiteFooter productLinks={NAV_LINKS} />
     </LandingFade>
+    {/* Fuera de LandingFade a proposito: LandingFade anima con `transform`
+        (translateY), y CUALQUIER transform en un ancestro -- incluso
+        translateY(0) en reposo -- crea un containing block nuevo para sus
+        descendientes position:fixed. El widget quedaba "fixed" respecto a
+        LandingFade (alto = toda la pagina, ~7000px) en vez del viewport, y
+        terminaba renderizado bien abajo del scroll, invisible. Mismo bug
+        que .animate-fade-opacity ya evita a proposito (ver ese comentario
+        en globals.css) -- ahi la solucion fue no usar transform; aca es mas
+        simple sacar el widget de adentro del contenedor animado. */}
+    <LandingChatWidget />
+    </>
   );
 }

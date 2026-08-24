@@ -4,7 +4,7 @@ import { trialSignupService } from "../services/trialSignup.service";
 export const trialSignupController = {
   async signup(req: Request, res: Response, next: NextFunction) {
     try {
-      const { businessName, adminName, adminEmail, adminPassword, phone } = req.body;
+      const { businessName, adminName, adminEmail, adminPassword, phone, planId } = req.body;
 
       const { tenant } = await trialSignupService.signup({
         businessName,
@@ -12,6 +12,7 @@ export const trialSignupController = {
         adminEmail,
         adminPassword,
         phone,
+        planId,
       });
 
       res.status(201).json({
