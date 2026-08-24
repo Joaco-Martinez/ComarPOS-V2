@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
 import { fmtDate, fmtMoney, normalizeArray } from '@/lib/helpers';
 import { todayInputAR, toDateInputAR } from '@/lib/dateAR';
@@ -66,6 +67,7 @@ export default function GastosRecurrentesPage() {
   const [editing, setEditing] = useState<RecurringExpense | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState('');
 
@@ -114,13 +116,18 @@ export default function GastosRecurrentesPage() {
   };
 
   const del = async (id: string) => {
-    if (!confirm('¿Eliminar este gasto recurrente?')) return;
     try {
       await api.delete(`/recurring-expenses/${id}`);
       showToast('Eliminado');
       load();
     } catch { showToast('Error al eliminar'); }
   };
+
+  const askDel = (id: string) => setConfirmState({
+    title: 'Eliminar gasto recurrente',
+    message: '¿Eliminar este gasto recurrente?',
+    onConfirm: () => del(id),
+  });
 
   const processDue = async () => {
     setProcessing(true);
@@ -201,7 +208,7 @@ export default function GastosRecurrentesPage() {
                 key: 'acciones', header: '', render: (e) => (
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button onClick={() => openEdit(e)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
-                    <button onClick={() => del(e.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                    <button onClick={() => askDel(e.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                   </div>
                 ),
               },
@@ -228,7 +235,7 @@ export default function GastosRecurrentesPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                   <button onClick={() => openEdit(e)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
-                  <button onClick={() => del(e.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                  <button onClick={() => askDel(e.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                 </div>
               </div>
             )}
@@ -282,6 +289,7 @@ export default function GastosRecurrentesPage() {
           </div>
         </div>
       )}
+      <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
     </AppLayout>
   );
 }

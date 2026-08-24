@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
 import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, Product, ProductCategory, SalePayment } from '@/types';
 import { categoryName, clientName, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
@@ -16,7 +17,6 @@ const DELIVERY_SKU = 'ENVIO-FLETE2';
 const PAGE_SIZE = 60;
 const SKU_SCANNER_ELEMENT_ID = 'comarpos-pos-sku-scanner';
 
-type StockLocation = 'LOCAL' | 'DEPOSITO';
 type QuickPriceType = 'price' | 'wholesalePrice';
 
 type DeliveryMethod = 'PICKUP' | 'LOCAL_DELIVERY';
@@ -41,7 +41,6 @@ const ALL_METHODS: { method: PaymentMode; label: string; icon: React.ReactNode }
 ];
 
 type KgModal = { product: Product; qty: string; priceType: QuickPriceType } | null;
-type ConfirmState = { title: string; message: string; onConfirm: () => void } | null;
 
 export default function PosPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -53,7 +52,7 @@ export default function PosPage() {
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<string>('');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [stockLocation, setStockLocation] = useState<StockLocation>('LOCAL');
+  const [stockLocationId, setStockLocationId] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientSearch, setClientSearch] = useState('');
@@ -64,7 +63,7 @@ export default function PosPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
   const [payments, setPayments] = useState<SalePayment[]>([{ method: 'EFECTIVO', amount: 0 }]);
   const [kgModal, setKgModal] = useState<KgModal>(null);
-  const [confirm, setConfirm] = useState<ConfirmState>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [showMobileCart, setShowMobileCart] = useState(false);
 
@@ -101,7 +100,9 @@ export default function PosPage() {
         if (blr) {
           const locations = normalizeArray<BusinessLocation>(blr.data).filter((l) => l.isActive);
           setBusinessLocations(locations);
-          setDeliveryLocationId(locations.find((l) => l.isDefault)?.id ?? locations[0]?.id ?? '');
+          const defaultId = locations.find((l) => l.isDefault)?.id ?? locations[0]?.id ?? '';
+          setDeliveryLocationId(defaultId);
+          setStockLocationId(defaultId);
         }
       } finally {
         setLoading(false);
@@ -123,7 +124,7 @@ export default function PosPage() {
   // Reset pagination whenever the visible set changes, so "Ver más" always starts from the top.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [search, catFilter, stockLocation]);
+  }, [search, catFilter, stockLocationId]);
 
   const visibleProducts = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
@@ -138,8 +139,9 @@ export default function PosPage() {
   }, [clients, clientSearch]);
 
   const productStock = (p: Product) => {
-    if (p.saleUnit === 'KG') return num(stockLocation === 'DEPOSITO' ? p.stockDepositoKg : p.stockLocalKg);
-    return num(stockLocation === 'DEPOSITO' ? p.stockDeposito : p.stockLocal);
+    const row = p.stock?.find((s) => s.businessLocationId === stockLocationId);
+    if (!row) return 0;
+    return num(p.saleUnit === 'KG' ? row.quantityKg : row.quantity);
   };
 
   const addToCart = (product: Product, priceType: QuickPriceType) => {
@@ -401,6 +403,10 @@ export default function PosPage() {
 
   const submitSale = async (status: 'COMPLETED' | 'PENDING') => {
     if (cart.length === 0) return;
+    if (!stockLocationId) {
+      alert('Elegí de qué ubicación sale el stock antes de confirmar la venta. Si no hay ninguna creada, configurá una en Sucursales.');
+      return;
+    }
     if (status === 'COMPLETED') {
       if (paymentMode === 'single' && paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient) {
         alert('Para vender en cuenta corriente tenés que elegir un cliente.');
@@ -428,7 +434,7 @@ export default function PosPage() {
         items,
         receiptType: 'TICKET',
         status,
-        stockLocation,
+        stockLocationId,
         paymentMethod: paymentMode === 'single' ? paymentMethod : payments[0].method,
         ...(paymentMode === 'multi' && {
           payments: payments.filter((p) => num(p.amount) > 0).map((p) => ({ method: p.method, amount: num(p.amount) })),
@@ -510,22 +516,24 @@ export default function PosPage() {
           </div>
 
           {/* Stock location */}
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            <button
-              onClick={() => setStockLocation('LOCAL')}
-              className={`btn btn-xs ${stockLocation === 'LOCAL' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ flex: 1, gap: 5 }}
-            >
-              <Warehouse size={11} /> Stock: Local
-            </button>
-            <button
-              onClick={() => setStockLocation('DEPOSITO')}
-              className={`btn btn-xs ${stockLocation === 'DEPOSITO' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ flex: 1, gap: 5 }}
-            >
-              <Warehouse size={11} /> Stock: Depósito
-            </button>
-          </div>
+          {businessLocations.length === 0 ? (
+            <div style={{ fontSize: 11, color: 'var(--danger)', flexShrink: 0 }}>
+              No hay ubicaciones de stock configuradas — creá una en Sucursales antes de vender.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flexShrink: 0, paddingBottom: 2 }}>
+              {businessLocations.map((loc) => (
+                <button
+                  key={loc.id}
+                  onClick={() => setStockLocationId(loc.id)}
+                  className={`btn btn-xs ${stockLocationId === loc.id ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flexShrink: 0, gap: 5, whiteSpace: 'nowrap' }}
+                >
+                  <Warehouse size={11} /> Stock: {loc.name}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Categories */}
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, paddingBottom: 2 }}>
@@ -557,7 +565,8 @@ export default function PosPage() {
             ) : (
               visibleProducts.map((p) => {
                 const stock = productStock(p);
-                const minStock = num(p.saleUnit === 'KG' ? p.minStockKg : p.minStock);
+                const stockRow = p.stock?.find((s) => s.businessLocationId === stockLocationId);
+                const minStock = num(p.saleUnit === 'KG' ? stockRow?.minQuantityKg : stockRow?.minQuantity);
                 const lowStock = stock <= minStock && minStock > 0;
                 const noStock = p.saleUnit !== 'KG' && stock <= 0 && !p.isService;
                 const retailPrice = productPrice(p, 'price');
@@ -654,7 +663,7 @@ export default function PosPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {cart.length > 0 && (
                 <button
-                  onClick={() => setConfirm({ title: 'Limpiar carrito', message: '¿Vaciar el carrito?', onConfirm: resetPOS })}
+                  onClick={() => setConfirmState({ title: 'Limpiar carrito', message: '¿Vaciar el carrito?', onConfirm: resetPOS })}
                   className="btn btn-ghost btn-xs"
                   style={{ color: 'var(--danger)', gap: 4 }}
                 >
@@ -1091,22 +1100,7 @@ export default function PosPage() {
         </div>
       )}
 
-      {/* Confirm Modal */}
-      {confirm && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 340 }}>
-            <div className="modal-header">
-              <span style={{ fontWeight: 700 }}>{confirm.title}</span>
-              <button onClick={() => setConfirm(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
-            </div>
-            <div className="modal-body"><p style={{ fontSize: 14, color: 'var(--text2)' }}>{confirm.message}</p></div>
-            <div className="modal-footer">
-              <button onClick={() => setConfirm(null)} className="btn btn-secondary btn-sm">Cancelar</button>
-              <button onClick={() => { confirm.onConfirm(); setConfirm(null); }} className="btn btn-danger btn-sm">Confirmar</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
     </AppLayout>
   );
 }

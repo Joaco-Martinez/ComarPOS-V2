@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -27,6 +28,7 @@ export default function TipoCambioPage() {
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [toast, setToast] = useState('');
 
   // Converter state
@@ -67,13 +69,18 @@ export default function TipoCambioPage() {
   };
 
   const del = async (id: string) => {
-    if (!confirm('¿Eliminar este registro de tipo de cambio?')) return;
     try {
       await api.delete(`/exchange-rates/${id}`);
       showToast('Eliminado');
       load();
     } catch { showToast('Error al eliminar'); }
   };
+
+  const askDel = (id: string) => setConfirmState({
+    title: 'Eliminar tipo de cambio',
+    message: '¿Eliminar este registro de tipo de cambio?',
+    onConfirm: () => del(id),
+  });
 
   const convert = async () => {
     if (!convAmount) return;
@@ -189,7 +196,7 @@ export default function TipoCambioPage() {
               { key: 'notas', header: 'Notas', render: (r) => <span style={{ fontSize: 12, color: 'var(--text3)' }}>{r.source ?? '—'}</span> },
               {
                 key: 'acciones', header: '', render: (r) => (
-                  <button onClick={() => del(r.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                  <button onClick={() => askDel(r.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                 ),
               },
             ] as ResponsiveTableColumn<ExchangeRate>[]}
@@ -209,7 +216,7 @@ export default function TipoCambioPage() {
                     <span>{r.source}</span>
                   </div>
                 )}
-                <button onClick={() => del(r.id)} className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', color: 'var(--danger)', gap: 6 }}>
+                <button onClick={() => askDel(r.id)} className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', color: 'var(--danger)', gap: 6 }}>
                   <Trash2 size={13} /> Eliminar
                 </button>
               </div>
@@ -252,6 +259,7 @@ export default function TipoCambioPage() {
           </div>
         </div>
       )}
+      <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
     </AppLayout>
   );
 }

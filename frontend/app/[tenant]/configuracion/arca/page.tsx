@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
 import { toDateInputAR, formatDateAR, formatDateTimeAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -205,6 +206,7 @@ function StatusChip({ tone, children }: { tone: 'green' | 'red' | 'yellow' | 'bl
 export default function ArcaPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [savingFiscal, setSavingFiscal] = useState(false);
 
   const [config, setConfig]       = useState<ArcaConfig | null>(null);
@@ -364,8 +366,15 @@ export default function ArcaPage() {
     finally { setSaving(false); }
   }
 
+  function askDeleteCertificates() {
+    setConfirmState({
+      title: 'Eliminar certificados',
+      message: '¿Seguro querés eliminar los certificados?',
+      onConfirm: handleDeleteCertificates,
+    });
+  }
+
   async function handleDeleteCertificates() {
-    if (!confirm('¿Seguro querés eliminar los certificados?')) return;
     setSaving(true);
     try {
       const { data } = await api.delete('/arca-config/certificados');
@@ -430,8 +439,15 @@ export default function ArcaPage() {
     finally { setSaving(false); }
   }
 
+  function askDeletePoint(id: string) {
+    setConfirmState({
+      title: 'Eliminar punto de venta',
+      message: '¿Eliminar este punto de venta?',
+      onConfirm: () => handleDeletePoint(id),
+    });
+  }
+
   async function handleDeletePoint(id: string) {
-    if (!confirm('¿Eliminar este punto de venta?')) return;
     setSaving(true);
     try {
       await api.delete(`/arca-config/puntos-venta/${id}`);
@@ -472,8 +488,15 @@ export default function ArcaPage() {
     finally { setSaving(false); }
   }
 
+  function askDeleteRemitoCai(id: string) {
+    setConfirmState({
+      title: 'Eliminar CAI de remitos',
+      message: '¿Eliminar este CAI de remitos?',
+      onConfirm: () => handleDeleteRemitoCai(id),
+    });
+  }
+
   async function handleDeleteRemitoCai(id: string) {
-    if (!confirm('¿Eliminar este CAI de remitos?')) return;
     setSaving(true);
     try {
       await api.delete(`/arca-config/remitos-cai/${id}`);
@@ -645,7 +668,7 @@ export default function ArcaPage() {
               <button onClick={handleTestWsfe} disabled={saving} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
                 <CheckCircle2 size={13} /> Test WSFE
               </button>
-              <button onClick={handleDeleteCertificates} disabled={saving} className="btn btn-danger btn-sm" style={{ gap: 6 }}>
+              <button onClick={askDeleteCertificates} disabled={saving} className="btn btn-danger btn-sm" style={{ gap: 6 }}>
                 <XCircle size={13} /> Borrar certificados
               </button>
             </div>
@@ -728,7 +751,7 @@ export default function ArcaPage() {
                   key: 'acciones', header: '', render: (pv) => (
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button onClick={() => setPointForm({ id: pv.id, number: String(pv.number), description: pv.description ?? '', enabled: pv.enabled, isDefault: pv.isDefault, enabledCbteTypes: pv.enabledCbteTypes?.join(',') ?? '' })} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
-                      <button onClick={() => handleDeletePoint(pv.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                      <button onClick={() => askDeletePoint(pv.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                     </div>
                   ),
                 },
@@ -754,7 +777,7 @@ export default function ArcaPage() {
                     <button onClick={(e) => { e.stopPropagation(); setPointForm({ id: pv.id, number: String(pv.number), description: pv.description ?? '', enabled: pv.enabled, isDefault: pv.isDefault, enabledCbteTypes: pv.enabledCbteTypes?.join(',') ?? '' }); }} className="btn btn-ghost btn-xs" style={{ gap: 4 }}>
                       <Edit2 size={12} /> Editar
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDeletePoint(pv.id); }} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', gap: 4 }}>
+                    <button onClick={(e) => { e.stopPropagation(); askDeletePoint(pv.id); }} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', gap: 4 }}>
                       <Trash2 size={12} /> Eliminar
                     </button>
                   </div>
@@ -835,7 +858,7 @@ export default function ArcaPage() {
                         onClick={() => setRemitoCaiForm({ id: item.id, mode: item.mode, pointOfSale: String(item.pointOfSale), cai: item.cai, expiresAt: toDateInput(item.expiresAt), rangeFrom: String(item.rangeFrom ?? ''), rangeTo: String(item.rangeTo ?? ''), nextNumber: String(item.nextNumber ?? ''), enabled: item.enabled })}
                         className="btn btn-ghost btn-xs"
                       ><Edit2 size={12} /></button>
-                      <button onClick={() => handleDeleteRemitoCai(item.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                      <button onClick={() => askDeleteRemitoCai(item.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                     </div>
                   ),
                 },
@@ -871,7 +894,7 @@ export default function ArcaPage() {
                         onClick={(e) => { e.stopPropagation(); setRemitoCaiForm({ id: item.id, mode: item.mode, pointOfSale: String(item.pointOfSale), cai: item.cai, expiresAt: toDateInput(item.expiresAt), rangeFrom: String(item.rangeFrom ?? ''), rangeTo: String(item.rangeTo ?? ''), nextNumber: String(item.nextNumber ?? ''), enabled: item.enabled }); }}
                         className="btn btn-ghost btn-xs" style={{ gap: 4 }}
                       ><Edit2 size={12} /> Editar</button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteRemitoCai(item.id); }} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', gap: 4 }}>
+                      <button onClick={(e) => { e.stopPropagation(); askDeleteRemitoCai(item.id); }} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', gap: 4 }}>
                         <Trash2 size={12} /> Eliminar
                       </button>
                     </div>
@@ -883,6 +906,7 @@ export default function ArcaPage() {
 
         </div>
       )}
+      <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
     </AppLayout>
   );
 }

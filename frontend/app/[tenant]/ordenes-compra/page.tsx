@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { todayInputAR } from '@/lib/dateAR';
@@ -40,6 +41,7 @@ export default function OrdenesCompraPage() {
   const [form, setForm] = useState({ supplierId: '', expectedDate: '', notes: '' });
   const [items, setItems] = useState<{ productId: string; quantityOrdered: string; unitCost: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
   // Receive form
   const [receiveItems, setReceiveItems] = useState<Record<string, string>>({});
@@ -133,13 +135,18 @@ export default function OrdenesCompraPage() {
   };
 
   const del = async (id: string) => {
-    if (!confirm('¿Eliminar esta orden?')) return;
     try {
       await api.delete(`/purchase-orders/${id}`);
       showToast('Orden eliminada');
       load();
     } catch { showToast('Error al eliminar'); }
   };
+
+  const askDel = (id: string) => setConfirmState({
+    title: 'Eliminar orden',
+    message: '¿Eliminar esta orden?',
+    onConfirm: () => del(id),
+  });
 
   const estimatedTotal = (ord: any) =>
     (ord.items ?? []).reduce((a: number, it: any) => a + num(it.unitCost) * num(it.quantityOrdered), 0);
@@ -202,7 +209,7 @@ export default function OrdenesCompraPage() {
                     {ord.status !== 'CANCELLED' && ord.status !== 'RECEIVED' && (
                       <button className="btn btn-ghost btn-sm" onClick={() => changeStatus(ord.id, 'SENT')} title="Marcar como enviada" style={{ color: 'var(--accent2)' }}><ClipboardList size={13} /></button>
                     )}
-                    <button className="btn btn-danger btn-sm" onClick={() => del(ord.id)} title="Eliminar"><Trash2 size={13} /></button>
+                    <button className="btn btn-danger btn-sm" onClick={() => askDel(ord.id)} title="Eliminar"><Trash2 size={13} /></button>
                   </div>
                 ),
               },
@@ -234,7 +241,7 @@ export default function OrdenesCompraPage() {
                   {ord.status !== 'CANCELLED' && ord.status !== 'RECEIVED' && (
                     <button className="btn btn-ghost btn-sm" onClick={() => changeStatus(ord.id, 'SENT')} title="Marcar como enviada" style={{ color: 'var(--accent2)' }}><ClipboardList size={13} /></button>
                   )}
-                  <button className="btn btn-danger btn-sm" onClick={() => del(ord.id)} title="Eliminar"><Trash2 size={13} /></button>
+                  <button className="btn btn-danger btn-sm" onClick={() => askDel(ord.id)} title="Eliminar"><Trash2 size={13} /></button>
                 </div>
               </div>
             )}
@@ -378,6 +385,7 @@ export default function OrdenesCompraPage() {
           </div>
         </div>
       )}
+      <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
     </AppLayout>
   );
 }

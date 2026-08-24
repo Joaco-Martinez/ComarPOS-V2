@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
@@ -67,6 +68,7 @@ export default function ObjetivosVentasPage() {
   const [editing, setEditing] = useState<Goal | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [toast, setToast] = useState('');
 
   const load = async () => {
@@ -122,13 +124,18 @@ export default function ObjetivosVentasPage() {
   };
 
   const del = async (id: string) => {
-    if (!confirm('¿Eliminar este objetivo?')) return;
     try {
       await api.delete(`/sales-goals/${id}`);
       showToast('Objetivo eliminado');
       load();
     } catch { showToast('Error al eliminar'); }
   };
+
+  const askDel = (id: string) => setConfirmState({
+    title: 'Eliminar objetivo',
+    message: '¿Eliminar este objetivo?',
+    onConfirm: () => del(id),
+  });
 
   const activeProgresses = progresses.filter((p) => goalStatus(p.goal, p.progressPercent) === 'EN_CURSO');
 
@@ -222,7 +229,7 @@ export default function ObjetivosVentasPage() {
                 key: 'acciones', header: '', render: (p) => (
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button onClick={() => openEdit(p.goal)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
-                    <button onClick={() => del(p.goal.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                    <button onClick={() => askDel(p.goal.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                   </div>
                 ),
               },
@@ -247,7 +254,7 @@ export default function ObjetivosVentasPage() {
                   </div>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                     <button onClick={() => openEdit(g)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
-                    <button onClick={() => del(g.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                    <button onClick={() => askDel(g.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                   </div>
                 </div>
               );
@@ -302,6 +309,7 @@ export default function ObjetivosVentasPage() {
           </div>
         </div>
       )}
+      <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
     </AppLayout>
   );
 }

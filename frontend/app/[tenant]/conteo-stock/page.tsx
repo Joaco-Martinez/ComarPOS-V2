@@ -4,9 +4,11 @@
 import { useEffect, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
+import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
+import type { BusinessLocation } from '@/types';
 import { fmtDate, normalizeArray, num } from '@/lib/helpers';
-import { ClipboardCheck, BarChart2, Play, CheckCircle, XCircle, ArrowLeft, RefreshCcw, ScanBarcode } from 'lucide-react';
+import { ClipboardCheck, BarChart2, Play, CheckCircle, XCircle, ArrowLeft, RefreshCcw, ScanBarcode, X } from 'lucide-react';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 
 type CountStatus = 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
@@ -32,6 +34,10 @@ export default function ConteoStockPage() {
   const [toast, setToast] = useState('');
   const [dirtyItems, setDirtyItems] = useState<Record<string, string>>({});
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [locations, setLocations] = useState<BusinessLocation[]>([]);
+  const [startLocationId, setStartLocationId] = useState('');
+  const [startModal, setStartModal] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
@@ -54,8 +60,14 @@ export default function ConteoStockPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/stock-counts');
-      setCounts(normalizeArray<any>(data));
+      const [cr, loc] = await Promise.all([
+        api.get('/stock-counts'),
+        api.get('/business-locations', { params: { onlyActive: true } }),
+      ]);
+      setCounts(normalizeArray<any>(cr.data));
+      const locs = normalizeArray<BusinessLocation>(loc.data);
+      setLocations(locs);
+      setStartLocationId((prev) => prev || locs.find((l) => l.isDefault)?.id || locs[0]?.id || '');
     } finally { setLoading(false); }
   };
 
@@ -72,11 +84,12 @@ export default function ConteoStockPage() {
   };
 
   const startCount = async () => {
-    if (!confirm('¿Iniciar un nuevo conteo de stock? Se cargará todos los productos activos.')) return;
+    if (!startLocationId) { showToast('Elegí una ubicación para contar'); return; }
     setStarting(true);
     try {
-      const { data } = await api.post('/stock-counts');
+      const { data } = await api.post('/stock-counts', { businessLocationId: startLocationId });
       showToast('Conteo iniciado');
+      setStartModal(false);
       load();
       openDetail(data);
     } catch (err: any) {
@@ -94,7 +107,6 @@ export default function ConteoStockPage() {
 
   const complete = async () => {
     if (!selected) return;
-    if (!confirm('¿Completar el conteo? Esto aplicará los ajustes de stock.')) return;
     setSaving(true);
     try {
       await api.post(`/stock-counts/${selected.id}/complete`);
@@ -108,7 +120,6 @@ export default function ConteoStockPage() {
 
   const cancel = async () => {
     if (!selected) return;
-    if (!confirm('¿Cancelar este conteo? No se aplicará ningún cambio.')) return;
     try {
       await api.post(`/stock-counts/${selected.id}/cancel`);
       showToast('Conteo cancelado');
@@ -165,10 +176,27 @@ export default function ConteoStockPage() {
         {/* Actions */}
         {selected.status === 'IN_PROGRESS' && (
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className="btn btn-primary btn-sm" onClick={complete} disabled={saving} style={{ gap: 6 }}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => setConfirmState({
+                title: 'Completar conteo',
+                message: '¿Completar el conteo? Esto aplicará los ajustes de stock.',
+                onConfirm: complete,
+              })}
+              disabled={saving}
+              style={{ gap: 6 }}
+            >
               <CheckCircle size={13} /> {saving ? 'Aplicando...' : 'Completar conteo'}
             </button>
-            <button className="btn btn-danger btn-sm" onClick={cancel} style={{ gap: 6 }}>
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => setConfirmState({
+                title: 'Cancelar conteo',
+                message: '¿Cancelar este conteo? No se aplicará ningún cambio.',
+                onConfirm: cancel,
+              })}
+              style={{ gap: 6 }}
+            >
               <XCircle size={13} /> Cancelar
             </button>
             <button className="btn btn-secondary btn-sm" onClick={() => setScannerOpen(true)} style={{ gap: 6 }}>
@@ -233,6 +261,7 @@ export default function ConteoStockPage() {
             </table>
           </div>
         </div>
+        <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
       </AppLayout>
     );
   }
@@ -245,7 +274,7 @@ export default function ConteoStockPage() {
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => load()} className="btn btn-ghost btn-sm"><RefreshCcw size={13} /></button>
-          <button onClick={startCount} disabled={starting} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+          <button onClick={() => setStartModal(true)} disabled={starting || locations.length === 0} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
             <Play size={13} /> {starting ? 'Iniciando...' : 'Iniciar conteo'}
           </button>
         </div>
@@ -268,6 +297,7 @@ export default function ConteoStockPage() {
             columns={[
               { key: 'id', header: '#', render: (c: any) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)' }}>{c.id?.slice(-6).toUpperCase()}</span> },
               { key: 'fecha', header: 'Fecha inicio', render: (c: any) => <span style={{ color: 'var(--text2)' }}>{fmtDate(c.startedAt ?? c.createdAt)}</span> },
+              { key: 'ubicacion', header: 'Ubicación', render: (c: any) => <span style={{ color: 'var(--text2)' }}>{c.businessLocation?.name ?? '—'}</span> },
               {
                 key: 'estado', header: 'Estado', render: (c: any) => (
                   <span className={`badge ${statusBadge[c.status as CountStatus] ?? 'badge-amber'}`}>{statusLabel[c.status as CountStatus] ?? c.status}</span>
@@ -319,6 +349,32 @@ export default function ConteoStockPage() {
           />
         )}
       </div>
+
+      {startModal && (
+        <div className="modal-overlay" onClick={() => setStartModal(false)}>
+          <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Iniciar conteo de stock</span>
+              <button onClick={() => setStartModal(false)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Ubicación a contar</label>
+                <select value={startLocationId} onChange={(e) => setStartLocationId(e.target.value)}>
+                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Se van a cargar todos los productos activos con su stock actual en esa ubicación.</div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setStartModal(false)} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={startCount} disabled={starting} className="btn btn-primary btn-sm">
+                {starting ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Iniciar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }
