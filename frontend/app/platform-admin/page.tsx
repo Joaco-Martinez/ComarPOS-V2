@@ -7,7 +7,9 @@ import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
 import type { Tenant, TenantSubscriptionStatus } from '@/types';
 import { fmtDate, normalizeArray, daysRemaining } from '@/lib/helpers';
-import { Building2, Plus, X, Search, Eye } from 'lucide-react';
+import { Building2, Plus, X, Search, Eye, CreditCard } from 'lucide-react';
+
+type MpPlanRow = { planId: string; mpPlanId: string; status: string };
 
 const statusBadge = (s: TenantSubscriptionStatus) =>
   s === 'TRIAL' ? 'badge-blue' : s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
@@ -33,6 +35,9 @@ export default function PlatformAdminTenantsPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
 
+  const [mpPlans, setMpPlans] = useState<MpPlanRow[]>([]);
+  const [syncingMpPlans, setSyncingMpPlans] = useState(false);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -43,7 +48,30 @@ export default function PlatformAdminTenantsPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  const loadMpPlans = async () => {
+    try {
+      const { data } = await api.get('/platform-admin/mp-plans');
+      setMpPlans(normalizeArray<MpPlanRow>(data));
+    } catch { /* silencioso: no bloquear el resto del panel */ }
+  };
+
+  useEffect(() => { load(); loadMpPlans(); }, []);
+
+  // Crea (una sola vez, ver mpPlan.service.ts) los 3 planes de
+  // config/billing.ts como planes reales en Mercado Pago -- necesita
+  // MP_ACCESS_TOKEN configurado en el backend, si no tira un error claro.
+  const syncMpPlans = async () => {
+    setSyncingMpPlans(true);
+    try {
+      const { data } = await api.post('/platform-admin/mp-plans/sync');
+      setMpPlans(normalizeArray<MpPlanRow>(data));
+      showToast('Planes sincronizados con Mercado Pago');
+    } catch (err: any) {
+      showToast(err?.response?.data?.message ?? err?.response?.data?.error ?? 'No se pudo sincronizar con Mercado Pago');
+    } finally {
+      setSyncingMpPlans(false);
+    }
+  };
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -88,13 +116,31 @@ export default function PlatformAdminTenantsPage() {
       title="Tenants"
       subtitle={`${tenants.length} negocios registrados${trialCount ? ` · ${trialCount} en prueba gratis` : ''}`}
       actions={
-        <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
-          <Plus size={13} /> Nuevo tenant
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={syncMpPlans} disabled={syncingMpPlans} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+            {syncingMpPlans ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <CreditCard size={13} />}
+            {mpPlans.length >= 3 ? 'Re-sincronizar planes MP' : 'Crear planes en Mercado Pago'}
+          </button>
+          <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+            <Plus size={13} /> Nuevo tenant
+          </button>
+        </div>
       }
     >
       {toast && (
         <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)' }}>{toast}</div>
+      )}
+
+      {mpPlans.length > 0 && (
+        <div className="card" style={{ padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: 0.5, fontFamily: 'var(--mono)' }}>PLANES EN MERCADO PAGO</span>
+          {mpPlans.map((p) => (
+            <span key={p.planId} style={{ fontSize: 12, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: p.status === 'active' ? 'var(--success)' : 'var(--text3)' }} />
+              {p.planId} ({p.status})
+            </span>
+          ))}
+        </div>
       )}
 
       <div style={{ marginBottom: 14 }}>

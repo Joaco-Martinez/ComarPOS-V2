@@ -18,4 +18,7 @@ router.patch(
 );
 router.post("/tenants", platformAuthMiddleware, platformAdminController.createTenant);
 
+router.get("/mp-plans", platformAuthMiddleware, platformAdminController.listMpPlans);
+router.post("/mp-plans/sync", platformAuthMiddleware, platformAdminController.syncMpPlans);
+
 export default router;

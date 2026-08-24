@@ -3,6 +3,7 @@ import { BusinessLocationType } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { planLimitsService } from "./planLimits.service";
+import { AppError } from "../utils/asyncHandler";
 
 function cleanString(value?: string | null) {
   const text = String(value || "").trim();
@@ -104,7 +105,7 @@ export const businessLocationService = {
     }
 
     const limitCheck = await planLimitsService.checkLimit(currentTenantId(), "businessLocations");
-    if (!limitCheck.ok) throw new Error(limitCheck.message);
+    if (!limitCheck.ok) throw new AppError("PLAN_LIMIT_REACHED", limitCheck.message, 403);
 
     validateCoordinates(data.latitude, data.longitude);
 

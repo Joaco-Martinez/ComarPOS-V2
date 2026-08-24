@@ -1,13 +1,16 @@
--- Backfill del tenant default de Grupo VJ (doc seccion 6 - multi-tenant).
--- Continua la migracion 20260620140000 (scaffolding): crea el tenant "grupo-vj"
--- y completa tenantId en todas las filas existentes que hoy tienen NULL.
--- Idempotente: el INSERT no duplica el tenant si ya existe (ON CONFLICT en slug)
--- y los UPDATE solo tocan filas con tenantId IS NULL, asi que correrla mas de
--- una vez no tiene efecto adicional ni pisa tenants asignados manualmente.
-
-INSERT INTO "Tenant" (id, name, slug, "isActive", "createdAt", "updatedAt")
-VALUES (gen_random_uuid(), 'Grupo VJ', 'grupo-vj', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-ON CONFLICT (slug) DO NOTHING;
+-- Backfill de tenantId (doc seccion 6 - multi-tenant). Continua la migracion
+-- 20260620140000 (scaffolding): completa tenantId en filas existentes que
+-- tengan NULL, asignandolas al tenant default configurado.
+--
+-- El INSERT original de esta migracion creaba a mano un tenant "Grupo VJ" --
+-- se saco a pedido explicito (el sistema en produccion arranca vacio, sin
+-- ningun tenant de fabrica; los tenants se dan de alta por /trial-signup o
+-- desde /platform-admin). El backfill de abajo queda igual por si en algun
+-- momento hay filas con tenantId NULL que asignar a mano -- en un deploy
+-- fresco no hay filas todavia, asi que no hace nada.
+-- Idempotente: los UPDATE solo tocan filas con tenantId IS NULL, asi que
+-- correrla mas de una vez no tiene efecto adicional ni pisa tenants
+-- asignados manualmente.
 
 DO $$
 DECLARE

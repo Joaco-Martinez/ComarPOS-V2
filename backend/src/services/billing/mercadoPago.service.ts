@@ -50,7 +50,40 @@ export type MpPayment = {
   external_reference?: string | null;
 };
 
+export type MpPreapprovalPlan = {
+  id: string;
+  status: string; // active | ...
+  init_point?: string;
+};
+
 export const mercadoPagoClient = {
+  /**
+   * "Plan" del lado de MP (distinto de una preapproval suelta): un objeto
+   * reutilizable que se ve en el dashboard de MP con nombre/precio propios.
+   * No hace falta para que el cobro funcione -- createPreapproval ya arma
+   * todo inline con auto_recurring -- pero registrar los 3 planes de
+   * ComarPOS como planes reales de MP le da visibilidad/reportes del lado
+   * de Mercado Pago (ver mpPlan.service.ts).
+   */
+  async createPreapprovalPlan(params: {
+    reason: string;
+    amount: number;
+    backUrl: string;
+  }): Promise<MpPreapprovalPlan> {
+    const { data } = await client().post("/preapproval_plan", {
+      reason: params.reason,
+      back_url: params.backUrl,
+      auto_recurring: {
+        frequency: 1,
+        frequency_type: "months",
+        transaction_amount: params.amount,
+        currency_id: "ARS",
+      },
+    });
+
+    return data;
+  },
+
   async createPreapproval(params: {
     tenantId: string;
     payerEmail: string;

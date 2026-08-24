@@ -143,6 +143,22 @@ model PlatformAdmin {
   paymentLogs TenantPaymentLog[]
 }
 
+// Espejo de los "preapproval_plan" creados del lado de Mercado Pago para
+// cada plan de config/billing.ts (PLANS sigue siendo la fuente de verdad
+// de precio/limites -- esta tabla solo guarda el id que devolvio MP la
+// primera vez que se creo, para no duplicarlo si se vuelve a apretar el
+// boton de sincronizar). planId matchea PLANS[].id ("esencial" |
+// "profesional" | "multisucursal"), no es una FK -- son constantes de
+// codigo, no una tabla.
+model MpPreapprovalPlan {
+  id        String   @id @default(uuid())
+  planId    String   @unique
+  mpPlanId  String   @unique
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model TenantPaymentLog {
   id              String                   @id @default(uuid())
   tenantId        String

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { platformAdminService } from "../services/platformAdmin.service";
 import { platformTenantService } from "../services/platformTenant.service";
+import { mpPlanService } from "../services/billing/mpPlan.service";
 import { getParamAsString } from "../utils/params";
 
 export const platformAdminController = {
@@ -88,6 +89,24 @@ export const platformAdminController = {
       });
 
       res.status(201).json({ ok: true, content: tenant });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async listMpPlans(req: Request, res: Response, next: NextFunction) {
+    try {
+      const plans = await mpPlanService.list();
+      res.json({ ok: true, content: plans });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async syncMpPlans(req: Request, res: Response, next: NextFunction) {
+    try {
+      const plans = await mpPlanService.syncPlans();
+      res.json({ ok: true, content: plans });
     } catch (err) {
       next(err);
     }

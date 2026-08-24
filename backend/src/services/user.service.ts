@@ -5,6 +5,7 @@ import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { startOfDayAR, endOfDayAR } from "../utils/dateAR";
 import { planLimitsService } from "./planLimits.service";
+import { AppError } from "../utils/asyncHandler";
 
 type ClientCategory = "Price" | "Cliente" | "Mayorista";
 
@@ -463,7 +464,7 @@ export const userService = {
 
     if (role !== Role.CLIENTE) {
       const limitCheck = await planLimitsService.checkLimit(currentTenantId(), "users");
-      if (!limitCheck.ok) throw new Error(limitCheck.message);
+      if (!limitCheck.ok) throw new AppError("PLAN_LIMIT_REACHED", limitCheck.message, 403);
 
       return prisma.user.create({
         data: {
