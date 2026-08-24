@@ -6,26 +6,31 @@ import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
 import SearchableSelect from '@/components/SearchableSelect';
 import api from '@/lib/api';
-import type { Product, ProductCategory, StockMovement } from '@/types';
-import { categoryName, fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
+import type { BusinessLocation, Product, ProductCategory, StockMovement } from '@/types';
+import { categoryName, fmtDate, normalizeArray, num, productStock, productMinStock } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
-import { BarChart2, Search, ArrowRightLeft, Plus, X, AlertTriangle, RefreshCcw, History, ScanBarcode, Package } from 'lucide-react';
+import { BarChart2, Search, ArrowRightLeft, X, AlertTriangle, RefreshCcw, History, ScanBarcode, Package, Pencil } from 'lucide-react';
 
 const MOVEMENT_LABELS: Record<string, string> = {
   TRANSFER: 'Transferencia', INGRESS: 'Ingreso', ADJUSTMENT: 'Ajuste',
   SALE: 'Venta', SALE_CANCEL: 'Cancelación venta',
 };
 
+type MoveForm = { type: 'TRANSFER' | 'INGRESS'; fromLocationId: string; toLocationId: string; quantity: string; reason: string };
+type MinModal = { product: Product; businessLocationId: string; businessLocationName: string; minQuantity: string; minQuantityKg: string } | null;
+
 export default function StockPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [locations, setLocations] = useState<BusinessLocation[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [tab, setTab] = useState<'stock' | 'movements'>('stock');
   const [moveModal, setMoveModal] = useState<Product | null>(null);
-  const [moveForm, setMoveForm] = useState({ type: 'TRANSFER' as 'TRANSFER' | 'INGRESS', from: 'LOCAL', to: 'DEPOSITO', quantity: '', reason: '' });
+  const [moveForm, setMoveForm] = useState<MoveForm>({ type: 'TRANSFER', fromLocationId: '', toLocationId: '', quantity: '', reason: '' });
+  const [minModal, setMinModal] = useState<MinModal>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -36,12 +41,14 @@ export default function StockPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [pr, cr] = await Promise.all([
+      const [pr, cr, loc] = await Promise.all([
         api.get('/products', { params: { limit: 500, isActive: true } }),
         api.get('/categories'),
+        api.get('/business-locations', { params: { onlyActive: true } }),
       ]);
       setProducts(normalizeArray<Product>(pr.data));
       setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
+      setLocations(normalizeArray<BusinessLocation>(loc.data));
     } finally {
       setLoading(false);
     }
@@ -77,6 +84,17 @@ export default function StockPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
+  const openMoveModal = (p: Product) => {
+    setMoveModal(p);
+    setMoveForm({
+      type: 'TRANSFER',
+      fromLocationId: locations[0]?.id ?? '',
+      toLocationId: locations[1]?.id ?? locations[0]?.id ?? '',
+      quantity: '',
+      reason: '',
+    });
+  };
+
   const handleScannedSku = (rawSku: string) => {
     const sku = rawSku.trim().toLowerCase();
     const found = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
@@ -85,27 +103,34 @@ export default function StockPage() {
       return;
     }
     setScannerOpen(false);
-    setMoveModal(found);
-    setMoveForm({ type: 'TRANSFER', from: 'LOCAL', to: 'DEPOSITO', quantity: '', reason: '' });
+    openMoveModal(found);
   };
 
   const submitMovement = async () => {
     if (!moveModal) return;
+    if (moveForm.type === 'TRANSFER' && moveForm.fromLocationId === moveForm.toLocationId) {
+      showToast('El origen y el destino tienen que ser distintos');
+      return;
+    }
     setSaving(true);
     try {
       const isKg = moveModal.saleUnit === 'KG';
       const reason = moveForm.reason || undefined;
       if (moveForm.type === 'TRANSFER') {
         if (isKg) {
-          await api.post(`/products/${moveModal.id}/transfer-kg`, { from: moveForm.from, quantityKg: Number(moveForm.quantity), reason });
+          await api.post(`/products/${moveModal.id}/transfer-kg`, {
+            fromLocationId: moveForm.fromLocationId, toLocationId: moveForm.toLocationId, quantityKg: Number(moveForm.quantity), reason,
+          });
         } else {
-          await api.post('/products/transfer', { productId: moveModal.id, from: moveForm.from, quantity: Number(moveForm.quantity), reason });
+          await api.post('/products/transfer', {
+            productId: moveModal.id, fromLocationId: moveForm.fromLocationId, toLocationId: moveForm.toLocationId, quantity: Number(moveForm.quantity), reason,
+          });
         }
       } else {
         if (isKg) {
-          await api.post(`/products/${moveModal.id}/add-stock-kg`, { to: moveForm.to, quantityKg: Number(moveForm.quantity), reason });
+          await api.post(`/products/${moveModal.id}/add-stock-kg`, { businessLocationId: moveForm.toLocationId, quantityKg: Number(moveForm.quantity), reason });
         } else {
-          await api.post('/products/add-stock', { productId: moveModal.id, to: moveForm.to, quantity: Number(moveForm.quantity), reason });
+          await api.post('/products/add-stock', { productId: moveModal.id, businessLocationId: moveForm.toLocationId, quantity: Number(moveForm.quantity), reason });
         }
       }
       showToast('Movimiento registrado');
@@ -118,9 +143,38 @@ export default function StockPage() {
     }
   };
 
+  const openMinModal = (p: Product, loc: BusinessLocation) => {
+    const row = p.stock?.find((s) => s.businessLocationId === loc.id);
+    setMinModal({
+      product: p,
+      businessLocationId: loc.id,
+      businessLocationName: loc.name,
+      minQuantity: String(row?.minQuantity ?? ''),
+      minQuantityKg: String(row?.minQuantityKg ?? ''),
+    });
+  };
+
+  const submitMin = async () => {
+    if (!minModal) return;
+    setSaving(true);
+    try {
+      await api.put(`/products/${minModal.product.id}/stock-min/${minModal.businessLocationId}`, {
+        minQuantity: minModal.minQuantity === '' ? null : Number(minModal.minQuantity),
+        minQuantityKg: minModal.minQuantityKg === '' ? null : Number(minModal.minQuantityKg),
+      });
+      showToast('Mínimo actualizado');
+      setMinModal(null);
+      load();
+    } catch (err: any) {
+      showToast(err?.response?.data?.message ?? 'Error al actualizar el mínimo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const lowStockCount = products.filter((p) => {
-    const s = p.saleUnit === 'KG' ? num(p.stockLocalKg) : num(p.stockLocal);
-    const m = p.saleUnit === 'KG' ? num(p.minStockKg) : num(p.minStock);
+    const s = productStock(p);
+    const m = productMinStock(p);
     return m > 0 && s <= m;
   }).length;
 
@@ -135,6 +189,14 @@ export default function StockPage() {
       {toast && (
         <div style={{ position: 'fixed', top: 70, right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>
           {toast}
+        </div>
+      )}
+
+      {!loading && locations.length === 0 && (
+        <div className="card" style={{ padding: 14, marginBottom: 16, borderColor: 'var(--warn)' }}>
+          <div style={{ fontSize: 13, color: 'var(--text)' }}>
+            Todavía no configuraste ninguna ubicación de stock. Creá al menos una desde <b>Configuración → Sucursales</b> para poder cargar y vender stock.
+          </div>
         </div>
       )}
 
@@ -187,41 +249,41 @@ export default function StockPage() {
                   },
                   { key: 'categoria', header: 'Categoría', render: (p) => <span style={{ fontSize: 12 }}>{categoryName(p)}</span> },
                   { key: 'unidad', header: 'Unidad', render: (p) => <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{p.saleUnit}</span> },
-                  {
-                    key: 'local', header: 'Stock local', render: (p) => {
-                      const local = p.saleUnit === 'KG' ? num(p.stockLocalKg) : num(p.stockLocal);
-                      const min = p.saleUnit === 'KG' ? num(p.minStockKg) : num(p.minStock);
-                      const low = min > 0 && local <= min;
-                      const critical = local <= 0 && !p.isService;
-                      const unit = p.saleUnit === 'KG' ? 'kg' : 'un';
+                  ...locations.map((loc) => ({
+                    key: `loc_${loc.id}`,
+                    header: loc.name,
+                    render: (p: Product) => {
+                      const row = p.stock?.find((s) => s.businessLocationId === loc.id);
+                      const isKg = p.saleUnit === 'KG';
+                      const qty = num(isKg ? row?.quantityKg : row?.quantity);
+                      const min = num(isKg ? row?.minQuantityKg : row?.minQuantity);
+                      const low = min > 0 && qty <= min;
+                      const critical = qty <= 0;
+                      const unit = isKg ? 'kg' : 'un';
                       return (
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: critical ? 'var(--danger)' : low ? 'var(--warn)' : 'var(--success)' }}>
-                          {critical && <AlertTriangle size={11} style={{ display: 'inline', marginRight: 4 }} />}
-                          {local} {unit}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: critical ? 'var(--danger)' : low ? 'var(--warn)' : 'var(--text2)' }}>
+                            {low && <AlertTriangle size={10} style={{ display: 'inline', marginRight: 3 }} />}
+                            {qty} {unit}
+                          </span>
+                          <button
+                            onClick={() => openMinModal(p, loc)}
+                            className="btn btn-ghost btn-xs"
+                            title={`Editar mínimo en ${loc.name}`}
+                            style={{ padding: 3, color: 'var(--text3)' }}
+                          >
+                            <Pencil size={10} />
+                          </button>
+                        </div>
                       );
                     },
-                  },
-                  {
-                    key: 'deposito', header: 'Stock depósito', render: (p) => {
-                      const dep = p.saleUnit === 'KG' ? num(p.stockDepositoKg) : num(p.stockDeposito);
-                      const unit = p.saleUnit === 'KG' ? 'kg' : 'un';
-                      return <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text2)' }}>{dep} {unit}</span>;
-                    },
-                  },
-                  {
-                    key: 'minimo', header: 'Mínimo', render: (p) => {
-                      const min = p.saleUnit === 'KG' ? num(p.minStockKg) : num(p.minStock);
-                      const unit = p.saleUnit === 'KG' ? 'kg' : 'un';
-                      return <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text3)' }}>{min} {unit}</span>;
-                    },
-                  },
+                  })),
                   {
                     key: 'estado', header: 'Estado', render: (p) => {
-                      const local = p.saleUnit === 'KG' ? num(p.stockLocalKg) : num(p.stockLocal);
-                      const min = p.saleUnit === 'KG' ? num(p.minStockKg) : num(p.minStock);
-                      const low = min > 0 && local <= min;
-                      const critical = local <= 0 && !p.isService;
+                      const s = productStock(p);
+                      const m = productMinStock(p);
+                      const low = m > 0 && s <= m;
+                      const critical = s <= 0;
                       return critical ? (
                         <span className="badge badge-red">Sin stock</span>
                       ) : low ? (
@@ -234,10 +296,11 @@ export default function StockPage() {
                   {
                     key: 'acciones', header: '', render: (p) => (
                       <button
-                        onClick={() => { setMoveModal(p); setMoveForm({ type: 'TRANSFER', from: 'LOCAL', to: 'DEPOSITO', quantity: '', reason: '' }); }}
+                        onClick={() => openMoveModal(p)}
                         className="btn btn-ghost"
                         title="Transferir stock"
                         style={{ gap: 4, padding: 10 }}
+                        disabled={locations.length === 0}
                       >
                         <ArrowRightLeft size={20} />
                       </button>
@@ -245,11 +308,10 @@ export default function StockPage() {
                   },
                 ] as ResponsiveTableColumn<Product>[]}
                 renderMobileCard={(p) => {
-                  const local = p.saleUnit === 'KG' ? num(p.stockLocalKg) : num(p.stockLocal);
-                  const dep = p.saleUnit === 'KG' ? num(p.stockDepositoKg) : num(p.stockDeposito);
-                  const min = p.saleUnit === 'KG' ? num(p.minStockKg) : num(p.minStock);
-                  const low = min > 0 && local <= min;
-                  const critical = local <= 0 && !p.isService;
+                  const s = productStock(p);
+                  const m = productMinStock(p);
+                  const low = m > 0 && s <= m;
+                  const critical = s <= 0;
                   const unit = p.saleUnit === 'KG' ? 'kg' : 'un';
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -270,22 +332,26 @@ export default function StockPage() {
                         <span>Categoría</span>
                         <span>{categoryName(p)} · {p.saleUnit}</span>
                       </div>
+                      {locations.map((loc) => {
+                        const row = p.stock?.find((s2) => s2.businessLocationId === loc.id);
+                        const isKg = p.saleUnit === 'KG';
+                        const qty = num(isKg ? row?.quantityKg : row?.quantity);
+                        return (
+                          <div className="mobile-card-row" key={loc.id}>
+                            <span>{loc.name}</span>
+                            <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{qty} {unit}</span>
+                          </div>
+                        );
+                      })}
                       <div className="mobile-card-row">
-                        <span>Stock local</span>
-                        <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: critical ? 'var(--danger)' : low ? 'var(--warn)' : 'var(--success)' }}>{local} {unit}</span>
-                      </div>
-                      <div className="mobile-card-row">
-                        <span>Stock depósito</span>
-                        <span style={{ fontFamily: 'var(--mono)' }}>{dep} {unit}</span>
-                      </div>
-                      <div className="mobile-card-row">
-                        <span>Mínimo</span>
-                        <span style={{ fontFamily: 'var(--mono)' }}>{min} {unit}</span>
+                        <span>Mínimo (total)</span>
+                        <span style={{ fontFamily: 'var(--mono)' }}>{m} {unit}</span>
                       </div>
                       <button
-                        onClick={() => { setMoveModal(p); setMoveForm({ type: 'TRANSFER', from: 'LOCAL', to: 'DEPOSITO', quantity: '', reason: '' }); }}
+                        onClick={() => openMoveModal(p)}
                         className="btn btn-secondary btn-sm"
                         style={{ marginTop: 4, gap: 6 }}
+                        disabled={locations.length === 0}
                       >
                         <ArrowRightLeft size={13} /> Transferir stock
                       </button>
@@ -324,8 +390,8 @@ export default function StockPage() {
               { key: 'fecha', header: 'Fecha', render: (m) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtDate(m.createdAt)}</span> },
               { key: 'producto', header: 'Producto', render: (m) => <span style={{ color: 'var(--text)', fontSize: 13 }}>{m.product?.name ?? '—'}</span> },
               { key: 'tipo', header: 'Tipo', render: (m) => <span className="badge badge-slate">{MOVEMENT_LABELS[m.type] ?? m.type}</span> },
-              { key: 'desde', header: 'Desde', render: (m) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{m.from ?? '—'}</span> },
-              { key: 'hacia', header: 'Hacia', render: (m) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{m.to ?? '—'}</span> },
+              { key: 'desde', header: 'Desde', render: (m) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{m.fromLocation?.name ?? '—'}</span> },
+              { key: 'hacia', header: 'Hacia', render: (m) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{m.toLocation?.name ?? '—'}</span> },
               { key: 'cantidad', header: 'Cantidad', render: (m) => <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{m.quantityKg != null ? `${m.quantityKg}kg` : m.quantity ?? '—'}</span> },
               { key: 'usuario', header: 'Usuario', render: (m) => <span style={{ fontSize: 12, color: 'var(--text2)' }}>{m.user?.name ?? '—'}</span> },
               { key: 'motivo', header: 'Motivo', render: (m) => <span style={{ fontSize: 12, color: 'var(--text3)' }}>{m.reason ?? '—'}</span> },
@@ -339,7 +405,7 @@ export default function StockPage() {
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{m.product?.name ?? '—'}</div>
                 <div className="mobile-card-row">
                   <span>Movimiento</span>
-                  <span style={{ fontFamily: 'var(--mono)' }}>{m.from ?? '—'} → {m.to ?? '—'}</span>
+                  <span style={{ fontFamily: 'var(--mono)' }}>{m.fromLocation?.name ?? '—'} → {m.toLocation?.name ?? '—'}</span>
                 </div>
                 <div className="mobile-card-row">
                   <span>Cantidad</span>
@@ -393,25 +459,22 @@ export default function StockPage() {
                 <div className="form-row">
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Desde</label>
-                    <select value={moveForm.from} onChange={(e) => setMoveForm((p) => ({ ...p, from: e.target.value }))}>
-                      <option value="LOCAL">Local</option>
-                      <option value="DEPOSITO">Depósito</option>
+                    <select value={moveForm.fromLocationId} onChange={(e) => setMoveForm((p) => ({ ...p, fromLocationId: e.target.value }))}>
+                      {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
                   </div>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Hacia</label>
-                    <select value={moveForm.to} onChange={(e) => setMoveForm((p) => ({ ...p, to: e.target.value }))}>
-                      <option value="LOCAL">Local</option>
-                      <option value="DEPOSITO">Depósito</option>
+                    <select value={moveForm.toLocationId} onChange={(e) => setMoveForm((p) => ({ ...p, toLocationId: e.target.value }))}>
+                      {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
                   </div>
                 </div>
               ) : (
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Hacia</label>
-                  <select value={moveForm.to} onChange={(e) => setMoveForm((p) => ({ ...p, to: e.target.value }))}>
-                    <option value="LOCAL">Local</option>
-                    <option value="DEPOSITO">Depósito</option>
+                  <select value={moveForm.toLocationId} onChange={(e) => setMoveForm((p) => ({ ...p, toLocationId: e.target.value }))}>
+                    {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </div>
               )}
@@ -428,6 +491,41 @@ export default function StockPage() {
               <button onClick={() => setMoveModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
               <button onClick={submitMovement} disabled={saving || !moveForm.quantity} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Registrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Min stock modal */}
+      {minModal && (
+        <div className="modal-overlay" onClick={() => setMinModal(null)}>
+          <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>Mínimo de stock</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{minModal.product.name} · {minModal.businessLocationName}</div>
+              </div>
+              <button onClick={() => setMinModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Mínimo {minModal.product.saleUnit === 'KG' ? '(kg)' : ''}</label>
+                <input
+                  type="number" min="0" step="any" autoFocus
+                  value={minModal.product.saleUnit === 'KG' ? minModal.minQuantityKg : minModal.minQuantity}
+                  onChange={(e) => setMinModal((p) => p && ({
+                    ...p,
+                    ...(p.product.saleUnit === 'KG' ? { minQuantityKg: e.target.value } : { minQuantity: e.target.value }),
+                  }))}
+                  placeholder="Sin mínimo"
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setMinModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={submitMin} disabled={saving} className="btn btn-primary btn-sm">
+                {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Guardar'}
               </button>
             </div>
           </div>

@@ -7,8 +7,7 @@ import { ProductType, SaleStatus, SaleItemPriceType, SaleUnit } from "@prisma/cl
 import { financeService } from "../finance.service";
 import { productStatsService } from "../productStats.service";
 import { ResolvedSaleItem, StockLine } from "./sale.types";
-import { normalizeStockLocation } from "./sale.pricing";
-import { buildStockLines, restoreStockLines, queueStockAlerts } from "./sale.stock";
+import { buildStockLines, requireStockLocationId, restoreStockLines, queueStockAlerts } from "./sale.stock";
 import { reverseAccountDebtFromSale } from "./sale.payment";
 import { tenantScope } from "../../utils/tenantScope";
 import { runWithTenant } from "../../context/tenantContext";
@@ -68,10 +67,12 @@ export async function updateStatus(id: string, status: SaleStatus) {
   }
 
   const restoredStockLines: StockLine[] = [];
-  const stockLocation = normalizeStockLocation((sale as any).stockLocation ?? "LOCAL");
   const pendingAlerts: string[] = [];
+  let stockLocationId: string | null = null;
 
   if (status === SaleStatus.CANCELLED) {
+    stockLocationId = await requireStockLocationId(sale.stockLocationId);
+
     const resolvedItems: ResolvedSaleItem[] = sale.items.map((item) => ({
       productId: item.productId,
       productName: item.product?.name ?? "Producto",
@@ -109,7 +110,7 @@ export async function updateStatus(id: string, status: SaleStatus) {
           restoredStockLines,
           sale.userId ?? undefined,
           sale.id,
-          stockLocation,
+          stockLocationId as string,
           pendingAlerts
         );
 

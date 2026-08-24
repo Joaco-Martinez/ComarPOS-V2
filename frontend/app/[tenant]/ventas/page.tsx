@@ -259,7 +259,6 @@ export default function VentasPage() {
           quantityKg: i.saleUnit === 'KG' ? i.quantityKg : undefined,
           price: i.price,
         })),
-        stockLocation: itemsSale.stockLocation ?? 'LOCAL',
         deliveryMethod: itemsSale.deliveryMethod ?? 'PICKUP',
         deliveryStatus: itemsSale.deliveryStatus ?? 'NONE',
       });

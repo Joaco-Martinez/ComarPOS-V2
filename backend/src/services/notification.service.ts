@@ -76,11 +76,22 @@ export const notificationService = {
     });
   },
 
+  // Una notificacion por cada (producto, ubicacion) por debajo de su propio
+  // minimo - generalizado a N ubicaciones dinamicas (antes sumaba
+  // stockLocal+stockDeposito contra un unico minStock fijo; ver doc de
+  // migracion "ubicaciones de stock dinamicas", y alert.service.ts que
+  // sigue el mismo criterio para la pagina de Alertas).
   async checkLowStock() {
     const scope = tenantScope();
     const products = await prisma.product.findMany({
       where: { isActive: true, isService: false, ...scope },
-      select: { id: true, name: true, sku: true, stockLocal: true, stockDeposito: true, minStock: true, tenantId: true },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        saleUnit: true,
+        stock: { include: { businessLocation: { select: { name: true, isActive: true } } } },
+      },
     });
 
     const tenantId = currentTenantId();
@@ -92,14 +103,21 @@ export const notificationService = {
 
     let created = 0;
     for (const product of products) {
-      const totalStock = product.stockLocal + product.stockDeposito;
-      if (product.minStock !== null && totalStock <= product.minStock) {
+      const isKg = product.saleUnit === "KG";
+      for (const row of product.stock) {
+        if (!row.businessLocation.isActive) continue;
+
+        const qty = Number((isKg ? row.quantityKg : row.quantity) ?? 0);
+        const min = isKg ? row.minQuantityKg : row.minQuantity;
+        if (min == null || Number(min) <= 0) continue;
+        if (qty > Number(min)) continue;
+
         await prisma.notification.createMany({
           data: admins.map((u) => ({
             userId: u.id,
             type: "LOW_STOCK" as NotificationType,
             title: "Stock bajo",
-            body: `${product.name}${product.sku ? ` (SKU: ${product.sku})` : ""} tiene ${totalStock} unidades (mínimo: ${product.minStock}).`,
+            body: `${product.name}${product.sku ? ` (SKU: ${product.sku})` : ""} tiene ${qty} ${isKg ? "kg" : "unidades"} en "${row.businessLocation.name}" (mínimo: ${min}).`,
             tenantId,
           })),
         });

@@ -30,6 +30,7 @@ function buildSaleInclude() {
   return {
     payments: true,
     businessLocation: true,
+    stockLocationRef: true,
     items: {
       include: {
         product: {

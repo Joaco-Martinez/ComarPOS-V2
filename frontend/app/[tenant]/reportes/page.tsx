@@ -186,7 +186,7 @@ export default function ReportesPage() {
           productName: r.product?.name ?? '—', stock: r.totalStock, lastSale: 'Sin ventas',
         })),
         lowStock: normalizeArray<any>(lowStock.data).map((r: any) => ({
-          productName: r.product?.name ?? '—', stock: r.stockLocal, minStock: r.minStockLocal,
+          productName: `${r.product?.name ?? '—'} (${r.location?.name ?? '—'})`, stock: r.stock, minStock: r.minStock,
         })),
         rotation: normalizeArray<any>(rotation.data).map((r: any) => ({
           productName: r.product?.name ?? '—', rotationRate: r.rotationIndex, unitsSold: r.qtySold, avgStock: r.currentStock,

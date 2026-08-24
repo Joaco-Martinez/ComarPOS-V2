@@ -26,6 +26,14 @@ router.post(
   productController.addStockKg
 );
 
+// Umbral de alerta de stock bajo, por ubicación
+router.put(
+  "/:id/stock-min/:businessLocationId",
+  authMiddleware,
+  requireRole("ADMIN"),
+  productController.setStockMin
+);
+
 // SKU
 router.get("/sku/:sku", authMiddleware, productController.getBySku);
 

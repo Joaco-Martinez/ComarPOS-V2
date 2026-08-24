@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
-import type { Product, Purchase, Supplier } from '@/types';
+import type { BusinessLocation, Product, Purchase, Supplier } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
@@ -15,10 +15,11 @@ export default function ComprasPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [locations, setLocations] = useState<BusinessLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<'create' | 'detail' | null>(null);
   const [selected, setSelected] = useState<Purchase | null>(null);
-  const [form, setForm] = useState({ supplierId: '', date: todayInputAR(), notes: '', to: 'DEPOSITO' as 'LOCAL' | 'DEPOSITO', paymentMethod: 'TRANSFERENCIA' });
+  const [form, setForm] = useState({ supplierId: '', date: todayInputAR(), notes: '', businessLocationId: '', paymentMethod: 'TRANSFERENCIA' });
   const [items, setItems] = useState<{ productId: string; quantity: string; quantityKg: string; unitCost: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
@@ -27,14 +28,18 @@ export default function ComprasPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [pr, sup, prod] = await Promise.all([
+      const [pr, sup, prod, loc] = await Promise.all([
         api.get('/purchases', { params: { limit: 100 } }),
         api.get('/suppliers', { params: { isActive: true } }),
         api.get('/products', { params: { limit: 500, isActive: true } }),
+        api.get('/business-locations', { params: { onlyActive: true } }),
       ]);
       setPurchases(normalizeArray<Purchase>(pr.data));
       setSuppliers(normalizeArray<Supplier>(sup.data));
       setProducts(normalizeArray<Product>(prod.data));
+      const locs = normalizeArray<BusinessLocation>(loc.data);
+      setLocations(locs);
+      setForm((p) => ({ ...p, businessLocationId: p.businessLocationId || locs[0]?.id || '' }));
     } finally { setLoading(false); }
   };
 
@@ -48,13 +53,14 @@ export default function ComprasPage() {
 
   const save = async () => {
     if (!items.length) return;
+    if (!form.businessLocationId) { showToast('Elegí una ubicación de destino'); return; }
     setSaving(true);
     try {
       await api.post('/purchases', {
         supplierId: form.supplierId || undefined,
         date: form.date,
         description: form.notes || undefined,
-        to: form.to,
+        businessLocationId: form.businessLocationId,
         paymentMethod: form.paymentMethod,
         items: items.filter((i) => i.productId).map((i) => {
           const p = products.find((x) => x.id === i.productId);
@@ -69,7 +75,7 @@ export default function ComprasPage() {
       showToast('Compra registrada');
       setModal(null);
       setItems([]);
-      setForm({ supplierId: '', date: todayInputAR(), notes: '', to: 'DEPOSITO', paymentMethod: 'TRANSFERENCIA' });
+      setForm((p) => ({ supplierId: '', date: todayInputAR(), notes: '', businessLocationId: p.businessLocationId, paymentMethod: 'TRANSFERENCIA' }));
       load();
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? 'Error al registrar');
@@ -91,7 +97,7 @@ export default function ComprasPage() {
       title="Compras"
       subtitle={`${purchases.length} registros`}
       actions={
-        <button onClick={() => { setForm({ supplierId: '', date: todayInputAR(), notes: '', to: 'DEPOSITO', paymentMethod: 'TRANSFERENCIA' }); setItems([{ productId: '', quantity: '1', quantityKg: '', unitCost: '' }]); setModal('create'); }}
+        <button onClick={() => { setForm((p) => ({ supplierId: '', date: todayInputAR(), notes: '', businessLocationId: p.businessLocationId, paymentMethod: 'TRANSFERENCIA' })); setItems([{ productId: '', quantity: '1', quantityKg: '', unitCost: '' }]); setModal('create'); }}
           className="btn btn-primary btn-sm" style={{ gap: 6 }}>
           <Plus size={13} /> Registrar compra
         </button>
@@ -181,9 +187,9 @@ export default function ComprasPage() {
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Destino del stock</label>
-                  <select value={form.to} onChange={(e) => setForm((p) => ({ ...p, to: e.target.value as 'LOCAL' | 'DEPOSITO' }))}>
-                    <option value="DEPOSITO">Depósito</option>
-                    <option value="LOCAL">Local</option>
+                  <select value={form.businessLocationId} onChange={(e) => setForm((p) => ({ ...p, businessLocationId: e.target.value }))}>
+                    <option value="">Seleccionar...</option>
+                    {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -258,7 +264,7 @@ export default function ComprasPage() {
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="grid-responsive" style={{ gap: 10 }}>
-                {[['Proveedor', selected.supplier?.name ?? 'Sin proveedor'], ['Fecha', fmtDate(selected.date)], ['Notas', selected.description ?? '—'], ['Total', fmtMoney(selected.totalAmount)]].map(([k, v]) => (
+                {[['Proveedor', selected.supplier?.name ?? 'Sin proveedor'], ['Fecha', fmtDate(selected.date)], ['Destino', selected.businessLocation?.name ?? '—'], ['Notas', selected.description ?? '—'], ['Total', fmtMoney(selected.totalAmount)]].map(([k, v]) => (
                   <div key={k}><div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>{k}</div><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{v}</div></div>
                 ))}
               </div>

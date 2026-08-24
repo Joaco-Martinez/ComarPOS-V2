@@ -176,6 +176,8 @@ export async function getMovements(filters?: {
           email: true,
         },
       },
+      fromLocation: { select: { id: true, name: true } },
+      toLocation: { select: { id: true, name: true } },
     },
     orderBy: {
       createdAt: "desc",

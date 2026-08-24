@@ -7,7 +7,6 @@ import {
   Role,
   SaleStatus,
   SaleUnit,
-  Location,
 } from "@prisma/client";
 import { saleService } from "./sale.service";
 import { whatsappService } from "./whatsapp.service";
@@ -72,32 +71,21 @@ function normalizeCategory(value?: string | null): CategoryClient {
   return CategoryClient.Price;
 }
 
-function getStockLocationByCategory(category: CategoryClient): Location {
-  return category === CategoryClient.Mayorista
-    ? Location.LOCAL
-    : Location.DEPOSITO;
+// Stock del catalogo publico = suma de todas las ubicaciones del tenant
+// (ver doc de migracion "ubicaciones de stock dinamicas" - reemplaza la
+// regla fija Mayorista->LOCAL / resto->DEPOSITO, que dejo de tener sentido
+// con N ubicaciones dinamicas en vez de 2 fijas).
+function getUnitStockTotal(product: any) {
+  const rows = Array.isArray(product.stock) ? product.stock : [];
+  return rows.reduce((acc: number, row: any) => acc + Number(row.quantity || 0), 0);
 }
 
-function getUnitStockByLocation(product: any, location: Location) {
-  return Number(
-    location === Location.LOCAL
-      ? product.stockLocal || 0
-      : product.stockDeposito || 0,
-  );
+function getKgStockTotal(product: any) {
+  const rows = Array.isArray(product.stock) ? product.stock : [];
+  return rows.reduce((acc: number, row: any) => acc + Number(row.quantityKg || 0), 0);
 }
 
-function getKgStockByLocation(product: any, location: Location) {
-  return Number(
-    location === Location.LOCAL
-      ? product.stockLocalKg || 0
-      : product.stockDepositoKg || 0,
-  );
-}
-
-function getProductStock(product: any, category: CategoryClient) {
-  const stockLocation = getStockLocationByCategory(category);
-  const locationLabel = stockLocation === Location.LOCAL ? "local" : "depósito";
-
+function getProductStock(product: any) {
   if (product.type === ProductType.COMPUESTO) {
     if (!Array.isArray(product.components) || product.components.length === 0) {
       return {
@@ -116,15 +104,11 @@ function getProductStock(product: any, category: CategoryClient) {
       if (!componentProduct) return 0;
 
       if (unitQty > 0) {
-        return Math.floor(
-          getUnitStockByLocation(componentProduct, stockLocation) / unitQty,
-        );
+        return Math.floor(getUnitStockTotal(componentProduct) / unitQty);
       }
 
       if (kgQty > 0) {
-        return Math.floor(
-          getKgStockByLocation(componentProduct, stockLocation) / kgQty,
-        );
+        return Math.floor(getKgStockTotal(componentProduct) / kgQty);
       }
 
       return 0;
@@ -135,37 +119,28 @@ function getProductStock(product: any, category: CategoryClient) {
     return {
       availableQuantity: available,
       availableKg: 0,
-      stockLabel:
-        available > 0
-          ? `${available} disponibles en ${locationLabel}`
-          : `Sin stock en ${locationLabel}`,
+      stockLabel: available > 0 ? `${available} disponibles` : "Sin stock",
       canSell: available > 0,
     };
   }
 
   if (product.saleUnit === SaleUnit.KG) {
-    const availableKg = getKgStockByLocation(product, stockLocation);
+    const availableKg = getKgStockTotal(product);
 
     return {
       availableQuantity: 0,
       availableKg,
-      stockLabel:
-        availableKg > 0
-          ? `${round2(availableKg)} kg disponibles en ${locationLabel}`
-          : `Sin stock en ${locationLabel}`,
+      stockLabel: availableKg > 0 ? `${round2(availableKg)} kg disponibles` : "Sin stock",
       canSell: availableKg > 0,
     };
   }
 
-  const availableQuantity = getUnitStockByLocation(product, stockLocation);
+  const availableQuantity = getUnitStockTotal(product);
 
   return {
     availableQuantity,
     availableKg: 0,
-    stockLabel:
-      availableQuantity > 0
-        ? `${availableQuantity} disponibles en ${locationLabel}`
-        : `Sin stock en ${locationLabel}`,
+    stockLabel: availableQuantity > 0 ? `${availableQuantity} disponibles` : "Sin stock",
     canSell: availableQuantity > 0,
   };
 }
@@ -205,7 +180,7 @@ function resolvePrice(product: any, category: CategoryClient) {
 }
 
 function mapProduct(product: any, customer: CustomerContext) {
-  const stock = getProductStock(product, customer.category);
+  const stock = getProductStock(product);
   const pricing = resolvePrice(product, customer.category);
 
   return {
@@ -405,7 +380,8 @@ export const catalogService = {
       orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
       include: {
         category: true,
-        components: { include: { component: true } },
+        stock: true,
+        components: { include: { component: { include: { stock: true } } } },
       },
     });
 
@@ -479,8 +455,19 @@ export const catalogService = {
       }
     }
 
-    // Mayorista descuenta LOCAL. Minorista/Price descuenta DEPÓSITO.
-    const stockLocation = getStockLocationByCategory(customer.category);
+    // El pedido de la tienda descuenta de la ubicacion default del tenant
+    // (o la primera activa si ninguna esta marcada default) - ver doc de
+    // migracion "ubicaciones de stock dinamicas". Antes se elegia LOCAL/
+    // DEPOSITO segun categoria de cliente, regla que ya no aplica con N
+    // ubicaciones dinamicas.
+    const defaultLocation = await prisma.businessLocation.findFirst({
+      where: { isActive: true, ...tenantScope() },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    });
+
+    if (!defaultLocation) {
+      throw new Error("El negocio todavía no configuró ninguna ubicación de stock");
+    }
 
     const saleResult = await saleService.create({
       userId: data.userId,
@@ -488,7 +475,7 @@ export const catalogService = {
       paymentMethod: data.paymentMethod || PaymentMethod.TRANSFERENCIA,
       receiptType: ReceiptType.TICKET,
       status: SaleStatus.PENDING,
-      stockLocation,
+      stockLocationId: defaultLocation.id,
       items: normalizedItems,
     });
 

@@ -5,7 +5,7 @@
 import {
   PrismaClient, Role, CategoryClient, PaymentMethod, ReceiptType,
   SaleStatus, FinanceType, CategoryFinance, PurchaseStatus,
-  MovementType, Location, BusinessLocationType, CashSessionStatus,
+  MovementType, BusinessLocationType, CashSessionStatus,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -157,11 +157,23 @@ async function main() {
         tenantId: tId, name: p.name, sku: p.sku,
         categoryId: cats[p.cat],
         price: p.price, wholesalePrice: p.wp, clientPrice: p.cp, purchasePrice: p.pp,
-        stockLocal: p.sl, stockDeposito: p.sd, minStock: p.ms,
         isActive: true,
       },
     });
     products[p.sku] = prod.id;
+
+    if (!existing) {
+      await prisma.productStock.upsert({
+        where: { productId_businessLocationId: { productId: prod.id, businessLocationId: local.id } },
+        update: {},
+        create: { tenantId: tId, productId: prod.id, businessLocationId: local.id, quantity: p.sl, minQuantity: p.ms },
+      });
+      await prisma.productStock.upsert({
+        where: { productId_businessLocationId: { productId: prod.id, businessLocationId: deposito.id } },
+        update: {},
+        create: { tenantId: tId, productId: prod.id, businessLocationId: deposito.id, quantity: p.sd },
+      });
+    }
   }
   console.log(`  ✓ ${prodDefs.length} productos`);
 
@@ -263,7 +275,7 @@ async function main() {
       data: {
         tenantId: tId, supplierId: comp.supplier, providerName: comp.provName,
         totalAmount: comp.amount, paymentMethod: PaymentMethod.TRANSFERENCIA,
-        to: Location.DEPOSITO, status: PurchaseStatus.COMPLETED,
+        businessLocationId: deposito.id, status: PurchaseStatus.COMPLETED,
         userId: admin.id, date: daysAgo(comp.daysBack),
         items: {
           create: comp.items.map(i => ({
@@ -279,7 +291,7 @@ async function main() {
         data: {
           tenantId: tId, productId: products[i.sku], userId: admin.id,
           purchaseId: purchase.id, type: MovementType.INGRESS,
-          to: Location.DEPOSITO, quantity: i.qty, reason: "Compra a proveedor",
+          toLocationId: deposito.id, quantity: i.qty, reason: "Compra a proveedor",
           createdAt: daysAgo(comp.daysBack),
         },
       });
@@ -388,7 +400,7 @@ async function main() {
             paymentMethod: payMethod,
             receiptType: ReceiptType.TICKET,
             status: SaleStatus.COMPLETED,
-            stockLocation: Location.LOCAL,
+            stockLocationId: local.id,
             createdAt: saleDate, updatedAt: saleDate,
             items: {
               create: saleItems.map(s => ({

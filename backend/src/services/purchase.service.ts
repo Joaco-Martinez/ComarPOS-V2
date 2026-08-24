@@ -2,7 +2,6 @@ import prisma from "../prisma";
 import {
   CategoryFinance,
   FinanceType,
-  Location,
   MovementType,
   PaymentMethod,
   ProductType,
@@ -27,7 +26,7 @@ type CreatePurchaseInput = {
   invoiceNumber?: string;
   description?: string;
   paymentMethod?: PaymentMethod;
-  to?: Location;
+  businessLocationId?: string;
   date?: string | Date;
   supplierId?: string;
   purchaseOrderId?: string;
@@ -43,9 +42,15 @@ function roundMoney(value: number) {
   return Number(value.toFixed(2));
 }
 
-function validateLocation(value: unknown): Location {
-  if (value === Location.LOCAL || value === Location.DEPOSITO) return value;
-  return Location.DEPOSITO;
+async function requireBusinessLocation(businessLocationId: unknown): Promise<string> {
+  if (typeof businessLocationId !== "string" || !businessLocationId) {
+    throw new Error("Falta la ubicación de destino del stock");
+  }
+  const location = await prisma.businessLocation.findFirst({
+    where: { id: businessLocationId, ...tenantScope() },
+  });
+  if (!location) throw new Error("La ubicación de destino no existe");
+  return location.id;
 }
 
 function validatePaymentMethod(value: unknown): PaymentMethod | undefined {
@@ -60,6 +65,17 @@ function parseDate(value: unknown): Date {
   return date;
 }
 
+const purchaseItemProductInclude = {
+  select: {
+    id: true,
+    name: true,
+    sku: true,
+    saleUnit: true,
+    purchasePrice: true,
+    stock: { include: { businessLocation: { select: { id: true, name: true } } } },
+  },
+} as const;
+
 export const purchaseService = {
   async getAll() {
     return prisma.purchase.findMany({
@@ -68,6 +84,7 @@ export const purchaseService = {
       include: {
         user: { select: { id: true, name: true, email: true } },
         finance: true,
+        businessLocation: true,
         items: {
           include: {
             product: { select: { id: true, name: true, sku: true, saleUnit: true } },
@@ -83,6 +100,7 @@ export const purchaseService = {
       include: {
         user: { select: { id: true, name: true, email: true } },
         finance: true,
+        businessLocation: true,
         items: { include: { product: true } },
         stockMovements: {
           include: {
@@ -102,7 +120,7 @@ export const purchaseService = {
       throw new Error("La compra debe tener al menos un producto");
     }
 
-    const to = validateLocation(data.to);
+    const businessLocationId = await requireBusinessLocation(data.businessLocationId);
     const paymentMethod = validatePaymentMethod(data.paymentMethod);
     const date = parseDate(data.date);
 
@@ -113,7 +131,7 @@ export const purchaseService = {
           invoiceNumber: data.invoiceNumber?.trim() || null,
           description: data.description?.trim() || null,
           paymentMethod,
-          to,
+          businessLocationId,
           date,
           userId,
           status: PurchaseStatus.COMPLETED,
@@ -158,14 +176,11 @@ export const purchaseService = {
           quantity = Math.trunc(qty);
           subtotal = roundMoney(quantity * unitCost);
 
-          await tx.product.update({
-            where: { id: product.id },
-            data: {
-              ...(to === Location.LOCAL
-                ? { stockLocal: { increment: quantity } }
-                : { stockDeposito: { increment: quantity } }),
-              purchasePrice: unitCost,
-            } as any,
+          await tx.product.update({ where: { id: product.id }, data: { purchasePrice: unitCost } });
+          await tx.productStock.upsert({
+            where: { productId_businessLocationId: { productId: product.id, businessLocationId } },
+            update: { quantity: { increment: quantity } },
+            create: { productId: product.id, businessLocationId, quantity, tenantId: currentTenantId() },
           });
 
           await tx.stockMovement.create({
@@ -174,13 +189,12 @@ export const purchaseService = {
               userId,
               purchaseId: purchase.id,
               type: MovementType.INGRESS,
-              from: null,
-              to,
+              toLocationId: businessLocationId,
               quantity,
               reason: "Compra de mercadería",
               reference: `[purchase:${purchase.id}]`,
               tenantId: currentTenantId(),
-            } as any,
+            },
           });
         }
 
@@ -191,14 +205,11 @@ export const purchaseService = {
           quantityKg = qtyKg;
           subtotal = roundMoney(quantityKg * unitCost);
 
-          await tx.product.update({
-            where: { id: product.id },
-            data: {
-              ...(to === Location.LOCAL
-                ? { stockLocalKg: { increment: quantityKg } }
-                : { stockDepositoKg: { increment: quantityKg } }),
-              purchasePrice: unitCost,
-            } as any,
+          await tx.product.update({ where: { id: product.id }, data: { purchasePrice: unitCost } });
+          await tx.productStock.upsert({
+            where: { productId_businessLocationId: { productId: product.id, businessLocationId } },
+            update: { quantityKg: { increment: quantityKg } },
+            create: { productId: product.id, businessLocationId, quantityKg, tenantId: currentTenantId() },
           });
 
           await tx.stockMovement.create({
@@ -207,13 +218,12 @@ export const purchaseService = {
               userId,
               purchaseId: purchase.id,
               type: MovementType.INGRESS,
-              from: null,
-              to,
+              toLocationId: businessLocationId,
               quantityKg,
               reason: "Compra de mercadería",
               reference: `[purchase:${purchase.id}]`,
               tenantId: currentTenantId(),
-            } as any,
+            },
           });
         }
 
@@ -252,27 +262,12 @@ export const purchaseService = {
         data: { totalAmount: total, financeId: finance.id },
         include: {
           finance: true,
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  sku: true,
-                  saleUnit: true,
-                  stockLocal: true,
-                  stockDeposito: true,
-                  stockLocalKg: true,
-                  stockDepositoKg: true,
-                  purchasePrice: true,
-                },
-              },
-            },
-          },
+          businessLocation: true,
+          items: { include: { product: purchaseItemProductInclude } },
           stockMovements: true,
         },
       });
-    });
+    }, { timeout: 20000, maxWait: 20000 });
 
     for (const item of createdPurchase.items) {
       await alertService.checkProductStock(item.productId).catch(() => undefined);
@@ -297,31 +292,33 @@ export const purchaseService = {
     const cancelled = await prisma.$transaction(async (tx) => {
       const purchase = await tx.purchase.findFirst({
         where: { id, ...tenantScope() },
-        include: { items: { include: { product: true } }, finance: true },
+        include: { items: { include: { product: true } }, finance: true, businessLocation: true },
       });
 
       if (!purchase) throw new Error("Compra no encontrada");
       if (purchase.status === PurchaseStatus.CANCELLED) throw new Error("La compra ya está cancelada");
+      if (!purchase.businessLocationId) {
+        throw new Error("Esta compra no tiene una ubicación de stock asociada, no se puede revertir automáticamente");
+      }
+      const businessLocationId = purchase.businessLocationId;
 
       for (const item of purchase.items) {
         const product = item.product;
 
+        const stockRow = await tx.productStock.findUnique({
+          where: { productId_businessLocationId: { productId: product.id, businessLocationId } },
+        });
+
         if (product.saleUnit === SaleUnit.UNIT) {
           const qty = Number(item.quantity || 0);
 
-          if (purchase.to === Location.LOCAL && product.stockLocal < qty) {
-            throw new Error(`No hay stock local suficiente para revertir "${product.name}"`);
-          }
-          if (purchase.to === Location.DEPOSITO && product.stockDeposito < qty) {
-            throw new Error(`No hay stock en depósito suficiente para revertir "${product.name}"`);
+          if (!stockRow || stockRow.quantity < qty) {
+            throw new Error(`No hay stock suficiente en "${purchase.businessLocation?.name ?? "la ubicación"}" para revertir "${product.name}"`);
           }
 
-          await tx.product.update({
-            where: { id: product.id },
-            data:
-              purchase.to === Location.LOCAL
-                ? { stockLocal: { decrement: qty } }
-                : { stockDeposito: { decrement: qty } },
+          await tx.productStock.update({
+            where: { id: stockRow.id },
+            data: { quantity: { decrement: qty } },
           });
 
           await tx.stockMovement.create({
@@ -330,32 +327,25 @@ export const purchaseService = {
               userId,
               purchaseId: purchase.id,
               type: MovementType.ADJUSTMENT,
-              from: purchase.to,
-              to: null,
+              fromLocationId: businessLocationId,
               quantity: qty,
               reason: "Cancelación de compra de mercadería",
               reference: `[purchase-cancel:${purchase.id}]`,
               tenantId: currentTenantId(),
-            } as any,
+            },
           });
         }
 
         if (product.saleUnit === SaleUnit.KG) {
           const qtyKg = Number(item.quantityKg || 0);
 
-          if (purchase.to === Location.LOCAL && product.stockLocalKg < qtyKg) {
-            throw new Error(`No hay stock local KG suficiente para revertir "${product.name}"`);
-          }
-          if (purchase.to === Location.DEPOSITO && product.stockDepositoKg < qtyKg) {
-            throw new Error(`No hay stock en depósito KG suficiente para revertir "${product.name}"`);
+          if (!stockRow || stockRow.quantityKg < qtyKg) {
+            throw new Error(`No hay stock KG suficiente en "${purchase.businessLocation?.name ?? "la ubicación"}" para revertir "${product.name}"`);
           }
 
-          await tx.product.update({
-            where: { id: product.id },
-            data:
-              purchase.to === Location.LOCAL
-                ? { stockLocalKg: { decrement: qtyKg } }
-                : { stockDepositoKg: { decrement: qtyKg } },
+          await tx.productStock.update({
+            where: { id: stockRow.id },
+            data: { quantityKg: { decrement: qtyKg } },
           });
 
           await tx.stockMovement.create({
@@ -364,13 +354,12 @@ export const purchaseService = {
               userId,
               purchaseId: purchase.id,
               type: MovementType.ADJUSTMENT,
-              from: purchase.to,
-              to: null,
+              fromLocationId: businessLocationId,
               quantityKg: qtyKg,
               reason: "Cancelación de compra de mercadería",
               reference: `[purchase-cancel:${purchase.id}]`,
               tenantId: currentTenantId(),
-            } as any,
+            },
           });
         }
       }
@@ -392,7 +381,7 @@ export const purchaseService = {
         data: { status: PurchaseStatus.CANCELLED },
         include: { finance: true, items: { include: { product: true } }, stockMovements: true },
       });
-    });
+    }, { timeout: 20000, maxWait: 20000 });
 
     for (const item of cancelled.items) {
       await alertService.checkProductStock(item.productId).catch(() => undefined);

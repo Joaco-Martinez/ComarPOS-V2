@@ -8,7 +8,7 @@ import SkuScannerModal from '@/components/SkuScannerModal';
 import ImageCropModal, { PRODUCT_IMAGE_SIZE } from '@/components/ImageCropModal';
 import api from '@/lib/api';
 import type { Product, ProductCategory } from '@/types';
-import { categoryName, fmtMoney, normalizeArray, num } from '@/lib/helpers';
+import { categoryName, fmtMoney, normalizeArray, num, productStock, productMinStock } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
 import { Package, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, ScanBarcode } from 'lucide-react';
@@ -19,7 +19,6 @@ const emptyForm = {
   price: '', wholesalePrice: '', purchasePrice: '',
   ivaRate: '21',
   pricePerKg: '', wholesalePricePerKg: '',
-  minStock: '0', minStockKg: '0',
 };
 
 type Form = typeof emptyForm;
@@ -86,7 +85,6 @@ export default function ProductosPage() {
       purchasePrice: String(p.purchasePrice ?? ''),
       ivaRate: String((p as any).ivaRate ?? 21),
       pricePerKg: String(p.pricePerKg ?? ''), wholesalePricePerKg: String(p.wholesalePricePerKg ?? ''),
-      minStock: String(p.minStock ?? 0), minStockKg: String(p.minStockKg ?? 0),
     });
     setImgFile(null);
     setCropSourceFile(null);
@@ -242,9 +240,9 @@ export default function ProductosPage() {
                 ),
               },
               {
-                key: 'stock', header: 'Stock local', render: (p) => {
-                  const stockVal = p.saleUnit === 'KG' ? num(p.stockLocalKg) : num(p.stockLocal);
-                  const minVal = p.saleUnit === 'KG' ? num(p.minStockKg) : num(p.minStock);
+                key: 'stock', header: 'Stock total', render: (p) => {
+                  const stockVal = productStock(p);
+                  const minVal = productMinStock(p);
                   const low = stockVal <= minVal && minVal > 0;
                   return (
                     <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: low ? 'var(--warn)' : 'var(--text2)' }}>
@@ -255,10 +253,13 @@ export default function ProductosPage() {
                 },
               },
               {
-                key: 'minimo', header: 'Mínimo', render: (p) => {
-                  const minVal = p.saleUnit === 'KG' ? num(p.minStockKg) : num(p.minStock);
-                  return <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{minVal}</span>;
-                },
+                key: 'ubicaciones', header: 'Por ubicación', render: (p) => (
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                    {(p.stock ?? []).filter((s) => (p.saleUnit === 'KG' ? s.quantityKg : s.quantity) > 0)
+                      .map((s) => `${s.businessLocation?.name ?? '?'}: ${p.saleUnit === 'KG' ? s.quantityKg : s.quantity}`)
+                      .join(' · ') || '—'}
+                  </span>
+                ),
               },
               {
                 key: 'estado', header: 'Estado', render: (p) => (
@@ -277,8 +278,8 @@ export default function ProductosPage() {
               },
             ] as ResponsiveTableColumn<Product>[]}
             renderMobileCard={(p) => {
-              const stockVal = p.saleUnit === 'KG' ? num(p.stockLocalKg) : num(p.stockLocal);
-              const minVal = p.saleUnit === 'KG' ? num(p.minStockKg) : num(p.minStock);
+              const stockVal = productStock(p);
+              const minVal = productMinStock(p);
               const low = stockVal <= minVal && minVal > 0;
               return (
                 <>
@@ -434,19 +435,8 @@ export default function ProductosPage() {
               {/* Stock */}
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Stock</div>
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -4 }}>
-                La cantidad de stock no se carga acá — se ajusta desde <b>Stock</b> o <b>Conteo de Stock</b> para que quede registrado el movimiento.
+                La cantidad y el mínimo de stock no se cargan acá — se ajustan por ubicación desde <b>Stock</b> o <b>Conteo de Stock</b> para que quede registrado el movimiento.
               </div>
-              {isKg ? (
-                <div className="form-group" style={{ marginBottom: 0, maxWidth: 220 }}>
-                  <label className="form-label">Stock mínimo (kg)</label>
-                  <input type="number" min="0" step="any" value={form.minStockKg} onChange={f('minStockKg')} />
-                </div>
-              ) : (
-                <div className="form-group" style={{ marginBottom: 0, maxWidth: 220 }}>
-                  <label className="form-label">Stock mínimo</label>
-                  <input type="number" min="0" step="any" value={form.minStock} onChange={f('minStock')} />
-                </div>
-              )}
 
               {/* Image */}
               <div className="form-group" style={{ marginBottom: 0 }}>

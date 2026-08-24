@@ -43,18 +43,10 @@ function normalizeSaleBody(body: any) {
       }))
     : [];
 
-  const stockLocation = body.stockLocation ?? body.stockSource ?? "LOCAL";
-
-  if (!["LOCAL", "DEPOSITO"].includes(stockLocation)) {
-    return {
-      error: {
-        status: 400,
-        body: {
-          message: "Depósito/origen de stock inválido. Usá LOCAL o DEPOSITO",
-        },
-      },
-    };
-  }
+  // No se valida presencia acá: en create() es requerida (la tira
+  // sale.create.ts si falta), en updateItems() es opcional (si no se manda,
+  // sale.update.ts sigue usando la ubicación actual de la venta).
+  const stockLocationId = body.stockLocationId ?? body.stockLocation ?? body.stockSource;
 
   const deliveryMethod = body.deliveryMethod ?? "PICKUP";
 
@@ -87,7 +79,7 @@ function normalizeSaleBody(body: any) {
   return {
     payload: {
       ...body,
-      stockLocation,
+      stockLocationId,
       quotationHours: toNumber(body.quotationHours),
       discountValue: toNumber(body.discountValue),
       businessLocationId: body.businessLocationId ?? null,

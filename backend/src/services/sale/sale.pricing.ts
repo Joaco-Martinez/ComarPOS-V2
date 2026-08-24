@@ -6,7 +6,6 @@
 import prisma from "../../prisma";
 import {
   CategoryClient,
-  Location,
   SaleItemPriceType,
   ProductType,
   SaleUnit,
@@ -15,7 +14,6 @@ import {
 import {
   CreateSaleInput,
   ResolvedSaleItem,
-  StockLocation,
   ClientMini,
   DELIVERY_SKU,
 } from "./sale.types";
@@ -43,26 +41,6 @@ function shouldDiscountStock(item: ResolvedSaleItem) {
 
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
-}
-
-function normalizeStockLocation(value?: Location | string): StockLocation {
-  if (!value) return "LOCAL";
-
-  if (value !== "LOCAL" && value !== "DEPOSITO") {
-    throw new Error("Depósito/origen de stock inválido. Usá LOCAL o DEPOSITO");
-  }
-
-  return value;
-}
-
-function getStockFieldNames(location: StockLocation) {
-  return location === "DEPOSITO"
-    ? { unit: "stockDeposito", kg: "stockDepositoKg" }
-    : { unit: "stockLocal", kg: "stockLocalKg" };
-}
-
-function getLocationLabel(location: StockLocation) {
-  return location === "DEPOSITO" ? "depósito" : "local";
 }
 
 function resolveQty(product: any, item: any) {
@@ -479,9 +457,6 @@ function applyDiscountAndProfitToItems(
 export {
   round2,
   normalizeText,
-  normalizeStockLocation,
-  getStockFieldNames,
-  getLocationLabel,
   isDeliverySaleItem,
   shouldDiscountStock,
   resolveQty,

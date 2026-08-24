@@ -78,8 +78,10 @@ export default function BusinessLocationsPage() {
   const del = async (id: string) => {
     setDeleting(id);
     try {
-      await api.delete(`/business-locations/${id}`);
-      showToast('Ubicación eliminada');
+      const { data } = await api.delete(`/business-locations/${id}`);
+      // Si tenía ventas o stock cargado, el backend la desactiva en vez de
+      // borrarla en limpio (no puede dejar movimientos/stock huérfanos).
+      showToast(data?.isActive === false ? 'Ubicación desactivada (tenía ventas o stock cargado)' : 'Ubicación eliminada');
       load();
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? 'No se puede eliminar');

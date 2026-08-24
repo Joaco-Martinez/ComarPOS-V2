@@ -7,13 +7,18 @@ import { DeliveryMethod, DeliveryStatus, SaleStatus } from "@prisma/client";
 import { CreateSaleInput, ClientMini, DELIVERY_SKU } from "./sale.types";
 import {
   round2,
-  normalizeStockLocation,
   isDeliverySaleItem,
   resolveSaleItems,
   buildSaleItemCreateData,
   applyDiscountAndProfitToItems,
 } from "./sale.pricing";
-import { buildStockLines, validateStockAvailability, discountStockLines, queueStockAlerts } from "./sale.stock";
+import {
+  buildStockLines,
+  requireStockLocationId,
+  validateStockAvailability,
+  discountStockLines,
+  queueStockAlerts,
+} from "./sale.stock";
 import { calculatePaymentState, createAccountDebtMovement } from "./sale.payment";
 import { addHours, resolveQuotationHours, queueSalePdfGeneration } from "./sale.query";
 import { tenantScope } from "../../utils/tenantScope";
@@ -167,7 +172,7 @@ export async function create(data: CreateSaleInput) {
     throw new Error("Para vender en cuenta corriente necesitás seleccionar un cliente");
   }
 
-  const stockLocation = normalizeStockLocation(data.stockLocation);
+  const stockLocationId = await requireStockLocationId(data.stockLocationId);
   const stockLines = buildStockLines(itemsWithProfit);
 
   const pendingAlerts: string[] = [];
@@ -181,7 +186,7 @@ export async function create(data: CreateSaleInput) {
 
   const result = await prisma.$transaction(
     async (tx) => {
-      await validateStockAvailability(tx, stockLines, stockLocation);
+      await validateStockAvailability(tx, stockLines, stockLocationId);
 
       const sale = await tx.sale.create({
         data: {
@@ -204,7 +209,7 @@ export async function create(data: CreateSaleInput) {
           paymentMethod: data.paymentMethod,
           receiptType: data.receiptType,
           status: saleStatus,
-          stockLocation,
+          stockLocationId,
 
           deliveryMethod: data.deliveryMethod ?? DeliveryMethod.PICKUP,
           deliveryStatus: data.deliveryStatus ?? DeliveryStatus.NONE,
@@ -263,7 +268,7 @@ export async function create(data: CreateSaleInput) {
         stockLines,
         data.userId,
         sale.id,
-        stockLocation,
+        stockLocationId,
         pendingAlerts
       );
 

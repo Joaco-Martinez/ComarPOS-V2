@@ -13,7 +13,6 @@ export type SaleStatus = 'COMPLETED' | 'PENDING' | 'CANCELLED';
 export type DiscountType = 'PERCENTAGE' | 'FIXED';
 export type ClientCategory = 'Price' | 'Cliente' | 'Mayorista';
 export type MovementType = 'TRANSFER' | 'INGRESS' | 'ADJUSTMENT' | 'SALE' | 'SALE_CANCEL';
-export type MovementLocation = 'LOCAL' | 'DEPOSITO';
 export type AccountMovementType = 'DEBT' | 'PAYMENT' | 'ADJUSTMENT_POSITIVE' | 'ADJUSTMENT_NEGATIVE' | 'CREDIT_NOTE';
 export type CashSessionStatus = 'OPEN' | 'CLOSED';
 export type CashMovementType = 'OPENING' | 'SALE_CASH' | 'PAYMENT_RECEIVED' | 'EXPENSE' | 'WITHDRAWAL' | 'DEPOSIT' | 'ADJUSTMENT';
@@ -22,6 +21,19 @@ export type PurchaseOrderStatus = 'DRAFT' | 'SENT' | 'PARTIAL' | 'RECEIVED' | 'C
 export type GoalMetric = 'REVENUE' | 'GROSS_PROFIT' | 'UNITS_SOLD' | 'SALES_COUNT';
 export type StockCountStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type NotificationType = 'LOW_STOCK' | 'DEBT_ALERT' | 'GOAL_REACHED' | 'PROMOTION_EXPIRING' | 'CASH_SESSION_OPEN' | 'SYSTEM' | 'ONBOARDING_PENDING';
+
+export interface QuickAccessFolder {
+  id: string;
+  name: string;
+  color: string;
+  items: string[];
+}
+
+export interface QuickAccessConfig {
+  pinned: string[];
+  folders: QuickAccessFolder[];
+  loose: string[];
+}
 
 export interface User {
   id: string;
@@ -36,6 +48,7 @@ export interface User {
   createdAt?: string;
   updatedAt?: string;
   lastLoginAt?: string | null;
+  quickAccessConfig?: QuickAccessConfig | null;
 }
 
 export interface ProductCategory {
@@ -58,6 +71,17 @@ export interface ProductComponent {
   component?: Product;
 }
 
+export interface ProductStock {
+  id: string;
+  productId: string;
+  businessLocationId: string;
+  businessLocation?: BusinessLocation;
+  quantity: number;
+  quantityKg: number;
+  minQuantity?: number | null;
+  minQuantityKg?: number | null;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -73,12 +97,7 @@ export interface Product {
   pricePerKg?: number | null;
   clientPricePerKg?: number | null;
   wholesalePricePerKg?: number | null;
-  stockLocal: number;
-  stockDeposito: number;
-  minStock?: number | null;
-  stockLocalKg?: number;
-  stockDepositoKg?: number;
-  minStockKg?: number | null;
+  stock?: ProductStock[];
   saleUnit: SaleUnit;
   imageUrl?: string | null;
   imageId?: string | null;
@@ -178,7 +197,8 @@ export interface Sale {
   total: number;
   businessLocationId?: string | null;
   businessLocation?: BusinessLocation | null;
-  stockLocation?: 'LOCAL' | 'DEPOSITO';
+  stockLocationId?: string | null;
+  stockLocationRef?: BusinessLocation | null;
   deliveryMethod?: DeliveryMethod;
   deliveryStatus?: DeliveryStatus;
   deliveryAddressSnapshot?: string | null;
@@ -220,8 +240,10 @@ export interface StockMovement {
   product?: Product;
   user?: User;
   type: MovementType;
-  from?: MovementLocation | null;
-  to?: MovementLocation | null;
+  fromLocationId?: string | null;
+  toLocationId?: string | null;
+  fromLocation?: { id: string; name: string } | null;
+  toLocation?: { id: string; name: string } | null;
   quantity?: number | null;
   quantityKg?: number | null;
   reason?: string | null;
@@ -236,8 +258,6 @@ export interface Alert {
   message?: string;
   resolved?: boolean;
   createdAt: string;
-  stockLocal?: number;
-  minStock?: number;
   productName?: string;
 }
 
@@ -279,7 +299,8 @@ export interface Purchase {
   date: string;
   totalAmount: number;
   description?: string | null;
-  to?: MovementLocation;
+  businessLocationId?: string | null;
+  businessLocation?: BusinessLocation | null;
   items?: PurchaseItem[];
   createdAt: string;
   updatedAt: string;

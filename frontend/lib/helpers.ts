@@ -54,8 +54,18 @@ export const productPrice = (
   return num(product[priceType], num(product.price));
 };
 
-export const productStock = (product: Product) =>
-  product.saleUnit === 'KG' ? num(product.stockLocalKg) : num(product.stockLocal);
+// Suma el stock de un producto a traves de todas sus ubicaciones (ver
+// backend doc de migracion "ubicaciones de stock dinamicas" - reemplaza
+// stockLocal/stockDeposito, que ya no existen como campos fijos).
+export const productStock = (product: Product) => {
+  const rows = product.stock ?? [];
+  return rows.reduce((acc, row) => acc + num(product.saleUnit === 'KG' ? row.quantityKg : row.quantity), 0);
+};
 
-export const productMinStock = (product: Product) =>
-  product.saleUnit === 'KG' ? num(product.minStockKg) : num(product.minStock);
+export const productMinStock = (product: Product) => {
+  const rows = product.stock ?? [];
+  return rows.reduce(
+    (acc, row) => acc + num(product.saleUnit === 'KG' ? row.minQuantityKg : row.minQuantity),
+    0
+  );
+};

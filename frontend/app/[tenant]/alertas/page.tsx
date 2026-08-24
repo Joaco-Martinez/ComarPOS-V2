@@ -60,14 +60,6 @@ export default function AlertasPage() {
             emptyMessage={`Sin alertas ${showResolved ? '' : 'activas'}`}
             columns={[
               { key: 'producto', header: 'Producto', render: (a) => <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>{a.product?.name ?? a.productName ?? '—'}</span> },
-              {
-                key: 'stock', header: 'Stock actual',
-                render: (a) => <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--danger)', fontWeight: 700 }}>{a.stockLocal ?? a.product?.stockLocal ?? '—'}</span>,
-              },
-              {
-                key: 'minimo', header: 'Mínimo',
-                render: (a) => <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--warn)' }}>{a.minStock ?? a.product?.minStock ?? '—'}</span>,
-              },
               { key: 'mensaje', header: 'Mensaje', render: (a) => <span style={{ fontSize: 12, color: 'var(--text2)' }}>{a.message ?? 'Stock bajo'}</span> },
               { key: 'fecha', header: 'Fecha', render: (a) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtDate(a.createdAt)}</span> },
               {
@@ -96,10 +88,6 @@ export default function AlertasPage() {
                   </span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text2)' }}>{a.message ?? 'Stock bajo'}</div>
-                <div className="mobile-card-row">
-                  <span>Stock: <span style={{ fontFamily: 'var(--mono)', color: 'var(--danger)', fontWeight: 700 }}>{a.stockLocal ?? a.product?.stockLocal ?? '—'}</span></span>
-                  <span>Mínimo: <span style={{ fontFamily: 'var(--mono)', color: 'var(--warn)' }}>{a.minStock ?? a.product?.minStock ?? '—'}</span></span>
-                </div>
                 <div className="mobile-card-row">
                   <span style={{ fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{fmtDate(a.createdAt)}</span>
                   {!a.resolved && (

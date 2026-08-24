@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import { stockCountService } from "../services/stockCount.service";
-import { Location } from "@prisma/client";
 
 function wrap(fn: (req: Request, res: Response) => Promise<any>) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -24,7 +23,7 @@ export const stockCountController = {
   start: wrap(async (req) =>
     stockCountService.startCount({
       userId: userId(req),
-      location: req.body.location as Location,
+      businessLocationId: req.body.businessLocationId as string,
       notes: req.body.notes,
     })
   ),

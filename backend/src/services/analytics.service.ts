@@ -367,17 +367,18 @@ async function getSalesByLocation(from: Date, to: Date) {
   const sales = await prisma.sale.findMany({
     where: { status: "COMPLETED", createdAt: { gte: from, lte: to }, ...scope },
     select: {
-      total: true, grossProfit: true, businessLocationId: true, stockLocation: true,
+      total: true, grossProfit: true, businessLocationId: true, stockLocationId: true,
       businessLocation: { select: { id: true, name: true, type: true } },
+      stockLocationRef: { select: { id: true, name: true, type: true } },
     },
   });
 
   const byLocation: Record<string, { location: any; revenue: number; profit: number; count: number }> = {};
   for (const s of sales) {
-    const key = s.businessLocationId ?? s.stockLocation ?? "SIN_LOCAL";
+    const key = s.businessLocationId ?? s.stockLocationId ?? "SIN_LOCAL";
     if (!byLocation[key])
       byLocation[key] = {
-        location: s.businessLocation ?? { id: null, name: s.stockLocation, type: null },
+        location: s.businessLocation ?? s.stockLocationRef ?? { id: null, name: "Sin ubicación", type: null },
         revenue: 0, profit: 0, count: 0,
       };
     byLocation[key].revenue += s.total;
@@ -1021,13 +1022,20 @@ async function getCollectionRate(from: Date, to: Date) {
 
 // ─── GROUP 5: INVENTORY ────────────────────────────────────────────────────────
 
+// Suma el stock de un producto a traves de todas sus ubicaciones (ver doc
+// de migracion "ubicaciones de stock dinamicas" - reemplaza
+// stockLocal+stockDeposito, que ya no existen como columnas fijas).
+function sumStock(stock: { quantity: number; quantityKg: number }[], isKg: boolean) {
+  return stock.reduce((acc, row) => acc + (isKg ? row.quantityKg : row.quantity), 0);
+}
+
 async function getInventoryValue() {
   const scope = tenantScope();
   const products = await prisma.product.findMany({
     where: { isActive: true, isService: false, ...scope },
     select: {
       id: true, name: true, sku: true, saleUnit: true, purchasePrice: true, price: true,
-      stockLocal: true, stockDeposito: true, stockLocalKg: true, stockDepositoKg: true,
+      stock: { select: { quantity: true, quantityKg: true } },
       category: { select: { name: true } },
     },
   });
@@ -1038,7 +1046,7 @@ async function getInventoryValue() {
 
   const items = products.map((p) => {
     const isKg = p.saleUnit === "KG";
-    const totalStock = isKg ? p.stockLocalKg + p.stockDepositoKg : p.stockLocal + p.stockDeposito;
+    const totalStock = sumStock(p.stock, isKg);
     const costValue = round2(totalStock * p.purchasePrice);
     const saleValue = round2(totalStock * p.price);
 
@@ -1054,8 +1062,6 @@ async function getInventoryValue() {
     return {
       product: { id: p.id, name: p.name, sku: p.sku, saleUnit: p.saleUnit, category: p.category?.name },
       totalStock: round2(totalStock),
-      stockLocal: isKg ? round2(p.stockLocalKg) : p.stockLocal,
-      stockDeposito: isKg ? round2(p.stockDepositoKg) : p.stockDeposito,
       purchasePrice: p.purchasePrice,
       salePrice: p.price,
       costValue,
@@ -1093,7 +1099,7 @@ async function getDeadStock(days = 45) {
     where: { isActive: true, isService: false, ...scope },
     select: {
       id: true, name: true, sku: true, saleUnit: true, purchasePrice: true,
-      stockLocal: true, stockDeposito: true, stockLocalKg: true, stockDepositoKg: true,
+      stock: { select: { quantity: true, quantityKg: true } },
       category: { select: { name: true } },
       StockMovement: {
         where: { type: "SALE", createdAt: { gte: cutoff }, tenantId: tenantId ?? undefined },
@@ -1104,14 +1110,12 @@ async function getDeadStock(days = 45) {
   });
 
   const dead = products.filter((p) => {
-    const isKg = p.saleUnit === "KG";
-    const stock = isKg ? p.stockLocalKg + p.stockDepositoKg : p.stockLocal + p.stockDeposito;
+    const stock = sumStock(p.stock, p.saleUnit === "KG");
     return stock > 0 && p.StockMovement.length === 0;
   });
 
   const totalImmobilizedValue = dead.reduce((s, p) => {
-    const isKg = p.saleUnit === "KG";
-    const stock = isKg ? p.stockLocalKg + p.stockDepositoKg : p.stockLocal + p.stockDeposito;
+    const stock = sumStock(p.stock, p.saleUnit === "KG");
     return s + stock * p.purchasePrice;
   }, 0);
 
@@ -1121,8 +1125,7 @@ async function getDeadStock(days = 45) {
     totalImmobilizedValue: round2(totalImmobilizedValue),
     products: dead
       .map((p) => {
-        const isKg = p.saleUnit === "KG";
-        const stock = isKg ? p.stockLocalKg + p.stockDepositoKg : p.stockLocal + p.stockDeposito;
+        const stock = sumStock(p.stock, p.saleUnit === "KG");
         return {
           product: { id: p.id, name: p.name, sku: p.sku, saleUnit: p.saleUnit, category: p.category?.name },
           totalStock: round2(stock),
@@ -1133,41 +1136,49 @@ async function getDeadStock(days = 45) {
   };
 }
 
+// Una fila por cada (producto, ubicacion) por debajo de su propio minimo -
+// generalizado a N ubicaciones dinamicas, reemplaza el chequeo fijo
+// LOCAL/DEPOSITO (ver doc de migracion "ubicaciones de stock dinamicas").
 async function getLowStock() {
   const scope = tenantScope();
   const products = await prisma.product.findMany({
     where: { isActive: true, isService: false, ...scope },
     select: {
       id: true, name: true, sku: true, saleUnit: true, purchasePrice: true, price: true,
-      stockLocal: true, stockDeposito: true, stockLocalKg: true, stockDepositoKg: true,
-      minStock: true, minStockDeposito: true, minStockKg: true, minStockDepositoKg: true,
       category: { select: { name: true } },
+      stock: { include: { businessLocation: { select: { id: true, name: true } } } },
     },
   });
 
-  return products
-    .filter((p) =>
-      p.saleUnit === "KG"
-        ? ((p.minStockKg ?? 0) > 0 && p.stockLocalKg < (p.minStockKg ?? 0)) ||
-          ((p.minStockDepositoKg ?? 0) > 0 && p.stockDepositoKg < (p.minStockDepositoKg ?? 0))
-        : ((p.minStock ?? 0) > 0 && p.stockLocal < (p.minStock ?? 0)) ||
-          ((p.minStockDeposito ?? 0) > 0 && p.stockDeposito < (p.minStockDeposito ?? 0))
-    )
-    .map((p) => {
-      const isKg = p.saleUnit === "KG";
-      const stock = isKg ? p.stockLocalKg : p.stockLocal;
-      const minLocal = isKg ? (p.minStockKg ?? 0) : (p.minStock ?? 0);
-      const deficit = Math.max(0, minLocal - stock);
-      return {
+  const rows: {
+    product: { id: string; name: string; sku: string | null; saleUnit: string; category?: string };
+    location: { id: string; name: string };
+    stock: number;
+    minStock: number;
+    deficit: number;
+    restockCost: number;
+  }[] = [];
+
+  for (const p of products) {
+    const isKg = p.saleUnit === "KG";
+    for (const s of p.stock) {
+      const qty = isKg ? s.quantityKg : s.quantity;
+      const min = isKg ? s.minQuantityKg : s.minQuantity;
+      if (min == null || min <= 0 || qty >= min) continue;
+
+      const deficit = Math.max(0, min - qty);
+      rows.push({
         product: { id: p.id, name: p.name, sku: p.sku, saleUnit: p.saleUnit, category: p.category?.name },
-        stockLocal: round2(stock),
-        stockDeposito: isKg ? round2(p.stockDepositoKg) : p.stockDeposito,
-        minStockLocal: minLocal,
+        location: s.businessLocation,
+        stock: round2(qty),
+        minStock: min,
         deficit: round2(deficit),
         restockCost: round2(deficit * p.purchasePrice),
-      };
-    })
-    .sort((a, b) => b.restockCost - a.restockCost);
+      });
+    }
+  }
+
+  return rows.sort((a, b) => b.restockCost - a.restockCost);
 }
 
 async function getInventoryRotation(from: Date, to: Date) {
@@ -1181,7 +1192,7 @@ async function getInventoryRotation(from: Date, to: Date) {
       where: { isActive: true, isService: false, ...scope },
       select: {
         id: true, name: true, sku: true, saleUnit: true, purchasePrice: true,
-        stockLocal: true, stockDeposito: true, stockLocalKg: true, stockDepositoKg: true,
+        stock: { select: { quantity: true, quantityKg: true } },
         category: { select: { name: true } },
       },
     }),
@@ -1201,7 +1212,7 @@ async function getInventoryRotation(from: Date, to: Date) {
   return products
     .map((p) => {
       const isKg = p.saleUnit === "KG";
-      const currentStock = isKg ? p.stockLocalKg + p.stockDepositoKg : p.stockLocal + p.stockDeposito;
+      const currentStock = sumStock(p.stock, isKg);
       const s = salesMap[p.id];
       const qtySold = s ? (isKg ? s.qtyKg : s.qty) : 0;
 
@@ -1590,7 +1601,7 @@ async function getInsights() {
     where: { isActive: true, isService: false, ...scope },
     select: {
       id: true, name: true, purchasePrice: true, saleUnit: true,
-      stockLocal: true, stockDeposito: true, stockLocalKg: true, stockDepositoKg: true,
+      stock: { select: { quantity: true, quantityKg: true } },
       StockMovement: {
         where: { type: "SALE", createdAt: { gte: daysAgo(60) } },
         take: 1,
@@ -1600,13 +1611,11 @@ async function getInsights() {
   });
   const deadHighValue = deadProducts
     .filter((p) => {
-      const isKg = p.saleUnit === "KG";
-      const stock = isKg ? p.stockLocalKg + p.stockDepositoKg : p.stockLocal + p.stockDeposito;
+      const stock = sumStock(p.stock, p.saleUnit === "KG");
       return stock > 0 && p.StockMovement.length === 0 && stock * p.purchasePrice > 5000;
     })
     .map((p) => {
-      const isKg = p.saleUnit === "KG";
-      const stock = isKg ? p.stockLocalKg + p.stockDepositoKg : p.stockLocal + p.stockDeposito;
+      const stock = sumStock(p.stock, p.saleUnit === "KG");
       return { id: p.id, name: p.name, stock: round2(stock), immobilizedValue: round2(stock * p.purchasePrice) };
     })
     .sort((a, b) => b.immobilizedValue - a.immobilizedValue)
@@ -1688,13 +1697,16 @@ async function getGrowthOpportunities() {
 
   const topProducts = await prisma.product.findMany({
     where: { id: { in: topSoldIds.map((i) => i.productId) }, ...scope },
-    select: { id: true, name: true, stockLocal: true, stockDeposito: true, minStock: true, price: true, purchasePrice: true, saleUnit: true },
+    select: {
+      id: true, name: true, price: true, purchasePrice: true, saleUnit: true,
+      stock: { select: { quantity: true, minQuantity: true } },
+    },
   });
 
   const highDemandLowStock = topProducts.filter((p) => {
     if (p.saleUnit === "KG") return false;
-    const total = p.stockLocal + p.stockDeposito;
-    const min = p.minStock ?? 0;
+    const total = p.stock.reduce((acc, row) => acc + row.quantity, 0);
+    const min = p.stock.reduce((acc, row) => acc + (row.minQuantity ?? 0), 0);
     return min > 0 && total <= min * 1.2;
   });
 
@@ -1869,12 +1881,17 @@ async function getRiskAlerts() {
   // 4. Products below min stock count
   const allProducts = await prisma.product.findMany({
     where: { isActive: true, isService: false, ...scope },
-    select: { saleUnit: true, minStock: true, stockLocal: true, minStockKg: true, stockLocalKg: true },
+    select: {
+      saleUnit: true,
+      stock: { select: { quantity: true, quantityKg: true, minQuantity: true, minQuantityKg: true } },
+    },
   });
   const belowMin = allProducts.filter((p) =>
-    p.saleUnit === "KG"
-      ? (p.minStockKg ?? 0) > 0 && p.stockLocalKg < (p.minStockKg ?? 0)
-      : (p.minStock ?? 0) > 0 && p.stockLocal < (p.minStock ?? 0)
+    p.stock.some((s) =>
+      p.saleUnit === "KG"
+        ? (s.minQuantityKg ?? 0) > 0 && s.quantityKg < (s.minQuantityKg ?? 0)
+        : (s.minQuantity ?? 0) > 0 && s.quantity < (s.minQuantity ?? 0)
+    )
   ).length;
 
   if (belowMin > 0) {

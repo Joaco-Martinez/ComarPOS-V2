@@ -8,7 +8,6 @@ import { financeService } from "../finance.service";
 import { CreateSaleInput, ClientMini, DELIVERY_SKU } from "./sale.types";
 import {
   round2,
-  normalizeStockLocation,
   isDeliverySaleItem,
   resolveSaleItems,
   saleItemToResolved,
@@ -16,7 +15,14 @@ import {
   getPaymentsFromExistingSale,
   applyDiscountAndProfitToItems,
 } from "./sale.pricing";
-import { buildStockLines, validateStockAvailability, discountStockLines, restoreStockLines, queueStockAlerts } from "./sale.stock";
+import {
+  buildStockLines,
+  requireStockLocationId,
+  validateStockAvailability,
+  discountStockLines,
+  restoreStockLines,
+  queueStockAlerts,
+} from "./sale.stock";
 import { calculatePaymentState } from "./sale.payment";
 import { buildSaleInclude, queueSalePdfGeneration } from "./sale.query";
 import { tenantScope } from "../../utils/tenantScope";
@@ -98,9 +104,10 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
     }
   }
 
-  const stockLocation = normalizeStockLocation(
-    data.stockLocation ?? (sale as any).stockLocation ?? "LOCAL"
+  const stockLocationId = await requireStockLocationId(
+    data.stockLocationId ?? sale.stockLocationId
   );
+  const previousStockLocationId = await requireStockLocationId(sale.stockLocationId);
 
   const itemsWithPrices = await resolveSaleItems(data.items, client);
 
@@ -203,11 +210,11 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
         oldStockLines,
         sale.userId ?? undefined,
         sale.id,
-        normalizeStockLocation((sale as any).stockLocation ?? "LOCAL"),
+        previousStockLocationId,
         pendingAlerts
       );
 
-      await validateStockAvailability(tx, newStockLines, stockLocation);
+      await validateStockAvailability(tx, newStockLines, stockLocationId);
 
       await tx.boxContent.deleteMany({
         where: {
@@ -294,7 +301,7 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
           discountValue: discountValue ?? null,
           paymentMethod: data.paymentMethod ?? sale.paymentMethod,
           receiptType: data.receiptType ?? sale.receiptType,
-          stockLocation,
+          stockLocationId,
           deliveryMethod,
           deliveryStatus,
           deliveryAddressSnapshot:
@@ -341,7 +348,7 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
         newStockLines,
         sale.userId ?? undefined,
         sale.id,
-        stockLocation,
+        stockLocationId,
         pendingAlerts
       );
 

@@ -129,14 +129,33 @@ export const businessLocationService = {
         where: { ...tenantScope() },
       });
 
-      return tx.businessLocation.create({
+      const created = await tx.businessLocation.create({
         data: {
           ...cleanData,
           tenantId: currentTenantId(),
           isDefault: existingCount === 0 ? true : cleanData.isDefault,
         },
       });
-    });
+
+      // Arranca con stock en 0 para todos los productos activos del tenant
+      // - ver doc de migracion "ubicaciones de stock dinamicas".
+      const products = await tx.product.findMany({
+        where: { isActive: true, ...tenantScope() },
+        select: { id: true },
+      });
+      if (products.length > 0) {
+        await tx.productStock.createMany({
+          data: products.map((p) => ({
+            productId: p.id,
+            businessLocationId: created.id,
+            tenantId: currentTenantId(),
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return created;
+    }, { timeout: 15000, maxWait: 15000 });
   },
 
   async getAll(options?: { onlyActive?: boolean }) {
@@ -263,6 +282,9 @@ export const businessLocationService = {
             sales: true,
           },
         },
+        productStocks: {
+          select: { quantity: true, quantityKg: true },
+        },
       },
     });
 
@@ -270,7 +292,13 @@ export const businessLocationService = {
       throw new Error("Sucursal/depósito no encontrado");
     }
 
-    if (existing._count.sales > 0) {
+    // No se puede borrar en limpio una ubicacion que todavia tiene stock
+    // adentro - ver doc de migracion "ubicaciones de stock dinamicas".
+    const hasStock = existing.productStocks.some(
+      (row) => row.quantity > 0 || row.quantityKg > 0
+    );
+
+    if (existing._count.sales > 0 || hasStock) {
       return prisma.businessLocation.update({
         where: {
           id,

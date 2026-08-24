@@ -6,7 +6,6 @@ import {
   CategoryClient,
   DeliveryMethod,
   DeliveryStatus,
-  Location,
   SaleItemPriceType,
   PaymentMethod,
   ProductType,
@@ -17,7 +16,7 @@ import {
 
 export type CreateSaleInput = {
   userId?: string;
-  stockLocation?: Location;
+  stockLocationId?: string;
   clientId?: string;
 
   businessLocationId?: string | null;
@@ -95,8 +94,6 @@ export type ResolvedSaleItem = {
     quantityKg: number | null;
   }[];
 };
-
-export type StockLocation = "LOCAL" | "DEPOSITO";
 
 export type StockLine = {
   productId: string;

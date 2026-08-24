@@ -1,4 +1,4 @@
-import { round2, isDeliverySaleItem, shouldDiscountStock, normalizeStockLocation } from "../sale.pricing";
+import { round2, isDeliverySaleItem, shouldDiscountStock } from "../sale.pricing";
 import type { ResolvedSaleItem } from "../sale.types";
 
 function item(overrides: Partial<ResolvedSaleItem> = {}): ResolvedSaleItem {
@@ -54,20 +54,5 @@ describe("shouldDiscountStock", () => {
 
   it("el item de envio no descuenta stock aunque no sea isService", () => {
     expect(shouldDiscountStock(item({ productSku: "ENVIO-FLETE2", isService: false }))).toBe(false);
-  });
-});
-
-describe("normalizeStockLocation", () => {
-  it("sin valor, default LOCAL", () => {
-    expect(normalizeStockLocation(undefined)).toBe("LOCAL");
-  });
-
-  it("acepta LOCAL y DEPOSITO", () => {
-    expect(normalizeStockLocation("LOCAL")).toBe("LOCAL");
-    expect(normalizeStockLocation("DEPOSITO")).toBe("DEPOSITO");
-  });
-
-  it("cualquier otro valor tira error", () => {
-    expect(() => normalizeStockLocation("OTRO" as any)).toThrow();
   });
 });

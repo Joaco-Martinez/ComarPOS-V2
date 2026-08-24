@@ -1,10 +1,12 @@
 import prisma from "../prisma";
 import nodemailer from "nodemailer";
-import { Product, SaleUnit } from "@prisma/client";
+import { Product, ProductStock, BusinessLocation, SaleUnit } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 
-type StockLocationLabel = "LOCAL" | "DEPÓSITO";
+type ProductWithStock = Product & { stock: (ProductStock & { businessLocation: BusinessLocation })[] };
+
+const stockInclude = { stock: { include: { businessLocation: true } } } as const;
 
 class AlertService {
   async createAlert(
@@ -13,7 +15,7 @@ class AlertService {
     stock: number,
     minStock: number,
     unit = "unidades",
-    location?: StockLocationLabel
+    location?: string
   ) {
     const locationText = location ? ` en ${location}` : "";
 
@@ -45,6 +47,7 @@ class AlertService {
   async checkProductStock(productId: string) {
     const product = await prisma.product.findFirst({
       where: { id: productId, ...tenantScope() },
+      include: stockInclude,
     });
 
     if (!product) return [];
@@ -52,7 +55,11 @@ class AlertService {
     return this.checkProductStockFromData(product);
   }
 
-  async checkProductStockFromData(product: Product) {
+  // Una alerta por cada (producto, ubicacion) que este por debajo de su
+  // propio minimo - generalizado a N ubicaciones dinamicas (ver doc de
+  // migracion "ubicaciones de stock dinamicas"), reemplaza el chequeo fijo
+  // LOCAL/DEPOSITO.
+  async checkProductStockFromData(product: ProductWithStock) {
     const alerts: {
       id: string;
       productId: string;
@@ -64,71 +71,25 @@ class AlertService {
     if (product.isService) return alerts;
     if (!product.isActive) return alerts;
 
-    if (product.saleUnit === SaleUnit.KG) {
-      // minStockKg queda como mínimo del LOCAL para no romper compatibilidad.
-      const minStockLocalKg = Number(product.minStockKg ?? 0);
-      const minStockDepositoKg = Number(product.minStockDepositoKg ?? 0);
+    const isKg = product.saleUnit === SaleUnit.KG;
+    const unit = isKg ? "kg" : "unidades";
 
-      const stockLocalKg = Number(product.stockLocalKg ?? 0);
-      const stockDepositoKg = Number(product.stockDepositoKg ?? 0);
+    for (const row of product.stock) {
+      if (!row.businessLocation.isActive) continue;
 
-      if (minStockLocalKg > 0 && stockLocalKg <= minStockLocalKg) {
-        const alert = await this.createAlert(
-          product.id,
-          product.name,
-          stockLocalKg,
-          minStockLocalKg,
-          "kg",
-          "LOCAL"
-        );
+      const qty = Number((isKg ? row.quantityKg : row.quantity) ?? 0);
+      const min = isKg ? row.minQuantityKg : row.minQuantity;
 
-        alerts.push(alert);
-      }
+      if (min == null || Number(min) <= 0) continue;
+      if (qty > Number(min)) continue;
 
-      if (minStockDepositoKg > 0 && stockDepositoKg <= minStockDepositoKg) {
-        const alert = await this.createAlert(
-          product.id,
-          product.name,
-          stockDepositoKg,
-          minStockDepositoKg,
-          "kg",
-          "DEPÓSITO"
-        );
-
-        alerts.push(alert);
-      }
-
-      return alerts;
-    }
-
-    // minStock queda como mínimo del LOCAL para no romper compatibilidad.
-    const minStockLocal = Number(product.minStock ?? 0);
-    const minStockDeposito = Number(product.minStockDeposito ?? 0);
-
-    const stockLocal = Number(product.stockLocal ?? 0);
-    const stockDeposito = Number(product.stockDeposito ?? 0);
-
-    if (minStockLocal > 0 && stockLocal <= minStockLocal) {
       const alert = await this.createAlert(
         product.id,
         product.name,
-        stockLocal,
-        minStockLocal,
-        "unidades",
-        "LOCAL"
-      );
-
-      alerts.push(alert);
-    }
-
-    if (minStockDeposito > 0 && stockDeposito <= minStockDeposito) {
-      const alert = await this.createAlert(
-        product.id,
-        product.name,
-        stockDeposito,
-        minStockDeposito,
-        "unidades",
-        "DEPÓSITO"
+        qty,
+        Number(min),
+        unit,
+        row.businessLocation.name
       );
 
       alerts.push(alert);
@@ -144,6 +105,7 @@ class AlertService {
         isService: false,
         ...tenantScope(),
       },
+      include: stockInclude,
     });
 
     const alerts = [];
@@ -169,7 +131,7 @@ private async sendEmailToAllUsers(
   stock: number,
   minStock: number,
   unit: string,
-  location?: StockLocationLabel
+  location?: string
 ) {
   const users = await prisma.user.findMany({
     where: {

@@ -3,13 +3,7 @@
  * Extraidos de product.service.ts (doc seccion 4.1 - modularizacion).
  */
 import prisma from "../../prisma";
-import {
-  ProductType,
-  Location,
-  MovementType,
-  Product,
-  SaleUnit,
-} from "@prisma/client";
+import { ProductType, SaleUnit } from "@prisma/client";
 import type { Express } from "express";
 import cloudinary from "../../config/cloudinary";
 import fs from "fs";
@@ -83,17 +77,8 @@ export type CreateProductInput = {
   pricePerKg?: number | string;
   clientPricePerKg?: number | string;
   wholesalePricePerKg?: number | string;
-  stockLocalKg?: number | string;
-  stockDepositoKg?: number | string;
-  minStockKg?: number | string;
-  minStockDepositoKg?: number | string;
 
   sku: string;
-
-  minStock?: number | string;
-  minStockDeposito?: number | string;
-  stockLocal?: number | string;
-  stockDeposito?: number | string;
 
   file?: Express.Multer.File;
 
@@ -272,6 +257,7 @@ function validatePricesBySaleUnit(data: CreateProductInput | any) {
 
 const productInclude = {
   category: true,
+  stock: { include: { businessLocation: true } },
   components: {
     include: {
       component: {

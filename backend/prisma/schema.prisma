@@ -42,7 +42,7 @@ model Tenant {
   // seteado; se bloquean solos al vencer (ver middleware/tenant.ts,
   // getTenantBlockCode) sin necesidad de un cron. Queda null para tenants
   // creados por el super-admin o el script createTenant.ts.
-  trialEndsAt DateTime?
+  trialEndsAt  DateTime?
   // Telefono de contacto de quien se dio de alta (obligatorio en
   // /trial-signup, ver trialSignup.service.ts) - lo usa el super-admin para
   // hacer seguimiento comercial/cobranza. Null para tenants creados a mano.
@@ -112,6 +112,7 @@ model Tenant {
   priceLists        PriceList[]
   loyaltyAccounts   LoyaltyAccount[]
   returns           Return[]
+  productStocks     ProductStock[]
 }
 
 // === Platform admin (super-admin de SaaS, fuera de cualquier tenant) ===
@@ -160,6 +161,10 @@ model User {
   passwordResetExpires DateTime?
   passwordResetToken   String?           @unique
   mustChangePassword   Boolean           @default(false)
+  // Layout personal de accesos rapidos del mobile nav (BottomNav.tsx),
+  // por usuario. null = sin personalizar, usa el orden default de
+  // navConfig.ts (ver frontend/lib/quickAccess.ts#buildEffectiveNav).
+  quickAccessConfig    Json?
   accountMovements     AccountMovement[]
   client               Client?
   remitos              Remito[]
@@ -228,30 +233,64 @@ model Client {
 }
 
 model BusinessLocation {
-  id                String               @id @default(uuid())
-  tenantId          String?
-  tenant            Tenant?              @relation(fields: [tenantId], references: [id])
-  name              String
-  type              BusinessLocationType @default(BRANCH)
-  addressStreet     String?
-  addressNumber     String?
-  addressCity       String?
-  addressProvince   String?
-  addressPostalCode String?
-  addressNotes      String?
-  latitude          Float?
-  longitude         Float?
-  isDefault         Boolean              @default(false)
-  isActive          Boolean              @default(true)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  remitos           Remito[]
-  sales             Sale[]
-  cashSessions      CashSession[]
+  id                 String               @id @default(uuid())
+  tenantId           String?
+  tenant             Tenant?              @relation(fields: [tenantId], references: [id])
+  name               String
+  type               BusinessLocationType @default(BRANCH)
+  addressStreet      String?
+  addressNumber      String?
+  addressCity        String?
+  addressProvince    String?
+  addressPostalCode  String?
+  addressNotes       String?
+  latitude           Float?
+  longitude          Float?
+  isDefault          Boolean              @default(false)
+  isActive           Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  remitos            Remito[]
+  sales              Sale[]
+  cashSessions       CashSession[]
+  productStocks      ProductStock[]
+  stockMovementsFrom StockMovement[]      @relation("StockMovementFrom")
+  stockMovementsTo   StockMovement[]      @relation("StockMovementTo")
+  purchases          Purchase[]
+  stockLocationSales Sale[]               @relation("SaleStockLocation")
+  stockCounts        StockCount[]
 
   @@index([type])
   @@index([isDefault])
   @@index([isActive])
+  @@index([tenantId])
+}
+
+// Stock de un producto en una ubicacion (BusinessLocation) puntual.
+// Reemplaza el split fijo Product.stockLocal/stockDeposito (ver doc de
+// migracion "ubicaciones de stock dinamicas") - cada tenant puede tener 0,
+// 1 o N ubicaciones, no dos fijas. Se mantiene siempre una fila por cada
+// combinacion producto x ubicacion existente (con 0 si no hay stock) para
+// no tener que distinguir "fila ausente" de "stock en cero" en el resto
+// del codigo.
+model ProductStock {
+  id                 String           @id @default(uuid())
+  tenantId           String?
+  tenant             Tenant?          @relation(fields: [tenantId], references: [id])
+  productId          String
+  product            Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  businessLocationId String
+  businessLocation   BusinessLocation @relation(fields: [businessLocationId], references: [id], onDelete: Cascade)
+  quantity           Int              @default(0)
+  quantityKg         Float            @default(0)
+  minQuantity        Int?
+  minQuantityKg      Float?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([productId, businessLocationId])
+  @@index([productId])
+  @@index([businessLocationId])
   @@index([tenantId])
 }
 
@@ -319,6 +358,7 @@ model Product {
   purchaseOrderItems  PurchaseOrderItem[]
   priceListItems      PriceListItem[]
   returnItems         ReturnItem[]
+  stock               ProductStock[]
 
   @@unique([tenantId, sku])
   @@index([sku])
@@ -617,6 +657,13 @@ model Sale {
   updatedAt               DateTime          @updatedAt
   pdfUrl                  String?
   stockLocation           Location          @default(LOCAL)
+  // Reemplaza stockLocation (enum Location fijo) - de que ubicacion se
+  // descuenta el stock de esta venta. Distinto de businessLocationId (esa
+  // es metadata de en que sucursal se hizo la venta, no se toca). Ver doc
+  // de migracion "ubicaciones de stock dinamicas". Nullable en la etapa
+  // aditiva, pasa a requerido una vez migrado el codigo que la escribe.
+  stockLocationId         String?
+  stockLocationRef        BusinessLocation? @relation("SaleStockLocation", fields: [stockLocationId], references: [id])
   quotationExpiredAt      DateTime?
   quotationExpiresAt      DateTime?
   quotationPdfUrl         String?
@@ -654,6 +701,7 @@ model Sale {
   @@index([clientId])
   @@index([userId])
   @@index([businessLocationId])
+  @@index([stockLocationId])
   @@index([status])
   @@index([createdAt])
   @@index([status, createdAt])
@@ -904,26 +952,35 @@ model Finance {
 }
 
 model StockMovement {
-  id         String       @id @default(uuid())
-  tenantId   String?
-  tenant     Tenant?      @relation(fields: [tenantId], references: [id])
-  productId  String
-  userId     String?
-  purchaseId String?
-  type       MovementType
-  from       Location?
-  to         Location?
-  quantity   Int?
-  quantityKg Float?
-  reason     String?
-  reference  String?
-  createdAt  DateTime     @default(now())
-  product    Product      @relation(fields: [productId], references: [id])
-  user       User?        @relation(fields: [userId], references: [id])
-  purchase   Purchase?    @relation(fields: [purchaseId], references: [id])
+  id             String            @id @default(uuid())
+  tenantId       String?
+  tenant         Tenant?           @relation(fields: [tenantId], references: [id])
+  productId      String
+  userId         String?
+  purchaseId     String?
+  type           MovementType
+  from           Location?
+  to             Location?
+  // Reemplazan from/to (enum Location fijo) - ver doc de migracion
+  // "ubicaciones de stock dinamicas". Nullable como from/to: INGRESS/SALE/
+  // SALE_CANCEL/ADJUSTMENT solo completan un lado, TRANSFER completa ambos.
+  fromLocationId String?
+  toLocationId   String?
+  fromLocation   BusinessLocation? @relation("StockMovementFrom", fields: [fromLocationId], references: [id])
+  toLocation     BusinessLocation? @relation("StockMovementTo", fields: [toLocationId], references: [id])
+  quantity       Int?
+  quantityKg     Float?
+  reason         String?
+  reference      String?
+  createdAt      DateTime          @default(now())
+  product        Product           @relation(fields: [productId], references: [id])
+  user           User?             @relation(fields: [userId], references: [id])
+  purchase       Purchase?         @relation(fields: [purchaseId], references: [id])
 
   @@index([productId])
   @@index([userId])
+  @@index([fromLocationId])
+  @@index([toLocationId])
   @@index([purchaseId])
   @@index([type])
   @@index([createdAt])
@@ -931,26 +988,31 @@ model StockMovement {
 }
 
 model Purchase {
-  id              String         @id @default(uuid())
-  tenantId        String?
-  tenant          Tenant?        @relation(fields: [tenantId], references: [id])
-  providerName    String?
-  invoiceNumber   String?
-  description     String?
-  totalAmount     Float          @default(0)
-  paymentMethod   PaymentMethod?
-  to              Location       @default(DEPOSITO)
-  date            DateTime       @default(now())
-  status          PurchaseStatus @default(COMPLETED)
-  userId          String?
-  financeId       String?        @unique
+  id                 String            @id @default(uuid())
+  tenantId           String?
+  tenant             Tenant?           @relation(fields: [tenantId], references: [id])
+  providerName       String?
+  invoiceNumber      String?
+  description        String?
+  totalAmount        Float             @default(0)
+  paymentMethod      PaymentMethod?
+  to                 Location          @default(DEPOSITO)
+  // Reemplaza `to` (enum Location fijo) - ver doc de migracion
+  // "ubicaciones de stock dinamicas". Nullable en la etapa aditiva, pasa a
+  // requerido una vez migrado el codigo que la escribe.
+  businessLocationId String?
+  businessLocation   BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+  date               DateTime          @default(now())
+  status             PurchaseStatus    @default(COMPLETED)
+  userId             String?
+  financeId          String?           @unique
   // new: link to supplier entity and purchase order
-  supplierId      String?
-  supplier        Supplier?      @relation(fields: [supplierId], references: [id])
-  purchaseOrderId String?
-  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  supplierId         String?
+  supplier           Supplier?         @relation(fields: [supplierId], references: [id])
+  purchaseOrderId    String?
+  purchaseOrder      PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id])
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   user           User?           @relation(fields: [userId], references: [id])
   finance        Finance?        @relation(fields: [financeId], references: [id])
@@ -1140,24 +1202,30 @@ model Promotion {
 }
 
 model StockCount {
-  id          String           @id @default(uuid())
-  tenantId    String?
-  tenant      Tenant?          @relation(fields: [tenantId], references: [id])
-  userId      String?
-  user        User?            @relation(fields: [userId], references: [id])
-  status      StockCountStatus @default(DRAFT)
-  location    Location         @default(LOCAL)
-  notes       String?
-  startedAt   DateTime         @default(now())
-  completedAt DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                 String            @id @default(uuid())
+  tenantId           String?
+  tenant             Tenant?           @relation(fields: [tenantId], references: [id])
+  userId             String?
+  user               User?             @relation(fields: [userId], references: [id])
+  status             StockCountStatus  @default(DRAFT)
+  location           Location          @default(LOCAL)
+  // Reemplaza `location` (enum Location fijo) - ver doc de migracion
+  // "ubicaciones de stock dinamicas". Nullable en la etapa aditiva, pasa a
+  // requerido una vez migrado el codigo que la escribe.
+  businessLocationId String?
+  businessLocation   BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+  notes              String?
+  startedAt          DateTime          @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   items StockCountItem[]
 
   @@index([tenantId])
   @@index([status])
   @@index([userId])
+  @@index([businessLocationId])
 }
 
 model StockCountItem {

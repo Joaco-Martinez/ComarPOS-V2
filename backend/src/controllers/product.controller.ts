@@ -137,17 +137,6 @@ export const productController = {
 
         sku: req.body.sku,
 
-        stockLocal: req.body.stockLocal,
-        stockDeposito: req.body.stockDeposito,
-
-        stockLocalKg: req.body.stockLocalKg,
-        stockDepositoKg: req.body.stockDepositoKg,
-
-        minStock: req.body.minStock,
-        minStockDeposito: req.body.minStockDeposito,
-        minStockKg: req.body.minStockKg,
-        minStockDepositoKg: req.body.minStockDepositoKg,
-
         file: req.file,
 
         components: parseJsonArray(req.body.components),
@@ -218,38 +207,6 @@ export const productController = {
         cleanBody.wholesalePricePerKg = toNumberOrUndefined(body.wholesalePricePerKg);
       }
 
-      if (body.stockLocal !== undefined) {
-        cleanBody.stockLocal = toNumberOrUndefined(body.stockLocal);
-      }
-
-      if (body.stockDeposito !== undefined) {
-        cleanBody.stockDeposito = toNumberOrUndefined(body.stockDeposito);
-      }
-
-      if (body.minStock !== undefined) {
-        cleanBody.minStock = toNumberOrUndefined(body.minStock);
-      }
-
-      if (body.minStockDeposito !== undefined) {
-        cleanBody.minStockDeposito = toNumberOrUndefined(body.minStockDeposito);
-      }
-
-      if (body.stockLocalKg !== undefined) {
-        cleanBody.stockLocalKg = toNumberOrUndefined(body.stockLocalKg);
-      }
-
-      if (body.stockDepositoKg !== undefined) {
-        cleanBody.stockDepositoKg = toNumberOrUndefined(body.stockDepositoKg);
-      }
-
-      if (body.minStockKg !== undefined) {
-        cleanBody.minStockKg = toNumberOrUndefined(body.minStockKg);
-      }
-
-      if (body.minStockDepositoKg !== undefined) {
-        cleanBody.minStockDepositoKg = toNumberOrUndefined(body.minStockDepositoKg);
-      }
-
       let updated = await productService.update(
         getParamAsString(req.params.id, "id"),
         cleanBody
@@ -281,7 +238,7 @@ export const productController = {
 
   async transferStock(req: Request, res: Response, next: NextFunction) {
     try {
-      const { productId, from, quantity, reason } = req.body;
+      const { productId, fromLocationId, toLocationId, quantity, reason } = req.body;
       const userId = (req as any).user?.id;
 
       if (!userId) {
@@ -290,7 +247,8 @@ export const productController = {
 
       const updated = await productService.transferStock(
         productId,
-        from,
+        fromLocationId,
+        toLocationId,
         Number(quantity),
         userId,
         reason
@@ -304,7 +262,7 @@ export const productController = {
 
   async addStock(req: Request, res: Response, next: NextFunction) {
     try {
-      const { productId, to, quantity, reason } = req.body;
+      const { productId, businessLocationId, quantity, reason } = req.body;
       const userId = (req as any).user?.id;
 
       if (!userId) {
@@ -313,7 +271,7 @@ export const productController = {
 
       const updated = await productService.addStock(
         productId,
-        to,
+        businessLocationId,
         Number(quantity),
         userId,
         reason
@@ -328,7 +286,7 @@ export const productController = {
   async transferStockKg(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { from, quantityKg, reason } = req.body;
+      const { fromLocationId, toLocationId, quantityKg, reason } = req.body;
 
       const userId = (req as any).user?.id;
 
@@ -338,7 +296,8 @@ export const productController = {
 
       const updated = await productService.transferStockKg(
         getParamAsString(id, "id"),
-        from,
+        fromLocationId,
+        toLocationId,
         Number(quantityKg),
         userId,
         reason
@@ -353,7 +312,7 @@ export const productController = {
   async addStockKg(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { to, quantityKg, reason } = req.body;
+      const { businessLocationId, quantityKg, reason } = req.body;
 
       const userId = (req as any).user?.id;
 
@@ -363,10 +322,28 @@ export const productController = {
 
       const updated = await productService.addStockKg(
         getParamAsString(id, "id"),
-        to,
+        businessLocationId,
         Number(quantityKg),
         userId,
         reason
+      );
+
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async setStockMin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id, businessLocationId } = req.params;
+      const { minQuantity, minQuantityKg } = req.body;
+
+      const updated = await productService.setStockMin(
+        getParamAsString(id, "id"),
+        getParamAsString(businessLocationId, "businessLocationId"),
+        minQuantity === undefined || minQuantity === null || minQuantity === "" ? null : Number(minQuantity),
+        minQuantityKg === undefined || minQuantityKg === null || minQuantityKg === "" ? null : Number(minQuantityKg)
       );
 
       res.json(updated);

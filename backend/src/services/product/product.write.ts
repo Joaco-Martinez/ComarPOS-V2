@@ -107,10 +107,6 @@ export async function create(data: CreateProductInput) {
       saleUnit,
       sku,
       isService: isTrue(data.isService),
-      minStock: toNumberOrNull(data.minStock),
-      minStockDeposito: toNumberOrNull(data.minStockDeposito),
-      minStockKg: toNumberOrNull(data.minStockKg),
-      minStockDepositoKg: toNumberOrNull(data.minStockDepositoKg),
       purchasePrice: toNumberOrZero(data.purchasePrice),
       ivaRate: data.ivaRate !== undefined ? toNumberOrZero(data.ivaRate) : 21,
       imageUrl,
@@ -126,27 +122,17 @@ export async function create(data: CreateProductInput) {
             // viejo todavia la lee, nunca quede desincronizada.
             clientPrice: toNumberOrZero(data.price),
             wholesalePrice: toNumberOrZero(data.wholesalePrice),
-            stockLocal: toNumberOrZero(data.stockLocal),
-            stockDeposito: toNumberOrZero(data.stockDeposito),
-
             pricePerKg: null,
             clientPricePerKg: null,
             wholesalePricePerKg: null,
-            stockLocalKg: 0,
-            stockDepositoKg: 0,
           }
         : {
             pricePerKg: toNumberOrZero(data.pricePerKg),
             clientPricePerKg: toNumberOrZero(data.pricePerKg),
             wholesalePricePerKg: toNumberOrZero(data.wholesalePricePerKg),
-            stockLocalKg: toNumberOrZero(data.stockLocalKg),
-            stockDepositoKg: toNumberOrZero(data.stockDepositoKg),
-
             price: 0,
             clientPrice: 0,
             wholesalePrice: 0,
-            stockLocal: 0,
-            stockDeposito: 0,
           };
 
     const created = await prisma.product.create({
@@ -166,12 +152,29 @@ export async function create(data: CreateProductInput) {
             }
           : {}),
       },
-      include: productInclude,
     });
+
+    // Arranca con stock en 0 en cada ubicacion activa del tenant - el
+    // negocio carga cantidades despues desde Stock/Compras/Conteo (ver doc
+    // de migracion "ubicaciones de stock dinamicas").
+    const locations = await prisma.businessLocation.findMany({
+      where: { isActive: true, ...tenantScope() },
+      select: { id: true },
+    });
+    if (locations.length > 0) {
+      await prisma.productStock.createMany({
+        data: locations.map((loc) => ({
+          productId: created.id,
+          businessLocationId: loc.id,
+          tenantId: currentTenantId(),
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     await alertService.checkProductStock(created.id);
 
-    return created;
+    return prisma.product.findUnique({ where: { id: created.id }, include: productInclude });
   } catch (err: any) {
     safeDeleteLocalFile(data.file?.path);
 
@@ -316,26 +319,6 @@ export async function update(id: string, data: Partial<Product> & any) {
   );
 
   setIfDefined(
-    "stockLocal",
-    data.stockLocal !== undefined ? Number(data.stockLocal) : undefined
-  );
-
-  setIfDefined(
-    "stockDeposito",
-    data.stockDeposito !== undefined ? Number(data.stockDeposito) : undefined
-  );
-
-  setIfDefined(
-    "minStock",
-    data.minStock !== undefined ? Number(data.minStock) : undefined
-  );
-
-  setIfDefined(
-    "minStockDeposito",
-    data.minStockDeposito !== undefined ? Number(data.minStockDeposito) : undefined
-  );
-
-  setIfDefined(
     "pricePerKg",
     data.pricePerKg !== undefined ? Number(data.pricePerKg) : undefined
   );
@@ -351,42 +334,16 @@ export async function update(id: string, data: Partial<Product> & any) {
     data.wholesalePricePerKg !== undefined ? Number(data.wholesalePricePerKg) : undefined
   );
 
-  setIfDefined(
-    "stockLocalKg",
-    data.stockLocalKg !== undefined ? Number(data.stockLocalKg) : undefined
-  );
-
-  setIfDefined(
-    "stockDepositoKg",
-    data.stockDepositoKg !== undefined ? Number(data.stockDepositoKg) : undefined
-  );
-
-  setIfDefined(
-    "minStockKg",
-    data.minStockKg !== undefined ? Number(data.minStockKg) : undefined
-  );
-
-  setIfDefined(
-    "minStockDepositoKg",
-    data.minStockDepositoKg !== undefined
-      ? Number(data.minStockDepositoKg)
-      : undefined
-  );
-
   if (data.saleUnit === SaleUnit.UNIT) {
     prismaData.pricePerKg = null;
     prismaData.clientPricePerKg = null;
     prismaData.wholesalePricePerKg = null;
-    prismaData.stockLocalKg = 0;
-    prismaData.stockDepositoKg = 0;
   }
 
   if (data.saleUnit === SaleUnit.KG) {
     prismaData.price = 0;
     prismaData.clientPrice = 0;
     prismaData.wholesalePrice = 0;
-    prismaData.stockLocal = 0;
-    prismaData.stockDeposito = 0;
   }
 
   try {

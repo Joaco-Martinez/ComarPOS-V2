@@ -142,10 +142,18 @@ export const exportService = {
   },
 
   async exportInventory() {
+    // Columnas de stock dinamicas, una por cada ubicacion activa del tenant
+    // (ver doc de migracion "ubicaciones de stock dinamicas" - reemplaza las
+    // 4 columnas fijas Local/Depósito).
+    const locations = await prisma.businessLocation.findMany({
+      where: { isActive: true, ...tenantScope() },
+      orderBy: { createdAt: "asc" },
+    });
+
     const products = await prisma.product.findMany({
       where: { ...tenantScope() },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      include: { category: { select: { name: true } } },
+      include: { category: { select: { name: true } }, stock: true },
     });
 
     const wb = new ExcelJS.Workbook();
@@ -158,11 +166,10 @@ export const exportService = {
       { header: "Tipo", key: "type", width: 12 },
       { header: "Unidad", key: "unit", width: 12 },
       { header: "Activo", key: "active", width: 10 },
-      { header: "Stock local (u)", key: "stockLocal", width: 16 },
-      { header: "Stock depósito (u)", key: "stockDeposito", width: 18 },
-      { header: "Stock local (kg)", key: "stockLocalKg", width: 16 },
-      { header: "Stock depósito (kg)", key: "stockDepositoKg", width: 18 },
-      { header: "Stock mín. local", key: "minStock", width: 16 },
+      ...locations.flatMap((loc) => [
+        { header: `Stock ${loc.name} (u)`, key: `loc_${loc.id}_u`, width: 16 },
+        { header: `Stock ${loc.name} (kg)`, key: `loc_${loc.id}_kg`, width: 16 },
+      ]),
       { header: "Precio minorista", key: "price", width: 16 },
       { header: "Precio mayorista", key: "wholesale", width: 16 },
       { header: "Precio compra", key: "purchasePrice", width: 16 },
@@ -170,27 +177,32 @@ export const exportService = {
     headerStyle(ws);
 
     for (const p of products) {
-      const row = ws.addRow({
+      const stockByLocation = new Map(p.stock.map((row) => [row.businessLocationId, row]));
+
+      const rowData: Record<string, unknown> = {
         name: p.name,
         sku: p.sku ?? "",
         category: p.category?.name ?? "",
         type: p.type,
         unit: p.saleUnit,
         active: p.isActive ? "Sí" : "No",
-        stockLocal: p.stockLocal,
-        stockDeposito: p.stockDeposito,
-        stockLocalKg: p.stockLocalKg,
-        stockDepositoKg: p.stockDepositoKg,
-        minStock: p.minStock ?? "",
         price: toARS(p.price),
         wholesale: toARS(p.wholesalePrice),
         purchasePrice: toARS(p.purchasePrice),
-      });
+      };
 
-      // Highlight low-stock rows
-      const isLow =
-        (p.minStock != null && p.stockLocal < p.minStock) ||
-        (p.minStockKg != null && p.stockLocalKg < p.minStockKg);
+      let isLow = false;
+      for (const loc of locations) {
+        const stockRow = stockByLocation.get(loc.id);
+        rowData[`loc_${loc.id}_u`] = stockRow?.quantity ?? 0;
+        rowData[`loc_${loc.id}_kg`] = stockRow?.quantityKg ?? 0;
+
+        if (stockRow?.minQuantity != null && stockRow.quantity < stockRow.minQuantity) isLow = true;
+        if (stockRow?.minQuantityKg != null && stockRow.quantityKg < stockRow.minQuantityKg) isLow = true;
+      }
+
+      const row = ws.addRow(rowData);
+
       if (isLow) {
         row.eachCell((cell) => {
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFCCCC" } };

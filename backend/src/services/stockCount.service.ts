@@ -1,45 +1,51 @@
 import prisma from "../prisma";
-import { Location } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 
 export const stockCountService = {
-  async startCount(data: { userId: string; location: Location; notes?: string }) {
+  async startCount(data: { userId: string; businessLocationId: string; notes?: string }) {
     const scope = tenantScope();
+
+    const location = await prisma.businessLocation.findFirst({
+      where: { id: data.businessLocationId, ...scope },
+    });
+    if (!location) throw new Error("Ubicación no encontrada.");
 
     // Only one IN_PROGRESS count per location
     const existing = await prisma.stockCount.findFirst({
-      where: { status: { in: ["DRAFT", "IN_PROGRESS"] }, location: data.location, ...scope },
+      where: { status: { in: ["DRAFT", "IN_PROGRESS"] }, businessLocationId: data.businessLocationId, ...scope },
     });
     if (existing) throw new Error("Ya hay un conteo activo para esta ubicación.");
 
-    // Pre-populate with all active products
-    const products = await prisma.product.findMany({
-      where: { isActive: true, isService: false, ...scope },
+    // Pre-populate con el stock actual de esta ubicacion para todos los
+    // productos activos (ver doc de migracion "ubicaciones de stock
+    // dinamicas" - reemplaza el split fijo Product.stockLocal/stockDeposito).
+    const stockRows = await prisma.productStock.findMany({
+      where: {
+        businessLocationId: data.businessLocationId,
+        product: { isActive: true, isService: false, ...scope },
+      },
       select: {
-        id: true, name: true, saleUnit: true,
-        stockLocal: true, stockDeposito: true,
-        stockLocalKg: true, stockDepositoKg: true,
+        productId: true,
+        quantity: true,
+        quantityKg: true,
+        product: { select: { saleUnit: true } },
       },
     });
 
     const stockCount = await prisma.stockCount.create({
       data: {
         userId: data.userId,
-        location: data.location,
+        businessLocationId: data.businessLocationId,
         notes: data.notes ?? null,
         status: "IN_PROGRESS",
         tenantId: currentTenantId(),
         items: {
-          create: products.map((p) => {
-            const isKg = p.saleUnit === "KG";
-            const systemStock =
-              data.location === "LOCAL"
-                ? isKg ? p.stockLocalKg : p.stockLocal
-                : isKg ? p.stockDepositoKg : p.stockDeposito;
+          create: stockRows.map((row) => {
+            const isKg = row.product.saleUnit === "KG";
             return {
-              productId: p.id,
-              systemStock,
+              productId: row.productId,
+              systemStock: isKg ? row.quantityKg : row.quantity,
               countedStock: null,
               difference: null,
             };
@@ -56,6 +62,7 @@ export const stockCountService = {
     return prisma.stockCount.findFirst({
       where: { id, ...tenantScope() },
       include: {
+        businessLocation: true,
         items: {
           include: { product: { select: { id: true, name: true, sku: true, saleUnit: true, category: { select: { name: true } } } } },
           orderBy: { product: { name: "asc" } },
@@ -91,6 +98,8 @@ export const stockCountService = {
       include: { items: { include: { product: { select: { saleUnit: true } } } } },
     });
     if (!count) throw new Error("Conteo no encontrado o no está en progreso.");
+    if (!count.businessLocationId) throw new Error("Este conteo no tiene una ubicación asociada.");
+    const businessLocationId = count.businessLocationId;
 
     const uncounted = count.items.filter((i) => i.countedStock === null);
     if (uncounted.length > 0) {
@@ -104,23 +113,16 @@ export const stockCountService = {
         const isKg = item.product.saleUnit === "KG";
         const diff = item.difference!;
 
-        if (isKg) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data:
-              count.location === "LOCAL"
-                ? { stockLocalKg: { increment: diff } }
-                : { stockDepositoKg: { increment: diff } },
-          });
-        } else {
-          await tx.product.update({
-            where: { id: item.productId },
-            data:
-              count.location === "LOCAL"
-                ? { stockLocal: { increment: Math.round(diff) } }
-                : { stockDeposito: { increment: Math.round(diff) } },
-          });
-        }
+        await tx.productStock.upsert({
+          where: { productId_businessLocationId: { productId: item.productId, businessLocationId } },
+          update: isKg ? { quantityKg: { increment: diff } } : { quantity: { increment: Math.round(diff) } },
+          create: {
+            productId: item.productId,
+            businessLocationId,
+            tenantId: currentTenantId(),
+            ...(isKg ? { quantityKg: diff } : { quantity: Math.round(diff) }),
+          },
+        });
 
         if (diff !== 0) {
           await tx.stockMovement.create({
@@ -128,7 +130,7 @@ export const stockCountService = {
               productId: item.productId,
               userId,
               type: "ADJUSTMENT",
-              to: count.location,
+              toLocationId: businessLocationId,
               ...(isKg ? { quantityKg: diff } : { quantity: Math.round(diff) }),
               reason: `Ajuste por toma de inventario #${id.slice(0, 8)}`,
               reference: id,
@@ -142,7 +144,7 @@ export const stockCountService = {
         where: { id },
         data: { status: "COMPLETED", completedAt: new Date() },
       });
-    });
+    }, { timeout: 20000, maxWait: 20000 });
 
     return prisma.stockCount.findFirst({ where: { id }, include: { items: true } });
   },
@@ -161,6 +163,7 @@ export const stockCountService = {
       where: { ...tenantScope() },
       include: {
         user: { select: { id: true, name: true } },
+        businessLocation: true,
         _count: { select: { items: true } },
       },
       orderBy: { startedAt: "desc" },
