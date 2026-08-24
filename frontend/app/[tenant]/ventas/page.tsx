@@ -12,7 +12,7 @@ import FilterBar from '@/components/mobile/FilterBar';
 import Pagination from '@/components/mobile/Pagination';
 import {
   Search, Download, RefreshCcw, X, FileText, Eye, MoreVertical, Check, Printer,
-  Send, Plus, Trash2, AlertTriangle, CreditCard, Package,
+  Send, Plus, Trash2, AlertTriangle, CreditCard, Package, Undo2,
 } from 'lucide-react';
 
 type InvoiceType = 1 | 6 | 11;
@@ -83,10 +83,15 @@ export default function VentasPage() {
   const [invoiceTypes, setInvoiceTypes] = useState<InvoiceType[]>([11]);
   const [invoicing, setInvoicing] = useState(false);
 
+  const [ncModal, setNcModal] = useState<{ sale: Sale; motivo: string; importe: string } | null>(null);
+  const [ncSubmitting, setNcSubmitting] = useState(false);
+  const [downloadingNCId, setDownloadingNCId] = useState<string | null>(null);
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const canEditItems = (s: Sale) => s.status === 'PENDING' && !s.invoiceAfip?.cae;
   const isInvoiced = (s: Sale) => !!s.invoiceAfip?.cae;
+  const hasApprovedCreditNote = (s: Sale) => (s.invoiceAfip?.creditNotes ?? []).some((nc) => nc.resultado === 'A' && nc.cae);
 
   useEffect(() => {
     api.get('/arca-config/config').then(({ data }) => {
@@ -293,6 +298,48 @@ export default function VentasPage() {
       showToast(`Error AFIP: ${err?.response?.data?.message ?? 'desconocido'}`);
     } finally {
       setInvoicing(false);
+    }
+  };
+
+  const openNotaCredito = (s: Sale) => setNcModal({ sale: s, motivo: 'Devolución de productos', importe: String(s.total) });
+
+  const submitNotaCredito = async () => {
+    if (!ncModal) return;
+    setNcSubmitting(true);
+    try {
+      const { data } = await api.post(`/nota-credito/${ncModal.sale.id}/emitir`, {
+        motivo: ncModal.motivo,
+        importe: num(ncModal.importe),
+      });
+      const content = data.content ?? data;
+      if (content?.resultado === 'A' && content?.cae) {
+        showToast('Nota de crédito aprobada por AFIP');
+        setNcModal(null);
+        fetchSales(page);
+      } else {
+        showToast('AFIP no aprobó la nota de crédito');
+      }
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? err?.response?.data?.message ?? 'No se pudo generar la nota de crédito');
+    } finally {
+      setNcSubmitting(false);
+    }
+  };
+
+  const downloadNotaCredito = async (s: Sale) => {
+    setDownloadingNCId(s.id);
+    try {
+      const res = await api.get(`/nota-credito-pdf/${s.id}/descargar`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nota-credito-${s.id.slice(-8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast('No se pudo descargar la nota de crédito');
+    } finally {
+      setDownloadingNCId(null);
     }
   };
 
@@ -554,7 +601,9 @@ export default function VentasPage() {
                   onClick: () => { openPayments(actionsSale); setActionsSale(null); },
                 },
                 {
-                  show: true, icon: printingId === actionsSale.id ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <Printer size={16} />, label: 'Imprimir ticket', sub: 'Enviar ticket no fiscal a impresión',
+                  show: true, icon: printingId === actionsSale.id ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <Printer size={16} />,
+                  label: isInvoiced(actionsSale) ? 'Imprimir factura' : 'Imprimir ticket',
+                  sub: isInvoiced(actionsSale) ? 'Enviar la factura (con CAE) a la PrintBox' : 'Enviar ticket no fiscal a impresión',
                   onClick: () => printTicket(actionsSale),
                 },
                 {
@@ -569,11 +618,19 @@ export default function VentasPage() {
                   show: isInvoiced(actionsSale), icon: downloadingInvoiceId === actionsSale.id ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <Download size={16} />, label: 'Descargar factura', sub: `PDF de la factura ${actionsSale.receiptType || ''} con CAE`,
                   onClick: () => downloadFacturaPdf(actionsSale),
                 },
+                {
+                  show: isInvoiced(actionsSale) && !hasApprovedCreditNote(actionsSale), icon: <Undo2 size={16} />, label: 'Generar nota de crédito', sub: 'Anula el importe ante AFIP',
+                  onClick: () => { openNotaCredito(actionsSale); setActionsSale(null); },
+                },
+                {
+                  show: hasApprovedCreditNote(actionsSale), icon: downloadingNCId === actionsSale.id ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <Download size={16} />, label: 'Descargar nota de crédito', sub: 'PDF de la nota de crédito con CAE',
+                  onClick: () => downloadNotaCredito(actionsSale),
+                },
               ].filter((a) => a.show).map((a) => (
                 <button
                   key={a.label}
                   onClick={a.onClick}
-                  disabled={updatingStatusId === actionsSale.id || printingId === actionsSale.id || quotingId === actionsSale.id || downloadingInvoiceId === actionsSale.id}
+                  disabled={updatingStatusId === actionsSale.id || printingId === actionsSale.id || quotingId === actionsSale.id || downloadingInvoiceId === actionsSale.id || downloadingNCId === actionsSale.id}
                   className="btn btn-secondary"
                   style={{
                     justifyContent: 'flex-start', gap: 12, padding: '12px 14px', textAlign: 'left', height: 'auto',
@@ -754,6 +811,44 @@ export default function VentasPage() {
               <button onClick={() => setInvoiceModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
               <button onClick={submitInvoice} disabled={invoicing} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
                 {invoicing ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><Send size={13} /> Emitir</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generar nota de crédito */}
+      {ncModal && (
+        <div className="modal-overlay" onClick={() => setNcModal(null)}>
+          <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div style={{ fontWeight: 800 }}>Generar nota de crédito</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{clientName(ncModal.sale.client)}</div>
+              </div>
+              <button onClick={() => setNcModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ background: 'var(--danger-dim)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: 'var(--warn)', display: 'flex', gap: 8 }}>
+                <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                Esta acción emite el comprobante ante AFIP. No se puede revertir.
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Motivo</label>
+                <input value={ncModal.motivo} onChange={(e) => setNcModal((p) => p && ({ ...p, motivo: e.target.value }))} placeholder="Devolución de productos" />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Importe a acreditar</label>
+                <input type="number" min="0" step="0.01" value={ncModal.importe} onChange={(e) => setNcModal((p) => p && ({ ...p, importe: e.target.value }))} />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                Total de la venta: {fmtMoney(ncModal.sale.total)}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setNcModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={submitNotaCredito} disabled={ncSubmitting || num(ncModal.importe) <= 0} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+                {ncSubmitting ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><Undo2 size={13} /> Emitir</>}
               </button>
             </div>
           </div>

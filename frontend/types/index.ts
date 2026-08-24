@@ -222,7 +222,12 @@ export interface Sale {
   userId?: string | null;
   user?: User | null;
   createdAt: string;
-  invoiceAfip?: { cae?: string; pdfUrl?: string | null };
+  invoiceAfip?: {
+    id?: string;
+    cae?: string;
+    pdfUrl?: string | null;
+    creditNotes?: { resultado: string; cae?: string | null }[];
+  };
   pdfUrl?: string | null;
 }
 

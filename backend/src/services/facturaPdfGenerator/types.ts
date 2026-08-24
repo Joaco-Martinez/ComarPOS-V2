@@ -55,10 +55,17 @@ export type FacturaPDFData = {
   logoPath?: string;
 };
 
+// "red"/"redDark" quedan con esos nombres por compatibilidad con el resto
+// de los archivos de esta carpeta (sections.header.ts, sections.totals.ts),
+// pero los valores son el azul de marca de ComarPOS -- mismos hex que
+// --accent/--accent2 en frontend/app/globals.css, para que la factura y la
+// nota de credito (que reusa este mismo generador, ver
+// notaCreditoPdf.service.ts) salgan con los colores de la marca en vez del
+// rojo generico que tenian antes.
 export const COLORS = {
   black: "#111111",
-  red: "#b91c1c",
-  redDark: "#7f1d1d",
+  red: "#0D59E7",
+  redDark: "#093C9D",
   gray900: "#222222",
   gray700: "#4b5563",
   gray500: "#6b7280",
