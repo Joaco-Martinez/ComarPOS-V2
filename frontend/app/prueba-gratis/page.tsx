@@ -100,8 +100,12 @@ export default function PruebaGratisPage() {
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 900, display: 'flex', gap: 40, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 320px' }}>
-          <img src="/brand/logo-horizontal-positivo.svg" alt="ComarPOS" style={{ height: 30, marginBottom: 24 }} className="brand-logo-light" />
-          <img src="/brand/logo-horizontal-negativo.svg" alt="ComarPOS" style={{ height: 30, marginBottom: 24 }} className="brand-logo-dark" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 24 }}>
+            <img src="/brand/isologo.png" alt="ComarPOS" width={38} height={38} style={{ objectFit: 'contain', flexShrink: 0 }} />
+            <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.5, color: 'var(--text)' }}>
+              omar<span style={{ color: 'var(--accent)' }}>POS</span>
+            </span>
+          </div>
           <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 12 }}>
             {mode === 'trial' ? 'Probá ComarPOS gratis durante 7 días' : 'Suscribite a ComarPOS'}
           </h1>

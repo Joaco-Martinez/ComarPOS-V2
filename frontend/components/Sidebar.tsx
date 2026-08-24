@@ -110,17 +110,15 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         padding: collapsed ? '18px 12px' : '20px 18px 16px',
         borderBottom: '1px solid var(--border)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 10 }}>
-          {/* ComarPOS isologo */}
-          <img src="/brand/isologo.png" alt="ComarPOS" width={64} height={64} style={{ objectFit: 'contain', flexShrink: 0 }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 4 }}>
+          {/* El isologo ES la "C" de ComarPOS - el texto sigue con "omarPOS"
+              para que se lea como un solo wordmark, no "C ComarPOS" con dos C. */}
+          <img src="/brand/isologo.png" alt="ComarPOS" width={56} height={56} style={{ objectFit: 'contain', flexShrink: 0 }} />
 
           {!collapsed && (
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--accent2)', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 3 }}>
-                SISTEMA ERP
-              </div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', lineHeight: 1, letterSpacing: -0.5 }}>
-                Comar<span style={{ color: 'var(--accent)' }}>POS</span>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', lineHeight: 1, letterSpacing: -0.5 }}>
+                omar<span style={{ color: 'var(--accent)' }}>POS</span>
               </div>
             </div>
           )}

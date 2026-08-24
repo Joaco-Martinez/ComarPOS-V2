@@ -1,20 +1,33 @@
 @import "tailwindcss";
 
 :root {
-  /* --- Fondos --- */
-  --bg:        #001125;
-  --surface:   #162140;
-  --surface2:  #1C2A52;
-  --surface3:  #213060;
+  /* --- Fondos ---
+     Antes eran azul saturado de punta a punta (#001125, hue~205° casi al
+     100% de saturacion) - con --border/--border2 tambien derivados del
+     mismo azul, cada superficie apilada sumaba mas azul encima de azul.
+     Ahora son grafito neutro con apenas una pizca de tinte frio (igual
+     criterio que GitHub/Linear/Vercel en dark mode: la jerarquia de
+     "elevacion" se lee por luminosidad, no por saturar de color cada
+     capa). El azul de marca queda reservado para lo interactivo (botones,
+     foco, activo) - ver mas abajo. */
+  --bg:        #0C0F14;
+  --surface:   #14181F;
+  --surface2:  #1B202A;
+  --surface3:  #252B37;
 
-  /* --- Bordes --- */
-  --border:    rgba(13, 89, 231, 0.15);
-  --border2:   rgba(13, 89, 231, 0.30);
+  /* --- Bordes ---
+     Blanco a baja opacidad en vez de azul a baja opacidad: un hairline
+     neutro se lee igual de bien sobre cualquier superficie, sin teñirla. */
+  --border:    rgba(255, 255, 255, 0.08);
+  --border2:   rgba(255, 255, 255, 0.14);
 
-  /* --- Marca principal (paleta oficial ComarPOS) --- */
+  /* --- Marca principal (paleta oficial ComarPOS) ---
+     El azul se mantiene intacto - es la marca - pero ahora es la unica
+     nota de color fuerte en la UI (botones primarios, links, activo,
+     foco), no algo que tambien tiñe bordes/superficies neutras. */
   --accent:        #0D59E7;
   --accent-dim:    rgba(13, 89, 231, 0.14);
-  --accent-hover:  #093C9D;
+  --accent-hover:  #2E6FF2;
   --accent2:       #093C9D;
   --accent2-dim:   rgba(9, 60, 157, 0.14);
   --accent3:       #6474BB;
@@ -26,9 +39,12 @@
   --danger:    #EF4444;
   --danger-dim: rgba(239, 68, 68, 0.14);
 
-  /* --- Texto --- */
-  --text:   #FFFFFF;
-  --text2:  #C5D0E6;
+  /* --- Texto ---
+     Blanco roto en vez de #FFFFFF puro (menos "glow"/fatiga visual en
+     sesiones largas) y gris neutro en vez de gris azulado para el texto
+     secundario. */
+  --text:   #F3F5F8;
+  --text2:  #A9B0BC;
   --text3:  #6B7280;
 
   /* --- Tipografía --- */
@@ -295,7 +311,7 @@ button { cursor: pointer; font-family: var(--sans); }
 }
 .card:hover { border-color: var(--border2); }
 .card-glass {
-  background: rgba(22, 33, 64, 0.7);
+  background: rgba(20, 24, 31, 0.7);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border2);
   border-radius: 8px;
@@ -718,6 +734,64 @@ body:has(.modal-overlay) .pwa-install-banner {
   width: 38px; height: 38px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
+.more-sheet-folder { margin-bottom: 10px; }
+.more-sheet-folder-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 10px 12px; border-radius: 12px;
+  background: var(--surface2); border: 1px solid var(--border);
+  font-size: 12.5px; font-weight: 800;
+}
+
+/* --- Quick access editor (BottomNav "Más" > Editar) --- */
+.qa-editor { display: flex; flex-direction: column; gap: 4px; }
+.qa-section { margin-bottom: 10px; }
+.qa-section-title {
+  font-size: 11px; font-weight: 800; color: var(--text3); text-transform: uppercase;
+  letter-spacing: .04em; margin-bottom: 6px; padding: 0 2px;
+}
+.qa-list { display: flex; flex-direction: column; gap: 6px; }
+.qa-empty { font-size: 12px; color: var(--text3); padding: 8px 4px; }
+.qa-row {
+  display: flex; align-items: center; gap: 8px; position: relative;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 12px;
+  padding: 6px 8px;
+}
+.qa-drag-handle {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  background: none; border: none; color: var(--text3); cursor: grab; touch-action: none;
+}
+.qa-row-icon {
+  width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.qa-row-label { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qa-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.qa-icon-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  background: none; border: none; color: var(--text3); cursor: pointer;
+}
+.qa-icon-btn.active { color: var(--accent); }
+.qa-menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 5;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--m-shadow-lg); padding: 6px; min-width: 190px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.qa-menu-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px;
+  background: none; border: none; color: var(--text2); font-size: 12.5px; font-weight: 600;
+  text-align: left; cursor: pointer;
+}
+.qa-menu-item:hover { background: var(--surface3, var(--surface)); }
+.qa-new-folder-row { display: flex; gap: 6px; padding: 4px 2px 2px; }
+.qa-new-folder-row input { flex: 1; }
+.qa-folder-block { border: 1px dashed var(--border2); border-radius: 14px; padding: 8px; margin-bottom: 10px; }
+.qa-folder-header { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 8px; }
+.qa-folder-name { font-size: 12.5px; font-weight: 800; }
+.qa-editor-footer { display: flex; gap: 8px; margin-top: 6px; }
+.qa-editor-footer .btn { flex: 1; }
 
 /* --- Hero header (Dashboard / gradient greeting) --- */
 .hero-header {
