@@ -13,7 +13,7 @@
  */
 import prisma from "../../prisma";
 import { invalidateTenantCache } from "../../middleware/tenant";
-import { PLANS, getPlan, LAUNCH_PRICE_ENDS_AT } from "../../config/billing";
+import { PLANS, getPlan, getEffectivePrice, isLaunchPriceActive, LAUNCH_PRICE_ENDS_AT, type Plan } from "../../config/billing";
 import { mercadoPagoClient } from "./mercadoPago.service";
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/login$/, "").replace(/\/$/, "");
@@ -24,9 +24,21 @@ function addOneMonth(date: Date): Date {
   return d;
 }
 
+// priceArs pisado por el efectivo (regularPriceArs una vez vencido el
+// lanzamiento) -- asi /prueba-gratis y /suscripcion, que ya leen
+// plan.priceArs tal cual viene de la API, muestran el precio correcto
+// sin ningun cambio de su lado apenas pasa la fecha.
+function withEffectivePrice(plan: Plan): Plan {
+  return { ...plan, priceArs: getEffectivePrice(plan) };
+}
+
 export const billingService = {
-  plans: PLANS,
   launchPriceEndsAt: LAUNCH_PRICE_ENDS_AT,
+  launchPriceActive: () => isLaunchPriceActive(),
+
+  getPlans() {
+    return PLANS.map(withEffectivePrice);
+  },
 
   async getStatus(tenantId: string) {
     const tenant = await prisma.tenant.findUnique({
@@ -45,7 +57,7 @@ export const billingService = {
 
     if (!tenant) throw new Error("Tenant no encontrado");
 
-    return { ...tenant, plan: getPlan(tenant.planId) };
+    return { ...tenant, plan: withEffectivePrice(getPlan(tenant.planId)) };
   },
 
   /**
@@ -69,7 +81,7 @@ export const billingService = {
       payerEmail,
       backUrl: `${FRONTEND_URL}/suscripcion?estado=procesando`,
       reason: `${plan.name} - suscripción mensual`,
-      amount: tenant.mpSubscriptionAmount ?? plan.priceArs,
+      amount: tenant.mpSubscriptionAmount ?? getEffectivePrice(plan),
     });
 
     await prisma.tenant.update({
@@ -128,7 +140,7 @@ export const billingService = {
           // Precio de lanzamiento fijo "de por vida": solo se graba en el
           // primer pago acreditado, un cambio futuro del precio de listado
           // no debe pisarlo en las renovaciones siguientes.
-          mpSubscriptionAmount: tenant.mpSubscriptionAmount ?? payment.transaction_amount ?? getPlan(tenant.planId).priceArs,
+          mpSubscriptionAmount: tenant.mpSubscriptionAmount ?? payment.transaction_amount ?? getEffectivePrice(getPlan(tenant.planId)),
         },
       }),
       prisma.tenantPaymentLog.create({

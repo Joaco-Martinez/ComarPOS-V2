@@ -9,7 +9,14 @@ export const billingController = {
   // en el frontend.
   async plans(_req: Request, res: Response, next: NextFunction) {
     try {
-      res.json({ ok: true, content: { plans: billingService.plans, launchPriceEndsAt: billingService.launchPriceEndsAt } });
+      res.json({
+        ok: true,
+        content: {
+          plans: billingService.getPlans(),
+          launchPriceEndsAt: billingService.launchPriceEndsAt,
+          launchPriceActive: billingService.launchPriceActive(),
+        },
+      });
     } catch (err) {
       next(err);
     }

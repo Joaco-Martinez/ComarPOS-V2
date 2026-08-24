@@ -33,6 +33,7 @@ export default function PruebaGratisPage() {
   const [mode, setMode] = useState<Mode>('trial');
   const [planId, setPlanId] = useState(DEFAULT_PLAN_ID);
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [launchActive, setLaunchActive] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -48,8 +49,10 @@ export default function PruebaGratisPage() {
       setPlanId(selectedPlanId);
     }
     api.get('/billing/plans').then(({ data }) => {
-      const plans: Plan[] = (data.content ?? data)?.plans ?? [];
+      const content = data.content ?? data;
+      const plans: Plan[] = content?.plans ?? [];
       setPlan(plans.find((p) => p.id === selectedPlanId) ?? plans.find((p) => p.id === DEFAULT_PLAN_ID) ?? null);
+      if (typeof content?.launchPriceActive === 'boolean') setLaunchActive(content.launchPriceActive);
     }).catch(() => {});
   }, []);
 
@@ -122,12 +125,16 @@ export default function PruebaGratisPage() {
           <p style={{ fontSize: 14.5, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 24, maxWidth: 380 }}>
             {mode === 'trial'
               ? 'Creá tu cuenta ahora y entrás directo al sistema con tu propio negocio ya configurado. No hace falta tarjeta de crédito.'
-              : `Creá tu cuenta y pagá tu suscripción con Mercado Pago (${priceLabel}, precio de lanzamiento por tiempo limitado). Arrancás a usar el sistema apenas se acredite.`}
+              : `Creá tu cuenta y pagá tu suscripción con Mercado Pago (${priceLabel}${launchActive ? ', precio de lanzamiento por tiempo limitado' : ''}). Arrancás a usar el sistema apenas se acredite.`}
           </p>
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {(mode === 'trial'
               ? PERKS
-              : [`${plan?.name ?? 'Plan ComarPOS'} - ${priceLabel}`, 'Precio de lanzamiento fijo de por vida, por tiempo limitado', 'Facturación AFIP real desde el minuto uno']
+              : [
+                  `${plan?.name ?? 'Plan ComarPOS'} - ${priceLabel}`,
+                  launchActive ? 'Precio de lanzamiento fijo de por vida, por tiempo limitado' : 'Precio fijo de por vida',
+                  'Facturación AFIP real desde el minuto uno',
+                ]
             ).map((p) => (
               <li key={p} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text3)' }}>
                 <CheckCircle2 size={15} style={{ color: 'var(--success)', flexShrink: 0 }} /> {p}

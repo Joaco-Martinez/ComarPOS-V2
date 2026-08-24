@@ -11,7 +11,8 @@ import SiteFooter from './SiteFooter';
 import LandingChatWidget from './LandingChatWidget';
 import { waLink } from './siteConfig';
 import { VERTICALS, type Vertical } from './verticals';
-import { PLANS, LAUNCH_PRICE_ENDS_LABEL } from './plans';
+import { PLANS, LAUNCH_PRICE_ENDS_LABEL, isLaunchPriceActive } from './plans';
+import LaunchCountdown from './LaunchCountdown';
 
 const CTA_LABEL = 'Pedir una demo por WhatsApp';
 
@@ -60,6 +61,12 @@ function Eyebrow({ children, align = 'center' }: { children: React.ReactNode; al
 }
 
 export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) {
+  // Se evalua en cada render -- LandingPage cuelga de una pagina que ya usa
+  // headers() (ver app/page.tsx/isMarketingHost), asi que Next la sirve
+  // dinamica por request, no cacheada -- una vez pasada la fecha, el precio
+  // de lanzamiento deja de mostrarse solo, sin redeploy.
+  const launchActive = isLaunchPriceActive();
+
   return (
     <>
     <LandingFade className="landing-root" style={{ background: 'var(--bg)', color: 'var(--text)', minHeight: '100vh', position: 'relative', overflowX: 'hidden', maxWidth: '100vw', contain: 'paint' }}>
@@ -283,9 +290,14 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
         <p style={{ fontSize: 14.5, color: 'var(--text3)', textAlign: 'center', marginBottom: 12, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
           Probalo gratis 7 días con cualquier plan, o suscribite directamente si ya lo tenés decidido.
         </p>
-        <p style={{ fontSize: 12.5, color: 'var(--accent)', fontWeight: 700, textAlign: 'center', marginBottom: 40, fontFamily: 'var(--mono)' }}>
-          Precio de lanzamiento válido hasta el {LAUNCH_PRICE_ENDS_LABEL} — después pasa al precio de lista
-        </p>
+        {launchActive && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginBottom: 40 }}>
+            <LaunchCountdown />
+            <p style={{ fontSize: 11.5, color: 'var(--text3)', textAlign: 'center' }}>
+              Precio de lanzamiento válido hasta el {LAUNCH_PRICE_ENDS_LABEL} — después pasa al precio de lista
+            </p>
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, alignItems: 'start', maxWidth: 1000, margin: '0 auto' }}>
           {PLANS.map((plan, i) => (
             <Reveal key={plan.id} delay={i * 0.06}>
@@ -312,19 +324,21 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
                 </div>
                 <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 18, minHeight: 32 }}>{plan.tagline}</p>
 
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 7, marginBottom: 2 }}>
-                  <span style={{ fontSize: 14, color: 'var(--text3)', textDecoration: 'line-through', fontFamily: 'var(--mono)' }}>
-                    ${plan.regularPriceArs.toLocaleString('es-AR')}
-                  </span>
-                </div>
+                {launchActive && (
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 7, marginBottom: 2 }}>
+                    <span style={{ fontSize: 14, color: 'var(--text3)', textDecoration: 'line-through', fontFamily: 'var(--mono)' }}>
+                      ${plan.regularPriceArs.toLocaleString('es-AR')}
+                    </span>
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 6, marginBottom: 6 }}>
                   <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', fontFamily: 'var(--mono)', color: 'var(--text)' }}>
-                    ${plan.priceArs.toLocaleString('es-AR')}
+                    ${(launchActive ? plan.priceArs : plan.regularPriceArs).toLocaleString('es-AR')}
                   </span>
                   <span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}>/mes</span>
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 22 }}>
-                  Precio de lanzamiento, fijo de por vida
+                  {launchActive ? 'Precio de lanzamiento, fijo de por vida' : 'Precio fijo de por vida'}
                 </p>
 
                 <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9, textAlign: 'left', marginBottom: 24, flex: 1 }}>

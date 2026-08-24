@@ -18,6 +18,14 @@ export type LandingPlan = {
 export const LAUNCH_PRICE_ENDS_AT = new Date('2026-09-24T00:00:00-03:00');
 export const LAUNCH_PRICE_ENDS_LABEL = LAUNCH_PRICE_ENDS_AT.toLocaleDateString('es-AR', { day: 'numeric', month: 'long' });
 
+// Misma cuenta que backend/src/config/billing.ts#isLaunchPriceActive -- acá
+// también en vez de un flag hardcodeado, para que apenas pase la fecha la
+// landing (que se sirve dinámica por request, ver headers() en
+// app/page.tsx) deje de mostrar precio de lanzamiento sola, sin redeploy.
+export function isLaunchPriceActive(now: Date = new Date()): boolean {
+  return now.getTime() < LAUNCH_PRICE_ENDS_AT.getTime();
+}
+
 export const PLANS: LandingPlan[] = [
   {
     id: 'esencial',

@@ -66,3 +66,16 @@ export const PLANS: Plan[] = [
 export function getPlan(id?: string | null): Plan {
   return PLANS.find((p) => p.id === id) ?? PLANS.find((p) => p.id === DEFAULT_PLAN_ID)!;
 }
+
+export function isLaunchPriceActive(): boolean {
+  return Date.now() < LAUNCH_PRICE_ENDS_AT.getTime();
+}
+
+// Fuente de verdad de "cuanto se cobra AHORA": antes del vencimiento es el
+// precio de lanzamiento, despues pasa solo al precio de lista -- sin este
+// helper, createCheckout() seguia usando plan.priceArs a mano incluso
+// pasada la fecha, y el precio de lanzamiento hubiera quedado vigente para
+// siempre en vez de por tiempo limitado como dice la landing.
+export function getEffectivePrice(plan: Plan): number {
+  return isLaunchPriceActive() ? plan.priceArs : plan.regularPriceArs;
+}
