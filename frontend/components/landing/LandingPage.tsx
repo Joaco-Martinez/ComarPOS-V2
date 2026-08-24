@@ -1,12 +1,13 @@
 import {
-  ArrowRight, ShoppingBag, PawPrint, Wrench,
-  Cpu, Candy, Shirt, Hammer, Truck, Pill, BookOpen, Wine,
-  Sparkles, Store, ShieldCheck, Zap, Layers, Target, CheckCircle2,
+  ArrowRight, Store, ShieldCheck, Zap, Layers, Target, CheckCircle2,
 } from 'lucide-react';
 import FiscalMoment from './FiscalMoment';
 import ShowcaseTabs from './ShowcaseTabs';
 import TiltCard from './TiltCard';
 import Reveal from './Reveal';
+import LandingFade from './LandingFade';
+import RubroPill from './RubroPill';
+import { VERTICALS, type Vertical } from './verticals';
 
 // TODO: reemplazar por el número real (con código de país, sin +, ej: 5493511234567)
 const WHATSAPP_NUMBER = '5490000000000';
@@ -31,20 +32,9 @@ const PLAN_PERKS = [
   'Precio de lanzamiento fijo de por vida, por tiempo limitado',
 ];
 
-const BUSINESS_TYPES = [
-  { icon: ShoppingBag, label: 'Kioscos y almacenes' },
-  { icon: PawPrint, label: 'Veterinarias' },
-  { icon: Wrench, label: 'Talleres mecánicos' },
-  { icon: Cpu, label: 'Electrónica' },
-  { icon: Candy, label: 'Chocolaterías y golosinas' },
-  { icon: Shirt, label: 'Indumentaria' },
-  { icon: Hammer, label: 'Ferreterías' },
-  { icon: Truck, label: 'Distribuidoras' },
-  { icon: Pill, label: 'Farmacias' },
-  { icon: BookOpen, label: 'Librerías' },
-  { icon: Wine, label: 'Vinotecas' },
-  { icon: Sparkles, label: 'Perfumerías' },
-  { icon: Store, label: 'Y cualquier otro rubro' },
+const ALL_BUSINESS_TYPES: Array<{ slug: string | null; icon: typeof Store; label: string }> = [
+  ...VERTICALS.map((v) => ({ slug: v.slug as string | null, icon: v.icon, label: v.label })),
+  { slug: null, icon: Store, label: 'Y cualquier otro rubro' },
 ];
 
 const DIFFERENTIATORS = [
@@ -79,9 +69,9 @@ function Eyebrow({ children, align = 'center' }: { children: React.ReactNode; al
   );
 }
 
-export default function LandingPage() {
+export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) {
   return (
-    <div className="landing-root" style={{ background: 'var(--bg)', color: 'var(--text)', minHeight: '100vh', position: 'relative', overflowX: 'hidden', maxWidth: '100vw', contain: 'paint' }}>
+    <LandingFade className="landing-root" style={{ background: 'var(--bg)', color: 'var(--text)', minHeight: '100vh', position: 'relative', overflowX: 'hidden', maxWidth: '100vw', contain: 'paint' }}>
       {/* Ambient glow (no grid technique: warm, soft, not "dev tool") */}
       <div style={{
         position: 'absolute', top: '-8%', left: '58%', transform: 'translateX(-50%)',
@@ -98,7 +88,12 @@ export default function LandingPage() {
       <header style={{ position: 'sticky', top: 0, zIndex: 30, background: 'rgba(247,249,252,0.85)', backdropFilter: 'blur(10px)', borderBottom: '1px solid var(--border)' }}>
         <Section style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap' }}>
-            <img src="/brand/logo-horizontal-positivo.svg" alt="ComarPOS" style={{ height: 28 }} />
+            <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}>
+              <img src="/brand/isologo.png" alt="ComarPOS" width={34} height={34} style={{ objectFit: 'contain', flexShrink: 0 }} />
+              <span style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.5, color: 'var(--text)' }}>
+                omar<span style={{ color: 'var(--accent)' }}>POS</span>
+              </span>
+            </a>
             <nav style={{ gap: 20 }} className="hidden md:flex">
               {NAV_LINKS.map((l) => (
                 <a key={l.href} href={l.href} style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>{l.label}</a>
@@ -118,12 +113,12 @@ export default function LandingPage() {
       <Section style={{ position: 'relative', padding: '72px 24px 48px' }}>
         <div style={{ display: 'flex', gap: 56, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 440px', animation: 'fadeIn 0.5s ease' }}>
+            {vertical && <Eyebrow align="left">{vertical.label.toUpperCase()}</Eyebrow>}
             <h1 style={{ fontSize: 'clamp(32px, 4.6vw, 52px)', fontWeight: 800, lineHeight: 1.12, letterSpacing: '-0.02em', marginBottom: 20 }}>
-              Vendé, facturá y controlá tu negocio, todo en un solo lugar
+              {vertical ? <>El sistema para tu {vertical.headline}</> : 'Vendé, facturá y controlá tu negocio, todo en un solo lugar'}
             </h1>
             <p style={{ fontSize: 16.5, color: 'var(--text2)', maxWidth: 480, marginBottom: 32, lineHeight: 1.6 }}>
-              ComarPOS junta punto de venta, factura electrónica con CAE de ARCA/AFIP, stock, caja y
-              reportes. Pensado para el mostrador de tu local, no para una oficina de sistemas.
+              {vertical ? vertical.heroDescription : 'ComarPOS junta punto de venta, factura electrónica con CAE de ARCA/AFIP, stock, caja y reportes. Pensado para el mostrador de tu local, no para una oficina de sistemas.'}
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 40 }}>
               <a href="/prueba-gratis" className="btn btn-primary btn-lg" style={{ gap: 8 }}>
@@ -154,23 +149,98 @@ export default function LandingPage() {
         </div>
       </Section>
 
+      {/* Problem (solo en páginas por rubro) */}
+      {vertical && (
+        <Section style={{ padding: '0 24px 72px' }}>
+          <Reveal>
+            <div className="card" style={{
+              padding: '40px 36px',
+              background: 'linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%)',
+            }}>
+              <Eyebrow align="left">EL PROBLEMA</Eyebrow>
+              <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 14, letterSpacing: '-0.01em', maxWidth: 600 }}>
+                {vertical.problemTitle}
+              </h2>
+              <p style={{ fontSize: 14.5, color: 'var(--text2)', lineHeight: 1.7, maxWidth: 660, marginBottom: 24 }}>
+                {vertical.problemDescription}
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {vertical.tags.map((tag) => (
+                  <span key={tag} style={{
+                    display: 'inline-flex', alignItems: 'center', fontSize: 12.5, fontWeight: 600,
+                    color: 'var(--accent)', background: 'var(--accent-dim)', border: '1px solid var(--border2)',
+                    borderRadius: 999, padding: '6px 14px',
+                  }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+        </Section>
+      )}
+
+      {/* Features específicas del rubro (solo en páginas por rubro) */}
+      {vertical && (
+        <Section style={{ padding: '0 24px 80px' }}>
+          <Eyebrow>QUÉ INCLUYE PARA VOS</Eyebrow>
+          <h2 style={{ fontSize: 26, fontWeight: 800, textAlign: 'center', marginBottom: 36, letterSpacing: '-0.01em' }}>
+            Hecho a medida para tu {vertical.headline}
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20 }}>
+            {vertical.features.map(({ icon: Icon, title, desc }, i) => (
+              <Reveal key={title} delay={i * 0.08}>
+                <TiltCard className="card" style={{ padding: 22, height: '100%' }}>
+                  <div style={{
+                    width: 44, height: 44, borderRadius: 12, background: 'var(--accent-dim)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+                  }}>
+                    <Icon size={20} style={{ color: 'var(--accent)' }} />
+                  </div>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{title}</h3>
+                  <p style={{ fontSize: 13, color: 'var(--text3)', lineHeight: 1.6 }}>{desc}</p>
+                </TiltCard>
+              </Reveal>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* Business types */}
       <Section id="rubros" style={{ padding: '40px 24px 80px', position: 'relative' }}>
         <Reveal>
-          <Eyebrow>UN SISTEMA, CUALQUIER RUBRO</Eyebrow>
+          <Eyebrow>{vertical ? 'CAMBIAR DE RUBRO' : 'UN SISTEMA, CUALQUIER RUBRO'}</Eyebrow>
           <h2 style={{ fontSize: 26, fontWeight: 800, textAlign: 'center', marginBottom: 28, letterSpacing: '-0.01em' }}>
-            Se adapta a como vendés vos
+            {vertical ? 'También usado en estos rubros' : 'Se adapta a como vendés vos'}
           </h2>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
-            {BUSINESS_TYPES.map(({ icon: Icon, label }) => (
-              <span key={label} style={{
+            {ALL_BUSINESS_TYPES.map(({ slug, icon: Icon, label }) => {
+              const active = !!vertical && slug === vertical.slug;
+              const pillStyle: React.CSSProperties = {
                 display: 'inline-flex', alignItems: 'center', gap: 7,
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 999, padding: '8px 16px', fontSize: 13, color: 'var(--text2)',
-              }}>
-                <Icon size={14} style={{ color: 'var(--accent)' }} /> {label}
-              </span>
-            ))}
+                background: active ? 'var(--accent-dim)' : 'var(--surface)',
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                borderRadius: 999, padding: '8px 16px', fontSize: 13,
+                color: active ? 'var(--accent)' : 'var(--text2)',
+                fontWeight: active ? 700 : 400,
+                textDecoration: 'none', transition: 'all 0.12s',
+              };
+              return slug ? (
+                <RubroPill key={label} href={`/para/${slug}`} style={pillStyle}>
+                  <Icon size={14} style={{ color: 'var(--accent)' }} /> {label}
+                </RubroPill>
+              ) : (
+                <a
+                  key={label}
+                  href={waLink('¡Hola! Mi rubro no está en la lista, quiero consultar si ComarPOS me sirve.')}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={pillStyle}
+                >
+                  <Icon size={14} style={{ color: 'var(--accent)' }} /> {label}
+                </a>
+              );
+            })}
           </div>
         </Reveal>
       </Section>
@@ -327,11 +397,12 @@ export default function LandingPage() {
       {/* Brand identity */}
       <Section style={{ padding: '0 24px 88px', textAlign: 'center' }}>
         <Reveal>
-          <img
-            src="/brand/logo-horizontal-positivo.svg"
-            alt="ComarPOS"
-            style={{ height: 64, margin: '0 auto', display: 'block' }}
-          />
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <img src="/brand/isologo.png" alt="ComarPOS" width={96} height={96} style={{ objectFit: 'contain' }} />
+            <span style={{ fontSize: 56, fontWeight: 800, letterSpacing: -1.5, color: 'var(--text)' }}>
+              omar<span style={{ color: 'var(--accent)' }}>POS</span>
+            </span>
+          </div>
         </Reveal>
       </Section>
 
@@ -339,7 +410,12 @@ export default function LandingPage() {
       <footer style={{ borderTop: '1px solid var(--border)', padding: '40px 24px 24px', position: 'relative' }}>
         <Section style={{ display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
           <div style={{ maxWidth: 280 }}>
-            <img src="/brand/logo-horizontal-positivo.svg" alt="ComarPOS" style={{ height: 24, marginBottom: 12 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 14 }}>
+              <img src="/brand/isologo.png" alt="ComarPOS" width={40} height={40} style={{ objectFit: 'contain' }} />
+              <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.6, color: 'var(--text)' }}>
+                omar<span style={{ color: 'var(--accent)' }}>POS</span>
+              </span>
+            </div>
             <p style={{ fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.6 }}>
               Sistema de gestión (ERP + punto de venta) para comercios de cualquier rubro,
               con facturación electrónica AFIP integrada.
@@ -367,6 +443,6 @@ export default function LandingPage() {
           </span>
         </Section>
       </footer>
-    </div>
+    </LandingFade>
   );
 }

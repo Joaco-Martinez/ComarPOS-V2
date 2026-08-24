@@ -76,8 +76,12 @@ export function proxy(req: NextRequest) {
   // Página pública de instrucciones para instalar la PWA (paso a paso
   // iPhone/Android) - tiene que verse sin estar logueado.
   const isInstallGuide = pathname === '/instalar';
+  // Alta de cuenta (prueba gratis / suscripción directa) y landings por
+  // rubro (/para/<slug>) - son parte del sitio de marketing, públicas.
+  const isSignup = pathname === '/prueba-gratis';
+  const isVerticalLanding = pathname.startsWith('/para/');
 
-  if (isInstallGuide) {
+  if (isInstallGuide || isSignup || isVerticalLanding) {
     return NextResponse.next();
   }
 
