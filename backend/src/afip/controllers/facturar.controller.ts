@@ -110,6 +110,18 @@ export async function facturarController(req: Request, res: Response) {
       return res.status(404).json({ ok: false, error: "Venta no encontrada" });
     }
 
+    // El frontend no siempre manda "importe" (ej. facturacion/page.tsx solo
+    // manda saleId/tipoComprobante/receiverDoc al facturar manualmente una
+    // venta ya guardada) -- sin este fallback, emitirFacturaA/B/C recibia
+    // importe undefined y crasheaba en un .toFixed() mas abajo
+    // (wsfe-base.service.ts#calcularImportes). sale.total ya es la fuente
+    // de verdad del monto, asi que se usa siempre que el body no traiga un
+    // numero valido (nunca se confia ciegamente en lo que manda el cliente
+    // para el monto que se le declara a AFIP).
+    if (facturaData.importe === undefined || facturaData.importe === null || Number.isNaN(Number(facturaData.importe))) {
+      facturaData.importe = sale.total;
+    }
+
     console.log(`✅ [${requestId}] Venta encontrada:`, {
       id: sale.id,
       total: sale.total,
