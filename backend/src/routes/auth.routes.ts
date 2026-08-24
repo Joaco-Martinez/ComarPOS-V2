@@ -10,6 +10,7 @@ router.post("/login", loginRateLimiter, authController.login);
 router.post("/logout", authController.logout);
 router.get("/me", authController.me);
 router.post("/change-password", authMiddleware, authController.changePassword);
+router.patch("/me/quick-access", authMiddleware, authController.updateQuickAccess);
 
 router.delete(
   "/:id",

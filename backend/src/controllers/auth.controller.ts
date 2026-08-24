@@ -61,6 +61,20 @@ export const authController = {
     }
   },
 
+  async updateQuickAccess(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      const result = await authService.updateQuickAccessConfig(userId, req.body.config);
+
+      res.json({
+        ok: true,
+        content: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async logout(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await authService.logout(res);

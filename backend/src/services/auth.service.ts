@@ -38,6 +38,7 @@ function sanitizeUser(user: any) {
     // el negocio identificado (ej. /grupo-vj/pos), como en Mi Taller Ya.
     tenantSlug: user.tenant?.slug ?? null,
     tenantName: user.tenant?.name ?? null,
+    quickAccessConfig: user.quickAccessConfig ?? null,
   };
 }
 
@@ -242,6 +243,32 @@ export const authService = {
       message: "Contraseña actualizada correctamente",
       user: cleanUser,
     };
+  },
+
+  async updateQuickAccessConfig(userId: string | undefined, config: unknown) {
+    if (!userId) throw new Error("No autenticado");
+
+    if (
+      config !== null &&
+      (typeof config !== "object" || Array.isArray(config))
+    ) {
+      throw new Error("Config inválida");
+    }
+
+    if (config !== null && JSON.stringify(config).length > 20000) {
+      throw new Error("Config demasiado grande");
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { quickAccessConfig: config as any },
+      include: {
+        client: true,
+        tenant: { select: { slug: true, name: true } },
+      },
+    });
+
+    return sanitizeUser(updatedUser);
   },
 
   async logout(res: Response) {

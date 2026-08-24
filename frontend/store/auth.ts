@@ -1,7 +1,8 @@
 'use client';
 import { create } from 'zustand';
-import type { User } from '@/types';
+import type { QuickAccessConfig, User } from '@/types';
 import api from '@/lib/api';
+import { writeCachedQuickAccessConfig } from '@/lib/quickAccess';
 
 interface AuthState {
   user: User | null;
@@ -10,9 +11,10 @@ interface AuthState {
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   me: () => Promise<void>;
+  updateQuickAccessConfig: (config: QuickAccessConfig | null) => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   loading: true,
   setUser: (u) => set({ user: u }),
@@ -32,9 +34,22 @@ export const useAuthStore = create<AuthState>((set) => ({
   me: async () => {
     try {
       const { data } = await api.get('/auth/me');
-      set({ user: data.content ?? data, loading: false });
+      const user = data.content ?? data;
+      set({ user, loading: false });
+      if (user?.id) writeCachedQuickAccessConfig(user.id, user.quickAccessConfig ?? null);
     } catch {
       set({ user: null, loading: false });
     }
+  },
+  updateQuickAccessConfig: async (config) => {
+    const currentUser = get().user;
+    if (!currentUser) return;
+    // Optimista: se ve al toque, se pisa con lo que confirme el server
+    set({ user: { ...currentUser, quickAccessConfig: config } });
+    writeCachedQuickAccessConfig(currentUser.id, config);
+    const { data } = await api.patch('/auth/me/quick-access', { config });
+    const updated = data.content ?? data;
+    set({ user: updated });
+    writeCachedQuickAccessConfig(updated.id, updated.quickAccessConfig ?? null);
   },
 }));
