@@ -5,7 +5,7 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { fmtDate } from '@/lib/helpers';
 import type { BillingPlan } from '@/types';
-import { CheckCircle2, CreditCard, LogOut, MessageCircle, RefreshCcw, Repeat } from 'lucide-react';
+import { CheckCircle2, CreditCard, LogOut, MessageCircle, RefreshCcw, Repeat, Ban } from 'lucide-react';
 import { waLink } from '@/components/landing/siteConfig';
 
 type BillingStatus = {
@@ -32,6 +32,9 @@ export default function SuscripcionPage() {
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelMessage, setCancelMessage] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +64,14 @@ export default function SuscripcionPage() {
 
   const isChangingPlan = !!status && status.subscriptionStatus === 'ACTIVE' && !!selectedPlanId && selectedPlanId !== status.planId;
 
+  // ACTIVE pero sin auto-cobro y con el periodo pagado ya vencido: es como
+  // llegar bloqueado (ver isSubscriptionExpired en middleware/tenant.ts),
+  // solo que via un redirect de un 403 en otra pantalla en vez de por el
+  // subscriptionStatus (que sigue en ACTIVE a proposito, ver
+  // cancelSubscription en billing.service.ts).
+  const isExpiredActive = !!status && status.subscriptionStatus === 'ACTIVE' && !status.mpPreapprovalId
+    && !!status.paidUntil && new Date(status.paidUntil).getTime() < Date.now();
+
   // Un solo boton para "activar" (primera vez) o "cambiar de plan" (ya
   // activo): createCheckout en el backend hace todo en la misma llamada --
   // si hay una preapproval vieja la cancela en Mercado Pago de verdad antes
@@ -76,6 +87,36 @@ export default function SuscripcionPage() {
     } catch {
       setError('No pudimos generar el link de pago. Probá de nuevo en un momento.');
       setRedirecting(false);
+    }
+  };
+
+  // Botón de arrepentimiento / baja: cancela el auto-cobro en Mercado Pago
+  // de verdad, pero deja usar el sistema hasta paidUntil (el backend corta
+  // el acceso solo despues, ver isSubscriptionExpired en middleware/tenant.ts).
+  // Doble click a proposito (primero pide confirmar) para no dar de baja
+  // por error un click perdido.
+  const cancelSubscription = async () => {
+    if (!confirmingCancel) {
+      setConfirmingCancel(true);
+      return;
+    }
+    setCancelling(true);
+    setError('');
+    try {
+      const { data } = await api.post('/billing/cancel');
+      const updated = data.content ?? data;
+      setStatus(updated);
+      setConfirmingCancel(false);
+      setCancelMessage(
+        updated?.paidUntil
+          ? `Diste de baja tu suscripción. Vas a poder seguir usando ComarPOS hasta el ${fmtDate(updated.paidUntil)}, no se te va a cobrar de nuevo.`
+          : 'Diste de baja tu suscripción. No se te va a cobrar de nuevo.'
+      );
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'No pudimos procesar la baja. Probá de nuevo o escribinos.');
+      setConfirmingCancel(false);
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -114,17 +155,19 @@ export default function SuscripcionPage() {
           ) : (
             <>
               <h1 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
-                {isReturningFromMp ? 'Estamos confirmando tu pago' : status?.subscriptionStatus === 'ACTIVE' ? 'Tu suscripción' : 'Activá tu suscripción'}
+                {isReturningFromMp ? 'Estamos confirmando tu pago' : isExpiredActive ? 'Tu período pago terminó' : status?.subscriptionStatus === 'ACTIVE' ? 'Tu suscripción' : 'Activá tu suscripción'}
               </h1>
               <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.5 }}>
                 {isReturningFromMp
                   ? 'Mercado Pago nos avisa apenas se acredite, puede tardar un par de minutos. Actualizá esta página en un rato.'
+                  : isExpiredActive
+                  ? `Diste de baja tu suscripción y el período que tenías pago venció el ${fmtDate(status!.paidUntil!)}. Reactivá para seguir usando ComarPOS.`
                   : status?.subscriptionStatus === 'ACTIVE'
                   ? 'Podés cambiar de plan cuando quieras — cancelamos tu suscripción actual y arrancamos la nueva en el mismo paso.'
                   : reasonText()}
               </p>
 
-              {status?.subscriptionStatus === 'ACTIVE' ? (
+              {status?.subscriptionStatus === 'ACTIVE' && !isExpiredActive ? (
                 <div style={{ background: 'var(--success-dim, rgba(24,193,94,0.1))', border: '1px solid rgba(24,193,94,0.25)', borderRadius: 8, padding: '14px 16px', display: 'flex', gap: 10, alignItems: 'center', marginBottom: 18 }}>
                   <CheckCircle2 size={18} style={{ color: 'var(--success)', flexShrink: 0 }} />
                   <div style={{ fontSize: 13, color: 'var(--text)' }}>
@@ -180,6 +223,12 @@ export default function SuscripcionPage() {
                 </div>
               )}
 
+              {cancelMessage && (
+                <div style={{ background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 6, padding: '9px 12px', marginBottom: 16, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
+                  {cancelMessage}
+                </div>
+              )}
+
               {error && (
                 <div style={{ background: 'var(--danger-dim)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, padding: '9px 12px', marginBottom: 16, fontSize: 13, color: 'var(--danger)' }}>
                   {error}
@@ -211,9 +260,48 @@ export default function SuscripcionPage() {
                   </button>
                 )}
 
+                {/* Diste de baja pero seguís en tu período pagado (ACTIVE
+                    sin mpPreapprovalId) y no elegiste otro plan: te dejamos
+                    reactivar la misma suscripción sin tener que esperar a
+                    que se corte el acceso. */}
+                {!isChangingPlan && status?.subscriptionStatus === 'ACTIVE' && !status.mpPreapprovalId && (
+                  <button onClick={subscribe} disabled={redirecting} className="btn btn-primary" style={{ width: '100%', gap: 8 }}>
+                    {redirecting ? (
+                      <span className="spinner" style={{ width: 15, height: 15 }} />
+                    ) : (
+                      <>
+                        <CreditCard size={15} /> Reactivar suscripción
+                      </>
+                    )}
+                  </button>
+                )}
+
                 <button onClick={load} className="btn btn-secondary" style={{ width: '100%', gap: 8 }}>
                   <RefreshCcw size={14} /> Actualizar estado
                 </button>
+
+                {status?.subscriptionStatus === 'ACTIVE' && status.mpPreapprovalId && !cancelMessage && (
+                  <button
+                    onClick={cancelSubscription}
+                    disabled={cancelling}
+                    className="btn btn-ghost"
+                    style={{ width: '100%', gap: 8, color: confirmingCancel ? 'var(--danger)' : 'var(--text3)', border: confirmingCancel ? '1px solid rgba(239,68,68,0.4)' : undefined }}
+                  >
+                    {cancelling ? (
+                      <span className="spinner" style={{ width: 14, height: 14 }} />
+                    ) : (
+                      <>
+                        <Ban size={14} />
+                        {confirmingCancel ? 'Confirmar baja (sin vuelta atrás)' : 'Botón de arrepentimiento / dar de baja'}
+                      </>
+                    )}
+                  </button>
+                )}
+                {confirmingCancel && (
+                  <button onClick={() => setConfirmingCancel(false)} className="btn btn-ghost" style={{ width: '100%', color: 'var(--text3)', fontSize: 12 }}>
+                    No, mantener mi suscripción
+                  </button>
+                )}
 
                 <a
                   href={waLink('¡Hola! Necesito ayuda con la suscripción de ComarPOS.')}

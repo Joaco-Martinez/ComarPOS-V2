@@ -22,6 +22,7 @@ type TenantRecord = {
   isActive: boolean;
   subscriptionStatus: string;
   trialEndsAt: Date | null;
+  paidUntil: Date | null;
 };
 
 const DEFAULT_TENANT_SLUG = process.env.DEFAULT_TENANT_SLUG || "grupo-vj";
@@ -41,7 +42,7 @@ async function resolveTenantBySlug(slug: string): Promise<TenantRecord | null> {
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
-    select: { id: true, slug: true, name: true, isActive: true, subscriptionStatus: true, trialEndsAt: true },
+    select: { id: true, slug: true, name: true, isActive: true, subscriptionStatus: true, trialEndsAt: true, paidUntil: true },
   });
 
   tenantCache.set(slug, tenant);
@@ -57,7 +58,7 @@ export async function resolveTenantById(id: string): Promise<TenantRecord | null
 
   const tenant = await prisma.tenant.findUnique({
     where: { id },
-    select: { id: true, slug: true, name: true, isActive: true, subscriptionStatus: true, trialEndsAt: true },
+    select: { id: true, slug: true, name: true, isActive: true, subscriptionStatus: true, trialEndsAt: true, paidUntil: true },
   });
 
   tenantByIdCache.set(id, tenant);
@@ -102,12 +103,29 @@ export function isTrialExpired(tenant: Pick<TenantRecord, "subscriptionStatus" |
   );
 }
 
+// Tenant ACTIVE cuyo periodo pago (paidUntil) ya paso sin renovarse -- el
+// caso principal es la baja self-service (ver POST /billing/cancel,
+// billing.service.ts cancelSubscription): cancela el auto-cobro en Mercado
+// Pago pero deja seguir usando el sistema hasta el vencimiento ya pagado,
+// asi que hace falta este chequeo (antes no existia ningun corte automatico
+// por fecha) para que el acceso se corte solo despues, sin intervencion
+// manual del super-admin. paidUntil null (tenants gratis/manuales del
+// super-admin, o que nunca pagaron via MP) NUNCA cuenta como vencido aca --
+// null significa "sin fecha de corte", no "vencido".
+export function isSubscriptionExpired(tenant: Pick<TenantRecord, "subscriptionStatus" | "paidUntil">): boolean {
+  return (
+    tenant.subscriptionStatus === "ACTIVE" &&
+    !!tenant.paidUntil &&
+    tenant.paidUntil.getTime() < Date.now()
+  );
+}
+
 // Un solo lugar que decide si un tenant bloquea el request y con que
 // codigo/mensaje - usado tanto por tenantMiddleware (tenant default, rutas
 // sin autenticar) como por runWithAuthenticatedTenant en middleware/auth.ts
 // (tenant real del JWT), asi los dos caminos responden igual.
 export function getTenantBlock(
-  tenant: Pick<TenantRecord, "isActive" | "subscriptionStatus" | "trialEndsAt">
+  tenant: Pick<TenantRecord, "isActive" | "subscriptionStatus" | "trialEndsAt" | "paidUntil">
 ): { code: string; message: string } | null {
   if (isTenantSuspended(tenant)) {
     return {
@@ -120,6 +138,13 @@ export function getTenantBlock(
     return {
       code: "TRIAL_EXPIRED",
       message: "Tu prueba gratis terminó. Contactá a soporte para seguir usando ComarPOS.",
+    };
+  }
+
+  if (isSubscriptionExpired(tenant)) {
+    return {
+      code: "SUBSCRIPTION_EXPIRED",
+      message: "Tu período pago terminó. Renová tu suscripción desde Suscripción para seguir usando ComarPOS.",
     };
   }
 

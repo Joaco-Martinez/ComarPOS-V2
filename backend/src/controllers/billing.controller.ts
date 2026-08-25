@@ -53,6 +53,18 @@ export const billingController = {
     }
   },
 
+  async cancel(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = (req as any).user?.tenantId;
+      if (!tenantId) return res.status(400).json({ ok: false, message: "Usuario sin tenant asignado" });
+
+      const status = await billingService.cancelSubscription(tenantId);
+      res.json({ ok: true, content: status });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   // Publico, sin auth: lo llama Mercado Pago directo (ver
   // routes/billing.routes.ts, eximido de auth/suspension/CSRF). Valida la
   // firma del webhook antes de tocar nada.

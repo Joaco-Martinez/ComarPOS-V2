@@ -38,7 +38,7 @@ api.interceptors.request.use((config) => {
 // mano) - se resuelven todos mandando a /suscripcion, que ademas de dejar
 // pagar via Mercado Pago explica la situacion y da un link de soporte para
 // los casos de suspension manual que no se resuelven pagando solo.
-const BILLING_BLOCK_CODES = new Set(['TENANT_SUSPENDED', 'TRIAL_EXPIRED']);
+const BILLING_BLOCK_CODES = new Set(['TENANT_SUSPENDED', 'TRIAL_EXPIRED', 'SUBSCRIPTION_EXPIRED']);
 
 api.interceptors.response.use(
   (response) => response,

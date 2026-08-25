@@ -132,6 +132,51 @@ export const billingService = {
     return { initPoint: preapproval.init_point };
   },
 
+  /**
+   * Baja self-service ("botón de arrepentimiento" en /suscripcion): cancela
+   * el auto-cobro en Mercado Pago de verdad, pero el tenant sigue teniendo
+   * acceso hasta paidUntil (el período que ya pagó) -- no lo suspende al
+   * toque. El corte real despues del vencimiento lo hace
+   * isSubscriptionExpired() en middleware/tenant.ts en el proximo request,
+   * no esta funcion. Poner mpPreapprovalId en null (en vez de solo
+   * cancelarla en MP) es lo que hace que el webhook tardío de esa
+   * cancelación no dispare handlePreapprovalStatus (guard: preapprovalId ya
+   * no coincide con ninguna del tenant).
+   */
+  async cancelSubscription(tenantId: string) {
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new Error("Tenant no encontrado");
+
+    if (!tenant.mpPreapprovalId) {
+      throw new Error("No tenés una suscripción de Mercado Pago activa para dar de baja");
+    }
+
+    try {
+      await mercadoPagoClient.cancelPreapproval(tenant.mpPreapprovalId);
+    } catch (err) {
+      console.warn(`⚠️ No se pudo cancelar la preapproval ${tenant.mpPreapprovalId} en Mercado Pago:`, err);
+    }
+
+    await prisma.$transaction([
+      prisma.tenant.update({
+        where: { id: tenantId },
+        data: { mpPreapprovalId: null },
+      }),
+      prisma.tenantPaymentLog.create({
+        data: {
+          tenantId,
+          previousStatus: tenant.subscriptionStatus,
+          newStatus: tenant.subscriptionStatus,
+          note: tenant.paidUntil
+            ? `Baja solicitada por el propio tenant desde Suscripción (botón de arrepentimiento). Mantiene acceso hasta el ${tenant.paidUntil.toLocaleDateString("es-AR")} (período ya pagado); no se renueva automáticamente.`
+            : "Baja solicitada por el propio tenant desde Suscripción (botón de arrepentimiento).",
+        },
+      }),
+    ]);
+
+    return this.getStatus(tenantId);
+  },
+
   /** Topic "payment" del webhook: un cobro puntual (alta o renovacion mensual) generado por una preapproval. */
   async handlePayment(paymentId: string | number) {
     const payment = await mercadoPagoClient.getPayment(paymentId);

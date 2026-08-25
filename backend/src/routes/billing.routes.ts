@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { billingController } from "../controllers/billing.controller";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireRole } from "../middleware/auth";
 
 const router = Router();
 
@@ -12,6 +12,7 @@ router.get("/plans", billingController.plans);
 // bloqueado nunca podria llegar a pagar para desbloquearse solo.
 router.get("/status", authMiddleware, billingController.status);
 router.post("/checkout", authMiddleware, billingController.checkout);
+router.post("/cancel", authMiddleware, requireRole("ADMIN"), billingController.cancel);
 
 // Publico, sin auth: lo llama Mercado Pago directo.
 router.post("/mp/webhook", billingController.webhook);
