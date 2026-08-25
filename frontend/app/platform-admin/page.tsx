@@ -5,11 +5,16 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
-import type { Tenant, TenantSubscriptionStatus, BillingPlan } from '@/types';
+import type { Tenant, TenantSubscriptionStatus, BillingPlan, PlanFeatureKey } from '@/types';
 import { fmtDate, normalizeArray, daysRemaining } from '@/lib/helpers';
-import { Building2, Plus, X, Search, Eye, CreditCard, Gift, LogIn, ShoppingCart } from 'lucide-react';
+import { Building2, Plus, X, Search, Eye, CreditCard, Gift, LogIn, ShoppingCart, ToggleLeft, ToggleRight, SlidersHorizontal } from 'lucide-react';
 
 type MpPlanRow = { planId: string; mpPlanId: string; status: string };
+
+const FEATURE_KEYS: PlanFeatureKey[] = ['fidelidad', 'promociones', 'cuentasCorrientes'];
+const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
+  fidelidad: 'Fidelidad', promociones: 'Promociones', cuentasCorrientes: 'Cuentas corrientes',
+};
 
 const statusBadge = (s: TenantSubscriptionStatus) =>
   s === 'TRIAL' ? 'badge-blue' : s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
@@ -39,6 +44,7 @@ export default function PlatformAdminTenantsPage() {
   const [syncingMpPlans, setSyncingMpPlans] = useState(false);
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [impersonating, setImpersonating] = useState<string | null>(null);
+  const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -124,6 +130,29 @@ export default function PlatformAdminTenantsPage() {
     }
   };
 
+  // Prende/apaga un modulo para un plan (ver planFeatureConfig.service.ts) --
+  // optimista: se ve al toque en la grilla, se revierte si el PATCH falla.
+  // GET /billing/plans ya devuelve el override, asi que este mismo estado
+  // billingPlans es lo que despues usan el selector de "Nuevo tenant" y
+  // (en el proximo fetch de cada tenant) el gating real del backend.
+  const toggleFeature = async (planId: string, feature: PlanFeatureKey, enabled: boolean) => {
+    const key = `${planId}:${feature}`;
+    setTogglingFeature(key);
+    const previous = billingPlans;
+    setBillingPlans((plans) =>
+      plans.map((p) => (p.id === planId ? { ...p, features: { ...p.features, [feature]: enabled } } : p))
+    );
+    try {
+      await api.patch(`/platform-admin/plan-features/${planId}`, { feature, enabled });
+      showToast(`${FEATURE_LABELS[feature]} ${enabled ? 'activado' : 'desactivado'} para ${planName(planId)}`);
+    } catch (err: any) {
+      setBillingPlans(previous);
+      showToast(err?.response?.data?.message ?? 'No se pudo actualizar el módulo');
+    } finally {
+      setTogglingFeature(null);
+    }
+  };
+
   const createTenant = async () => {
     if (!form.name.trim() || !form.slug.trim() || !form.adminEmail.trim() || !form.adminPassword.trim()) return;
     setSaving(true);
@@ -175,6 +204,56 @@ export default function PlatformAdminTenantsPage() {
               {p.planId} ({p.status})
             </span>
           ))}
+        </div>
+      )}
+
+      {billingPlans.length > 0 && (
+        <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <SlidersHorizontal size={14} style={{ color: 'var(--text3)' }} />
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Módulos por plan</span>
+            <span style={{ fontSize: 11, color: 'var(--text3)' }}>— se aplica al instante a todos los tenants de ese plan</span>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Módulo</th>
+                  {billingPlans.map((p) => <th key={p.id}>{p.name}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {FEATURE_KEYS.map((feature) => (
+                  <tr key={feature}>
+                    <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{FEATURE_LABELS[feature]}</td>
+                    {billingPlans.map((p) => {
+                      const enabled = !!p.features[feature];
+                      const key = `${p.id}:${feature}`;
+                      return (
+                        <td key={p.id}>
+                          <button
+                            onClick={() => toggleFeature(p.id, feature, !enabled)}
+                            disabled={togglingFeature === key}
+                            className="btn btn-ghost btn-xs"
+                            style={{ color: enabled ? 'var(--success)' : 'var(--text3)', gap: 6 }}
+                          >
+                            {togglingFeature === key ? (
+                              <span className="spinner" style={{ width: 13, height: 13 }} />
+                            ) : enabled ? (
+                              <ToggleRight size={18} />
+                            ) : (
+                              <ToggleLeft size={18} />
+                            )}
+                            <span style={{ fontSize: 11 }}>{enabled ? 'Activo' : 'Inactivo'}</span>
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

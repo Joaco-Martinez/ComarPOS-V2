@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import { platformAdminService } from "../services/platformAdmin.service";
 import { platformTenantService } from "../services/platformTenant.service";
 import { mpPlanService } from "../services/billing/mpPlan.service";
+import { planFeatureConfigService } from "../services/planFeatureConfig.service";
+import { PlanFeatureKey } from "../config/billing";
 import { getParamAsString } from "../utils/params";
 
 export const platformAdminController = {
@@ -110,6 +112,20 @@ export const platformAdminController = {
       );
 
       res.json({ ok: true, content: user });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async updatePlanFeature(req: Request, res: Response, next: NextFunction) {
+    try {
+      const planId = getParamAsString(req.params.planId, "planId");
+      const feature = req.body.feature as PlanFeatureKey;
+      const enabled = Boolean(req.body.enabled);
+
+      const features = await planFeatureConfigService.setFeature(planId, feature, enabled);
+
+      res.json({ ok: true, content: { planId, features } });
     } catch (err) {
       next(err);
     }

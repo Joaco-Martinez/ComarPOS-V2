@@ -15,6 +15,7 @@ import prisma from "../../prisma";
 import { invalidateTenantCache } from "../../middleware/tenant";
 import { PLANS, getPlan, getEffectivePrice, isLaunchPriceActive, LAUNCH_PRICE_ENDS_AT, type Plan } from "../../config/billing";
 import { mercadoPagoClient } from "./mercadoPago.service";
+import { planFeatureConfigService } from "../planFeatureConfig.service";
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/login$/, "").replace(/\/$/, "");
 
@@ -36,8 +37,14 @@ export const billingService = {
   launchPriceEndsAt: LAUNCH_PRICE_ENDS_AT,
   launchPriceActive: () => isLaunchPriceActive(),
 
-  getPlans() {
-    return PLANS.map(withEffectivePrice);
+  // Async porque "features" puede estar pisado desde /platform-admin (ver
+  // planFeatureConfig.service.ts) -- este es el unico endpoint publico que
+  // expone los planes (landing, /prueba-gratis, /suscripcion y el panel de
+  // super-admin), asi que un toggle de modulo se ve reflejado ahi apenas se
+  // vuelve a pedir /billing/plans, sin redeploy.
+  async getPlans() {
+    const effectivePlans = await planFeatureConfigService.getAllEffectivePlans();
+    return effectivePlans.map(withEffectivePrice);
   },
 
   async getStatus(tenantId: string) {
@@ -57,7 +64,8 @@ export const billingService = {
 
     if (!tenant) throw new Error("Tenant no encontrado");
 
-    return { ...tenant, plan: withEffectivePrice(getPlan(tenant.planId)) };
+    const features = await planFeatureConfigService.getEffectiveFeatures(tenant.planId);
+    return { ...tenant, plan: withEffectivePrice({ ...getPlan(tenant.planId), features }) };
   },
 
   /**

@@ -12,7 +12,7 @@ export const billingController = {
       res.json({
         ok: true,
         content: {
-          plans: billingService.getPlans(),
+          plans: await billingService.getPlans(),
           launchPriceEndsAt: billingService.launchPriceEndsAt,
           launchPriceActive: billingService.launchPriceActive(),
         },
