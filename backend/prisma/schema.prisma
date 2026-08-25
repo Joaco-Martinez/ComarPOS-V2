@@ -1547,6 +1547,12 @@ model RepairOrderItem {
   quantity      Int                 @default(1)
   unitPrice     Float
   subtotal      Float
+  // unitPrice/subtotal son precio final (con IVA incluido), mismo criterio
+  // que Sale/SaleItem -- ivaRate solo se usa para "destapar" el neto al
+  // mostrar/facturar (ver repairOrder.service.ts, generarPresupuestoReparacionPDF.ts).
+  // Default 21 igual que Product.ivaRate; si la linea es un repuesto real
+  // se autocompleta con el ivaRate del producto al cargarla.
+  ivaRate       Float               @default(21)
   createdAt     DateTime            @default(now())
 
   @@index([repairOrderId])

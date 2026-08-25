@@ -38,6 +38,27 @@ const CHECKOUT_STATUSES = new Set<RepairOrderStatus>(['APPROVED', 'IN_PROGRESS',
 const LOCKED_STATUSES = new Set<RepairOrderStatus>(['DELIVERED', 'CANCELLED']);
 
 const PAYMENT_METHODS: PaymentMethod[] = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'QR_MERCADOPAGO', 'QR_NACION', 'CUENTA_CORRIENTE'];
+const IVA_RATES = [21, 10.5, 27, 5, 2.5, 0];
+const fmtIvaRate = (rate: number) => (rate <= 0 ? 'Exento' : `${rate}%`);
+
+// El precio de cada item ya incluye IVA (precio final) -- mismo criterio que
+// el resto del sistema (ver backend/src/services/ticket.service.ts). "Destapa"
+// el neto de cada item con su propia alicuota y agrupa el IVA por tasa.
+function buildIvaBreakdown(items: { subtotal: number; ivaRate: number }[]) {
+  const ivaByRate: Record<number, number> = {};
+  let netoSum = 0;
+  for (const item of items) {
+    const rate = item.ivaRate ?? 21;
+    const neto = (item.subtotal || 0) / (1 + rate / 100);
+    ivaByRate[rate] = (ivaByRate[rate] ?? 0) + ((item.subtotal || 0) - neto);
+    netoSum += neto;
+  }
+  const breakdown = Object.entries(ivaByRate)
+    .filter(([, amount]) => amount > 0.01)
+    .map(([rate, amount]) => ({ rate: Number(rate), amount }))
+    .sort((a, b) => b.rate - a.rate);
+  return { netoSum, breakdown };
+}
 
 const emptyForm = {
   clientId: '', deviceType: '', deviceBrand: '', deviceModel: '', deviceSerial: '',
@@ -62,7 +83,7 @@ export default function ServiciosPage() {
   const [form, setForm] = useState(emptyForm);
 
   const [itemMode, setItemMode] = useState<'product' | 'text'>('text');
-  const [itemForm, setItemForm] = useState({ productId: '', description: '', quantity: '1', unitPrice: '' });
+  const [itemForm, setItemForm] = useState({ productId: '', description: '', quantity: '1', unitPrice: '', ivaRate: '21' });
 
   const [shareLink, setShareLink] = useState('');
   const [copied, setCopied] = useState(false);
@@ -130,7 +151,7 @@ export default function ServiciosPage() {
   const openDetail = async (order: RepairOrder) => {
     setShareLink('');
     setItemMode('text');
-    setItemForm({ productId: '', description: '', quantity: '1', unitPrice: '' });
+    setItemForm({ productId: '', description: '', quantity: '1', unitPrice: '', ivaRate: '21' });
     try {
       const { data } = await api.get(`/repair-orders/${order.id}`);
       setSelected(data);
@@ -163,8 +184,9 @@ export default function ServiciosPage() {
         description: itemForm.description || undefined,
         quantity: Number(itemForm.quantity) || 1,
         unitPrice,
+        ivaRate: Number(itemForm.ivaRate),
       });
-      setItemForm({ productId: '', description: '', quantity: '1', unitPrice: '' });
+      setItemForm({ productId: '', description: '', quantity: '1', unitPrice: '', ivaRate: '21' });
       showToast('Ítem agregado');
       refreshSelected(selected.id);
     } catch (err: any) {
@@ -529,7 +551,7 @@ export default function ServiciosPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Descripción', 'Cant.', 'Precio u.', 'Subtotal', ''].map((h) => (
+                    {['Descripción', 'Cant.', 'IVA', 'Precio u.', 'Subtotal', ''].map((h) => (
                       <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>{h}</th>
                     ))}
                   </tr>
@@ -539,6 +561,7 @@ export default function ServiciosPage() {
                     <tr key={it.id} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '8px 10px', color: 'var(--text)' }}>{it.description}{it.productId && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text3)' }}>(repuesto)</span>}</td>
                       <td style={{ padding: '8px 10px', fontFamily: 'var(--mono)' }}>{it.quantity}</td>
+                      <td style={{ padding: '8px 10px', fontFamily: 'var(--mono)', color: 'var(--text3)', fontSize: 12 }}>{fmtIvaRate(it.ivaRate ?? 21)}</td>
                       <td style={{ padding: '8px 10px', fontFamily: 'var(--mono)' }}>{fmtMoney(it.unitPrice)}</td>
                       <td style={{ padding: '8px 10px', fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--accent)' }}>{fmtMoney(it.subtotal)}</td>
                       <td style={{ padding: '8px 10px' }}>
@@ -549,15 +572,30 @@ export default function ServiciosPage() {
                     </tr>
                   ))}
                   {selected.items.length === 0 && (
-                    <tr><td colSpan={5} style={{ padding: 16, textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>Sin ítems todavía</td></tr>
+                    <tr><td colSpan={6} style={{ padding: 16, textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>Sin ítems todavía</td></tr>
                   )}
                 </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={3} style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--text2)' }}>Total</td>
-                    <td colSpan={2} style={{ padding: '8px 10px', fontFamily: 'var(--mono)', fontWeight: 800, color: 'var(--accent)' }}>{fmtMoney(selected.totalAmount)}</td>
-                  </tr>
-                </tfoot>
+                {selected.items.length > 0 && (() => {
+                  const { netoSum, breakdown } = buildIvaBreakdown(selected.items);
+                  return (
+                    <tfoot>
+                      <tr>
+                        <td colSpan={4} style={{ padding: '4px 10px', textAlign: 'right', color: 'var(--text3)', fontSize: 12 }}>Subtotal (sin IVA)</td>
+                        <td colSpan={2} style={{ padding: '4px 10px', fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{fmtMoney(netoSum)}</td>
+                      </tr>
+                      {breakdown.map((line) => (
+                        <tr key={line.rate}>
+                          <td colSpan={4} style={{ padding: '4px 10px', textAlign: 'right', color: 'var(--text3)', fontSize: 12 }}>IVA {fmtIvaRate(line.rate)}</td>
+                          <td colSpan={2} style={{ padding: '4px 10px', fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{fmtMoney(line.amount)}</td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td colSpan={4} style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--text2)' }}>Total</td>
+                        <td colSpan={2} style={{ padding: '8px 10px', fontFamily: 'var(--mono)', fontWeight: 800, color: 'var(--accent)' }}>{fmtMoney(selected.totalAmount)}</td>
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
               </table>
             </div>
 
@@ -567,14 +605,19 @@ export default function ServiciosPage() {
                   <button className={`btn btn-sm ${itemMode === 'text' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setItemMode('text')}>Mano de obra / otro</button>
                   <button className={`btn btn-sm ${itemMode === 'product' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setItemMode('product')}>Repuesto del catálogo</button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: itemMode === 'product' ? '2fr 80px 100px 90px' : '2fr 80px 100px 90px', gap: 8, alignItems: 'end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 64px 84px 100px 90px', gap: 8, alignItems: 'end' }}>
                   {itemMode === 'product' ? (
                     <div>
                       <SearchableSelect
                         value={itemForm.productId}
                         onChange={(v) => {
                           const p = products.find((pr) => pr.id === v);
-                          setItemForm((f) => ({ ...f, productId: v, unitPrice: p ? String(p.price ?? '') : f.unitPrice }));
+                          setItemForm((f) => ({
+                            ...f,
+                            productId: v,
+                            unitPrice: p ? String(p.price ?? '') : f.unitPrice,
+                            ivaRate: p?.ivaRate !== undefined ? String(p.ivaRate) : f.ivaRate,
+                          }));
                         }}
                         options={productOptions}
                         placeholder="Elegir producto..."
@@ -584,6 +627,9 @@ export default function ServiciosPage() {
                     <input value={itemForm.description} onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))} placeholder="Descripción (ej. cambio de pantalla)" style={{ fontSize: 13 }} />
                   )}
                   <input type="number" min={1} value={itemForm.quantity} onChange={(e) => setItemForm((f) => ({ ...f, quantity: e.target.value }))} placeholder="Cant." style={{ fontSize: 13 }} />
+                  <select value={itemForm.ivaRate} onChange={(e) => setItemForm((f) => ({ ...f, ivaRate: e.target.value }))} style={{ fontSize: 13 }}>
+                    {IVA_RATES.map((r) => <option key={r} value={r}>{fmtIvaRate(r)}</option>)}
+                  </select>
                   <input type="number" min={0} value={itemForm.unitPrice} onChange={(e) => setItemForm((f) => ({ ...f, unitPrice: e.target.value }))} placeholder="Precio" style={{ fontSize: 13 }} />
                   <button className="btn btn-secondary btn-sm" onClick={addItem} disabled={saving} style={{ gap: 5 }}><Plus size={12} /> Agregar</button>
                 </div>

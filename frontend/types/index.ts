@@ -94,6 +94,7 @@ export interface Product {
   clientPrice: number;
   wholesalePrice: number;
   purchasePrice?: number | null;
+  ivaRate?: number;
   pricePerKg?: number | null;
   clientPricePerKg?: number | null;
   wholesalePricePerKg?: number | null;
@@ -443,6 +444,7 @@ export interface RepairOrderItem {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  ivaRate: number;
   createdAt?: string;
 }
 

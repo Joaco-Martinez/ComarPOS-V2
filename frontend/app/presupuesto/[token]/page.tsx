@@ -19,13 +19,31 @@ type PublicRepairOrder = {
   rejectionReason?: string | null;
   createdAt: string;
   client?: { nombre: string; apellido: string } | null;
-  items: { id: string; description: string; quantity: number; unitPrice: number; subtotal: number }[];
+  items: { id: string; description: string; quantity: number; unitPrice: number; subtotal: number; ivaRate: number }[];
 };
 
 const STATUS_LABEL: Record<string, string> = {
   BUDGETED: 'Pendiente de tu aprobación', APPROVED: 'Aprobado', REJECTED: 'Rechazado',
   IN_PROGRESS: 'En reparación', READY: 'Listo para retirar', DELIVERED: 'Entregado', CANCELLED: 'Cancelado',
 };
+
+const fmtIvaRate = (rate: number) => (rate <= 0 ? 'Exento' : `${rate}%`);
+
+function buildIvaBreakdown(items: { subtotal: number; ivaRate: number }[]) {
+  const ivaByRate: Record<number, number> = {};
+  let netoSum = 0;
+  for (const item of items) {
+    const rate = item.ivaRate ?? 21;
+    const neto = (item.subtotal || 0) / (1 + rate / 100);
+    ivaByRate[rate] = (ivaByRate[rate] ?? 0) + ((item.subtotal || 0) - neto);
+    netoSum += neto;
+  }
+  const breakdown = Object.entries(ivaByRate)
+    .filter(([, amount]) => amount > 0.01)
+    .map(([rate, amount]) => ({ rate: Number(rate), amount }))
+    .sort((a, b) => b.rate - a.rate);
+  return { netoSum, breakdown };
+}
 
 export default function PresupuestoPublicoPage() {
   const { token } = useParams<{ token: string }>();
@@ -148,11 +166,12 @@ export default function PresupuestoPublicoPage() {
         </div>
       )}
 
-      <div className="table-wrap" style={{ marginBottom: 14 }}>
+      <div className="table-wrap" style={{ marginBottom: 10 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
               <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: 11, color: 'var(--text3)' }}>Ítem</th>
+              <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: 11, color: 'var(--text3)' }}>IVA</th>
               <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: 11, color: 'var(--text3)' }}>Subtotal</th>
             </tr>
           </thead>
@@ -160,6 +179,7 @@ export default function PresupuestoPublicoPage() {
             {order.items.map((it) => (
               <tr key={it.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '6px 8px', color: 'var(--text)' }}>{it.description} {it.quantity > 1 ? `x${it.quantity}` : ''}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: 12, color: 'var(--text3)' }}>{fmtIvaRate(it.ivaRate ?? 21)}</td>
                 <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtMoney(it.subtotal)}</td>
               </tr>
             ))}
@@ -167,10 +187,25 @@ export default function PresupuestoPublicoPage() {
         </table>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text2)' }}>Total</span>
-        <span style={{ fontSize: 20, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--accent)' }}>{fmtMoney(order.totalAmount)}</span>
-      </div>
+      {(() => {
+        const { netoSum, breakdown } = buildIvaBreakdown(order.items);
+        return (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', padding: '2px 0' }}>
+              <span>Subtotal (sin IVA)</span><span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(netoSum)}</span>
+            </div>
+            {breakdown.map((line) => (
+              <div key={line.rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', padding: '2px 0' }}>
+                <span>IVA {fmtIvaRate(line.rate)}</span><span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(line.amount)}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text2)' }}>Total</span>
+              <span style={{ fontSize: 20, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--accent)' }}>{fmtMoney(order.totalAmount)}</span>
+            </div>
+          </div>
+        );
+      })()}
 
       <button className="btn btn-secondary" style={{ width: '100%', gap: 6, marginBottom: 18 }} onClick={downloadPdf}>
         <Download size={15} /> Descargar en PDF

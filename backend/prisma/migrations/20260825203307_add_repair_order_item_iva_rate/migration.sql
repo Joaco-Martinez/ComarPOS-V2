@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "RepairOrderItem" ADD COLUMN     "ivaRate" DOUBLE PRECISION NOT NULL DEFAULT 21;

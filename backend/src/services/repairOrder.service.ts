@@ -94,23 +94,30 @@ async function recalcTotal(id: string) {
 
 // El item "mano de obra / texto libre" se carga en la Sale final como un
 // Product mas (igual patron que DELIVERY_SKU en delivery.service.ts) con
-// precio manual = suma de esas lineas. Si el tenant todavia no tiene ese
-// producto lo creamos la primera vez.
-async function ensureServiceLaborProduct() {
+// precio manual = suma de esas lineas. Un producto por alicuota de IVA
+// distinta (21/10.5/27/0...) porque saleService.create() resuelve el
+// ivaRate de cada SaleItem desde el Product, no desde un override por item
+// -- asi el checkout no pierde el desglose de IVA que se cargo en el
+// presupuesto sin tener que tocar sale.pricing.ts. Se crean solos la
+// primera vez que hace falta cada alicuota.
+async function ensureServiceLaborProduct(ivaRate: number) {
+  const rate = round2(ivaRate);
+  const sku = `${SERVICE_LABOR_SKU}-${rate}`;
   const scope = tenantScope();
-  const existing = await prisma.product.findFirst({ where: { sku: SERVICE_LABOR_SKU, ...scope } });
+  const existing = await prisma.product.findFirst({ where: { sku, ...scope } });
   if (existing) return existing;
 
   return prisma.product.create({
     data: {
-      name: "Servicio técnico",
-      sku: SERVICE_LABOR_SKU,
+      name: rate === 21 ? "Servicio técnico" : `Servicio técnico (${rate <= 0 ? "Exento" : `IVA ${rate}%`})`,
+      sku,
       type: "SIMPLE",
       saleUnit: "UNIT",
       isService: true,
       price: 0,
       clientPrice: 0,
       wholesalePrice: 0,
+      ivaRate: rate,
       tenantId: currentTenantId(),
     },
   });
@@ -130,7 +137,7 @@ async function buildPdfBuffer(order: {
   totalAmount: number;
   tenantId: string | null;
   client?: { nombre: string; apellido: string; dni?: string | null; telefono?: string | null } | null;
-  items: { description: string; quantity: number; unitPrice: number; subtotal: number }[];
+  items: { description: string; quantity: number; unitPrice: number; subtotal: number; ivaRate: number }[];
 }) {
   const tenant = order.tenantId
     ? await prisma.tenant.findUnique({
@@ -316,18 +323,27 @@ export const repairOrderService = {
 
   async addItem(
     id: string,
-    item: { type?: string; productId?: string | null; description?: string; quantity?: number; unitPrice: number }
+    item: {
+      type?: string;
+      productId?: string | null;
+      description?: string;
+      quantity?: number;
+      unitPrice: number;
+      ivaRate?: number;
+    }
   ) {
     const order = await findOrThrow(id);
     assertEditable(order);
 
     let productId: string | null = null;
     let description = cleanString(item.description) ?? "";
+    let productIvaRate: number | null = null;
 
     if (item.productId) {
       const product = await prisma.product.findFirst({ where: { id: item.productId, ...tenantScope() } });
       if (!product) throw new AppError("PRODUCT_NOT_FOUND", "Producto no encontrado", 404);
       productId = product.id;
+      productIvaRate = product.ivaRate;
       if (!description) description = product.name;
     } else if (!description) {
       throw new AppError("VALIDATION_ERROR", "La línea necesita una descripción o un producto del catálogo", 400);
@@ -339,6 +355,11 @@ export const repairOrderService = {
       throw new AppError("VALIDATION_ERROR", "El precio de la línea es inválido", 400);
     }
 
+    const ivaRate = item.ivaRate !== undefined ? Number(item.ivaRate) : productIvaRate ?? 21;
+    if (!Number.isFinite(ivaRate) || ivaRate < 0 || ivaRate > 100) {
+      throw new AppError("VALIDATION_ERROR", "La alícuota de IVA es inválida", 400);
+    }
+
     await prisma.repairOrderItem.create({
       data: {
         repairOrderId: id,
@@ -348,13 +369,18 @@ export const repairOrderService = {
         quantity,
         unitPrice: round2(unitPrice),
         subtotal: round2(unitPrice * quantity),
+        ivaRate: round2(ivaRate),
       },
     });
 
     return recalcTotal(id);
   },
 
-  async updateItem(id: string, itemId: string, data: { description?: string; quantity?: number; unitPrice?: number }) {
+  async updateItem(
+    id: string,
+    itemId: string,
+    data: { description?: string; quantity?: number; unitPrice?: number; ivaRate?: number }
+  ) {
     const order = await findOrThrow(id);
     assertEditable(order);
 
@@ -367,6 +393,11 @@ export const repairOrderService = {
       throw new AppError("VALIDATION_ERROR", "El precio de la línea es inválido", 400);
     }
 
+    const ivaRate = data.ivaRate !== undefined ? Number(data.ivaRate) : Number(existing.ivaRate);
+    if (!Number.isFinite(ivaRate) || ivaRate < 0 || ivaRate > 100) {
+      throw new AppError("VALIDATION_ERROR", "La alícuota de IVA es inválida", 400);
+    }
+
     await prisma.repairOrderItem.update({
       where: { id: itemId },
       data: {
@@ -374,6 +405,7 @@ export const repairOrderService = {
         quantity,
         unitPrice: round2(unitPrice),
         subtotal: round2(unitPrice * quantity),
+        ivaRate: round2(ivaRate),
       },
     });
 
@@ -493,7 +525,6 @@ export const repairOrderService = {
 
     const partItems = order.items.filter((it) => it.productId);
     const freeItems = order.items.filter((it) => !it.productId);
-    const laborTotal = round2(freeItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0));
 
     const saleItems: { productId: string; quantity: number; price: number; priceType: string }[] = partItems.map((it) => ({
       productId: it.productId as string,
@@ -502,9 +533,20 @@ export const repairOrderService = {
       priceType: "MANUAL",
     }));
 
-    if (laborTotal > 0) {
-      const laborProduct = await ensureServiceLaborProduct();
-      saleItems.push({ productId: laborProduct.id, quantity: 1, price: laborTotal, priceType: "MANUAL" });
+    // Las lineas libres (mano de obra/otro) se agrupan por alicuota de IVA
+    // -- una linea de Sale por cada alicuota distinta, no todas juntas, para
+    // no perder el desglose de IVA que se cargo en el presupuesto (ver
+    // ensureServiceLaborProduct).
+    const laborByRate = new Map<number, number>();
+    for (const it of freeItems) {
+      const rate = round2(Number(it.ivaRate ?? 21));
+      laborByRate.set(rate, round2((laborByRate.get(rate) ?? 0) + Number(it.subtotal || 0)));
+    }
+
+    for (const [rate, amount] of laborByRate) {
+      if (amount <= 0) continue;
+      const laborProduct = await ensureServiceLaborProduct(rate);
+      saleItems.push({ productId: laborProduct.id, quantity: 1, price: amount, priceType: "MANUAL" });
     }
 
     const { sale } = await saleService.create({

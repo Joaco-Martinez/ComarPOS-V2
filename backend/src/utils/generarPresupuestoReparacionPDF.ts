@@ -23,7 +23,7 @@ export type PresupuestoReparacionPDFData = {
   diagnosis?: string | null;
   totalAmount: number;
   client?: { nombre?: string | null; apellido?: string | null; dni?: string | null; telefono?: string | null } | null;
-  items: { description: string; quantity: number; unitPrice: number; subtotal: number }[];
+  items: { description: string; quantity: number; unitPrice: number; subtotal: number; ivaRate: number }[];
   business: {
     name: string;
     cuit?: string | null;
@@ -50,6 +50,32 @@ function fmtDate(v?: Date | string | null) {
 
 function fmtMoney(v?: number | null) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 2 }).format(Number(v ?? 0));
+}
+
+function fmtIvaRate(rate: number) {
+  return rate <= 0 ? "Exento" : `${rate % 1 === 0 ? rate.toFixed(0) : rate}%`;
+}
+
+// El precio de cada item ya incluye IVA (precio final) -- mismo criterio que
+// generarCotizacionPDF/sections.ts y ticket.service.ts#buildIvaBreakdown:
+// "destapa" el neto de cada item con su propia alicuota y agrupa el IVA por
+// tasa, para que el desglose Subtotal/IVA/Total sea el mismo en todos los
+// documentos del sistema.
+function buildIvaBreakdown(items: { subtotal: number; ivaRate: number }[]) {
+  const ivaByRate: Record<number, number> = {};
+  let netoSum = 0;
+  for (const item of items) {
+    const rate = item.ivaRate ?? 21;
+    const neto = (item.subtotal || 0) / (1 + rate / 100);
+    const iva = (item.subtotal || 0) - neto;
+    ivaByRate[rate] = (ivaByRate[rate] ?? 0) + iva;
+    netoSum += neto;
+  }
+  const breakdown = Object.entries(ivaByRate)
+    .filter(([, amount]) => amount > 0.01)
+    .map(([rate, amount]) => ({ rate: Number(rate), amount }))
+    .sort((a, b) => b.rate - a.rate);
+  return { netoSum, breakdown };
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, y: number, needed: number) {
@@ -139,31 +165,52 @@ export async function generarPresupuestoReparacionPDF(data: PresupuestoReparacio
       }
 
       // --- Items ---
+      const cDesc = width * 0.44, cQty = width * 0.1, cIva = width * 0.12, cUnit = width * 0.17, cSub = width * 0.17 - 8;
+      const xDesc = left, xQty = left + cDesc, xIva = xQty + cQty, xUnit = xIva + cIva, xSub = xUnit + cUnit;
+
       y = ensureSpace(doc, y, 30);
       doc.rect(left, y, width, 20).fill(C.soft);
       doc.font("Helvetica-Bold").fontSize(8.5).fillColor(C.muted);
-      doc.text("DESCRIPCIÓN", left + 8, y + 6, { width: width * 0.55 });
-      doc.text("CANT.", left + width * 0.58, y + 6, { width: width * 0.12, align: "right" });
-      doc.text("PRECIO UNIT.", left + width * 0.68, y + 6, { width: width * 0.16, align: "right" });
-      doc.text("SUBTOTAL", left + width * 0.84, y + 6, { width: width * 0.16 - 8, align: "right" });
+      doc.text("DESCRIPCIÓN", xDesc + 8, y + 6, { width: cDesc - 8 });
+      doc.text("CANT.", xQty, y + 6, { width: cQty, align: "right" });
+      doc.text("IVA", xIva, y + 6, { width: cIva, align: "right" });
+      doc.text("PRECIO UNIT.", xUnit, y + 6, { width: cUnit, align: "right" });
+      doc.text("SUBTOTAL", xSub, y + 6, { width: cSub, align: "right" });
       y += 20;
 
       for (const item of data.items) {
-        const rowHeight = Math.max(20, doc.font("Helvetica").fontSize(9.5).heightOfString(item.description, { width: width * 0.55 - 8 }) + 8);
+        const rowHeight = Math.max(20, doc.font("Helvetica").fontSize(9.5).heightOfString(item.description, { width: cDesc - 8 }) + 8);
         y = ensureSpace(doc, y, rowHeight);
         doc.font("Helvetica").fontSize(9.5).fillColor(C.text);
-        doc.text(item.description, left + 8, y + 5, { width: width * 0.55 - 8 });
-        doc.text(String(item.quantity), left + width * 0.58, y + 5, { width: width * 0.12, align: "right" });
-        doc.text(fmtMoney(item.unitPrice), left + width * 0.68, y + 5, { width: width * 0.16, align: "right" });
-        doc.text(fmtMoney(item.subtotal), left + width * 0.84, y + 5, { width: width * 0.16 - 8, align: "right" });
+        doc.text(item.description, xDesc + 8, y + 5, { width: cDesc - 8 });
+        doc.text(String(item.quantity), xQty, y + 5, { width: cQty, align: "right" });
+        doc.fontSize(8.5).fillColor(C.muted).text(fmtIvaRate(item.ivaRate ?? 21), xIva, y + 6, { width: cIva, align: "right" });
+        doc.fontSize(9.5).fillColor(C.text).text(fmtMoney(item.unitPrice), xUnit, y + 5, { width: cUnit, align: "right" });
+        doc.text(fmtMoney(item.subtotal), xSub, y + 5, { width: cSub, align: "right" });
         doc.moveTo(left, y + rowHeight).lineTo(left + width, y + rowHeight).lineWidth(0.5).strokeColor(C.line).stroke();
         y += rowHeight;
       }
 
-      y = ensureSpace(doc, y, 40);
+      // --- Totales: Subtotal (sin IVA) -> IVA por alicuota -> Total ---
+      const { netoSum, breakdown } = buildIvaBreakdown(data.items);
+      const totalsLines = 1 + breakdown.length + 1;
+      y = ensureSpace(doc, y, 16 * totalsLines + 16);
       y += 12;
-      doc.font("Helvetica-Bold").fontSize(11).fillColor(C.text).text("TOTAL", left + width * 0.68, y, { width: width * 0.16, align: "right" });
-      doc.font("Helvetica-Bold").fontSize(13).fillColor(C.accent).text(fmtMoney(data.totalAmount), left + width * 0.84, y - 1, { width: width * 0.16 - 8, align: "right" });
+
+      const labelX = xUnit, labelW = cUnit, valueX = xSub, valueW = cSub;
+
+      doc.font("Helvetica").fontSize(9.5).fillColor(C.muted).text("Subtotal (sin IVA)", labelX, y, { width: labelW, align: "right" });
+      doc.fillColor(C.text).text(fmtMoney(netoSum), valueX, y, { width: valueW, align: "right" });
+      y += 16;
+
+      for (const line of breakdown) {
+        doc.font("Helvetica").fontSize(9.5).fillColor(C.muted).text(`IVA ${fmtIvaRate(line.rate)}`, labelX, y, { width: labelW, align: "right" });
+        doc.fillColor(C.text).text(fmtMoney(line.amount), valueX, y, { width: valueW, align: "right" });
+        y += 16;
+      }
+
+      doc.font("Helvetica-Bold").fontSize(11).fillColor(C.text).text("TOTAL", labelX, y, { width: labelW, align: "right" });
+      doc.font("Helvetica-Bold").fontSize(13).fillColor(C.accent).text(fmtMoney(data.totalAmount), valueX, y - 1, { width: valueW, align: "right" });
 
       // --- Footer (todas las paginas) ---
       const pages = doc.bufferedPageRange();
