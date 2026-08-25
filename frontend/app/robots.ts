@@ -14,7 +14,14 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: '*',
-      allow: ['/$', '/para/', '/prueba-gratis', '/suscripcion', '/terminos', '/privacidad', '/arrepentimiento', '/login', '/instalar'],
+      allow: [
+        '/$', '/para/', '/prueba-gratis', '/suscripcion', '/terminos', '/privacidad', '/arrepentimiento', '/login', '/instalar',
+        // Assets que Google/redes sociales necesitan poder pedir directo para
+        // mostrar el favicon en resultados de busqueda y la preview al
+        // compartir un link (og:image) -- si no, el Disallow: '/' de abajo
+        // tambien se los bloquea a ellos aunque el archivo exista y sirva bien.
+        '/favicon.ico', '/icon.png', '/apple-icon.png', '/opengraph-image', '/manifest.webmanifest', '/icons/',
+      ],
       disallow: '/',
     },
     sitemap: 'https://www.comarpos.com/sitemap.xml',
