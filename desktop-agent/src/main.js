@@ -19,6 +19,8 @@ if (!gotLock) {
 let tray = null;
 let setupWindow = null;
 let lastStatus = { type: 'unpaired' };
+let isQuitting = false;
+let shownTrayHint = false;
 
 function iconPath(name) {
   return path.join(__dirname, '..', 'assets', name);
@@ -64,7 +66,24 @@ function openSetupWindow() {
   });
   setupWindow.setMenuBarVisibility(false);
   setupWindow.loadFile(path.join(__dirname, 'setup.html'));
-  setupWindow.on('closed', () => { setupWindow = null; });
+
+  // Cerrar la ventana (la X) no cierra el agente -- lo minimiza a la
+  // bandeja, para no tener que recrear la ventana (y su renderer) cada vez
+  // que el usuario la vuelve a abrir. Solo se destruye de verdad al
+  // "Salir" desde el menu de la bandeja (ver isQuitting).
+  setupWindow.on('close', (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    setupWindow.hide();
+    if (!shownTrayHint) {
+      shownTrayHint = true;
+      tray?.displayBalloon?.({
+        title: 'ComarPOS Agent sigue activo',
+        content: 'Se minimizó a la bandeja del sistema y sigue imprimiendo en segundo plano.',
+        icon: iconPath('icon.ico'),
+      });
+    }
+  });
 }
 
 function buildTrayMenu() {
@@ -73,7 +92,7 @@ function buildTrayMenu() {
     { type: 'separator' },
     { label: 'ComarPOS', click: () => shell.openExternal('https://www.comarpos.com') },
     { type: 'separator' },
-    { label: 'Salir', click: () => { worker.stop(); app.quit(); } },
+    { label: 'Salir', click: () => { isQuitting = true; worker.stop(); app.quit(); } },
   ]);
 }
 
@@ -158,9 +177,18 @@ app.on('second-instance', () => {
   openSetupWindow();
 });
 
+// Apagado/cierre de sesion de Windows dispara esto -- si no marcamos
+// isQuitting acá, el listener de "close" de la ventana (arriba) la
+// esconde en vez de dejarla cerrar, y el sistema operativo queda
+// esperando a una ventana que nunca termina de cerrarse.
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 app.whenReady().then(() => {
   registerIpc();
   createTray();
+  printer.warmup();
   worker.setStatusListener(broadcastStatus);
   worker.start();
 
