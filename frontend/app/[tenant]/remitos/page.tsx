@@ -2,11 +2,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import { fmtDate, normalizeArray } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
-import { FileText, Download, CheckCircle, X, Plus, RefreshCcw } from 'lucide-react';
+import { FileText, Download, CheckCircle, X, Plus, RefreshCcw, AlertTriangle } from 'lucide-react';
 
 const STATUS_BADGE: Record<string, string> = {
   PENDING: 'badge-amber',
@@ -20,6 +21,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function RemitosPage() {
+  const { tenant } = useParams<{ tenant: string }>();
   const [remitos, setRemitos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
@@ -29,6 +31,7 @@ export default function RemitosPage() {
   const [saleId, setSaleId] = useState('');
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [caiStatus, setCaiStatus] = useState<{ hasActiveCai: boolean; reason?: string | null } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -43,6 +46,15 @@ export default function RemitosPage() {
   };
 
   useEffect(() => { load(); }, [statusFilter]);
+
+  // Chequeo proactivo -- sin esto, un EMPLEADO recien se entera de que falta
+  // el CAI al intentar crear el remito (createFromSale ya lo bloquea del
+  // lado del backend, esto solo evita que llegue a intentarlo a ciegas).
+  useEffect(() => {
+    api.get('/remitos/cai-status')
+      .then(({ data }) => setCaiStatus(data?.content ?? data))
+      .catch(() => setCaiStatus(null));
+  }, []);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -122,7 +134,12 @@ export default function RemitosPage() {
       title="Remitos"
       subtitle="Notas de entrega y remitos de envío"
       actions={
-        <button className="btn btn-primary btn-sm" onClick={() => { setSaleId(''); setModal('create'); }}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => { setSaleId(''); setModal('create'); }}
+          disabled={caiStatus?.hasActiveCai === false}
+          title={caiStatus?.hasActiveCai === false ? caiStatus.reason ?? undefined : undefined}
+        >
           <Plus size={13} /> Crear desde venta
         </button>
       }
@@ -130,6 +147,18 @@ export default function RemitosPage() {
       {toast && (
         <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>
           {toast}
+        </div>
+      )}
+
+      {caiStatus?.hasActiveCai === false && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'rgba(243,156,18,0.1)', border: '1px solid rgba(243,156,18,0.3)', borderRadius: 8, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: 'var(--warn)' }}>
+          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            {caiStatus.reason ?? 'No podés emitir remitos hasta configurar un CAI activo.'}{' '}
+            <a href={`/${tenant}/configuracion/arca`} style={{ color: 'var(--warn)', textDecoration: 'underline', fontWeight: 600 }}>
+              Ir a Configuración ARCA
+            </a>
+          </div>
         </div>
       )}
 

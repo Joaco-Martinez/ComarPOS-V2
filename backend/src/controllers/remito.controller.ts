@@ -9,6 +9,16 @@ function getAuthUserId(req: Request): string | undefined {
 }
 
 export const remitoController = {
+  async caiStatus(req: Request, res: Response) {
+    try {
+      const status = await remitoService.checkCaiStatus();
+      return res.json({ ok: true, content: status });
+    } catch (error: any) {
+      console.error("Error caiStatus remitos:", error);
+      return res.status(500).json({ ok: false, message: error.message || "Error al verificar el CAI" });
+    }
+  },
+
   async createFromSale(req: Request, res: Response) {
     try {
       const saleId = getParamAsString(req.params.saleId, "saleId");

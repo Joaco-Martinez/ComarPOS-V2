@@ -158,6 +158,42 @@ function mapRemitoToPdfData(remito: any): RemitoPDFData {
 }
 
 export const remitoService = {
+  // Chequeo liviano (sin permisos de ARCA) para que la pantalla de Remitos
+  // pueda avisar/bloquear ANTES de que el usuario intente crear uno y se
+  // encuentre con el error recien en createFromSale (misma condicion que ahi
+  // -- ArcaConfig activa + al menos un RemitoCaiConfig habilitado y vigente).
+  async checkCaiStatus() {
+    const now = new Date();
+
+    const arcaConfig = await prisma.arcaConfig.findFirst({
+      where: { isActive: true, ...tenantScope() },
+      include: {
+        remitoCais: {
+          where: { enabled: true, expiresAt: { gte: now } },
+          orderBy: { expiresAt: "asc" },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    if (!arcaConfig) {
+      return {
+        hasActiveCai: false,
+        reason: "No hay configuración ARCA activa. Cargá primero los datos fiscales del negocio en Configuración > ARCA.",
+      };
+    }
+
+    if (!arcaConfig.remitoCais[0]) {
+      return {
+        hasActiveCai: false,
+        reason: "No hay CAI activo para remitos. Cargá CAI, vencimiento y numeración en Configuración > ARCA.",
+      };
+    }
+
+    return { hasActiveCai: true, reason: null };
+  },
+
   async createFromSale(input: CreateRemitoFromSaleInput) {
     const sale = await prisma.sale.findFirst({
       where: { id: input.saleId, ...tenantScope() },

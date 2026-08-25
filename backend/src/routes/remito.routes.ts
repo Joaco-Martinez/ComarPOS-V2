@@ -9,6 +9,8 @@ const router = Router();
 router.use(authMiddleware);
 router.use(requirePlanFeature("remitos"));
 
+router.get("/cai-status", remitoController.caiStatus);
+
 router.post("/from-sale/:saleId", remitoController.createFromSale);
 
 router.get("/", remitoController.getAll);
