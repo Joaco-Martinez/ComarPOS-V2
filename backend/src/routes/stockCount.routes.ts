@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { authMiddleware, requireAnyRole } from "../middleware/auth";
+import { requirePlanFeature } from "../middleware/planFeature";
 import { stockCountController } from "../controllers/stockCount.controller";
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePlanFeature("conteoStock"));
 
 router.get("/", requireAnyRole(["ADMIN", "CONTADOR"]), stockCountController.getHistory);
 router.get("/:id", stockCountController.getById);

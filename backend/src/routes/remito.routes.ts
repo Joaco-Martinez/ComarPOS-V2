@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { remitoController } from "../controllers/remito.controller";
 import { authMiddleware } from "../middleware/auth";
+import { requirePlanFeature } from "../middleware/planFeature";
 
 
 const router = Router();
 
 router.use(authMiddleware);
+router.use(requirePlanFeature("remitos"));
 
 router.post("/from-sale/:saleId", remitoController.createFromSale);
 

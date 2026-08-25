@@ -3,13 +3,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
+import { moduleKeyForPath } from '@/lib/navConfig';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
 import NotificationsBell from './NotificationsBell';
 import BottomNav from './mobile/BottomNav';
 import HelpCenter from './HelpCenter';
 import { useToast } from '@/hooks/useToast';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Lock } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { initPushNotifications } from '@/lib/push';
 
@@ -24,6 +26,7 @@ const STORAGE_KEY = 'comarpos-sidebar-collapsed';
 
 export default function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
   const { user, loading, me } = useAuthStore();
+  const { features, loaded: featuresLoaded, load: loadFeatures } = usePlanFeaturesStore();
   const router = useRouter();
   const params = useParams<{ tenant?: string }>();
   const pathname = usePathname();
@@ -39,6 +42,10 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
   useEffect(() => {
     if (loading) me();
   }, [loading, me]);
+
+  useEffect(() => {
+    if (!loading && user && !featuresLoaded) loadFeatures();
+  }, [loading, user, featuresLoaded, loadFeatures]);
 
   // El header es position:fixed (ver .app-header en globals.css) para que
   // quede clavado arriba pase lo que pase con el scroll de cada page -- eso
@@ -94,6 +101,15 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
   }, []);
 
   const sidebarW = sidebarCollapsed ? 72 : 236;
+
+  // Bloqueo por modulo (ver store/planFeatures.ts, lib/navConfig.ts): un
+  // solo punto para las ~30 pantallas de negocio en vez de repetir el check
+  // en cada page.tsx -- si el plan del tenant no incluye el modulo de la
+  // ruta actual, se pinta esto en vez de {children}. fail-open mientras no
+  // cargo (featuresLoaded=false) para no bloquear por un request lento/caido.
+  const afterTenantPath = '/' + pathname.split('/').slice(2).join('/');
+  const currentModule = moduleKeyForPath(afterTenantPath);
+  const moduleBlocked = featuresLoaded && !isModuleAllowed(features, currentModule);
 
   if (loading || !user) {
     return (
@@ -165,7 +181,26 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
           className="animate-fade-opacity"
           style={{ flex: 1, padding: `${headerHeight + 22}px 20px 22px`, maxWidth: 1440, width: '100%', margin: '0 auto' }}
         >
-          {children}
+          {moduleBlocked ? (
+            <div
+              className="card"
+              style={{
+                padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                textAlign: 'center', gap: 12, maxWidth: 460, margin: '40px auto',
+              }}
+            >
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--surface2)', border: '1px solid var(--border)', display: 'grid', placeItems: 'center' }}>
+                <Lock size={22} style={{ color: 'var(--text3)' }} />
+              </div>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>No incluido en tu plan</div>
+              <p style={{ fontSize: 13, color: 'var(--text3)', lineHeight: 1.6 }}>
+                Esta sección no está disponible en tu plan actual. Mejorá tu plan desde Suscripción para desbloquearla.
+              </p>
+              <a href="/suscripcion" className="btn btn-primary btn-sm">Ver planes</a>
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </div>
 

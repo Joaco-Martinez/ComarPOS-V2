@@ -159,19 +159,22 @@ model MpPreapprovalPlan {
   updatedAt DateTime @updatedAt
 }
 
-// Override editable desde el panel de super-admin de que modulos
-// (PlanFeatureKey en config/billing.ts: fidelidad/promociones/
-// cuentasCorrientes) incluye cada plan. PLANS sigue siendo la fuente de
-// verdad de precio/limites y el default de features -- esta tabla solo
-// pisa "features" cuando un admin lo cambia a mano desde /platform-admin;
-// sin fila para un plan, rige el default hardcodeado. Ver
+// Override editable desde el panel de super-admin de que modulos incluye
+// cada plan (PlanFeatureKey en config/billing.ts -- ya cubre TODOS los
+// modulos del sistema, no solo fidelidad/promociones/cuentasCorrientes) y de
+// su precio. PLANS sigue siendo la fuente de verdad default (features +
+// precio) -- esta tabla solo pisa lo que un admin cambio a mano desde
+// /platform-admin; sin fila para un plan, rige el default hardcodeado.
+// priceArs/regularPriceArs nulos = usar el default de PLANS. Ver
 // planFeatureConfig.service.ts (cachea en memoria, se invalida al escribir).
 model PlanFeatureConfig {
-  id        String   @id @default(uuid())
-  planId    String   @unique
-  features  Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(uuid())
+  planId          String   @unique
+  features        Json
+  priceArs        Float?
+  regularPriceArs Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model TenantPaymentLog {

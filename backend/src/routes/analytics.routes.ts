@@ -1,13 +1,19 @@
 import { Router } from "express";
 import { analyticsController as ac } from "../controllers/analytics.controller";
 import { authMiddleware } from "../middleware/auth";
+import { requirePlanFeature } from "../middleware/planFeature";
 
 const router = Router();
 
 router.use(authMiddleware);
 
-// Dashboard
-router.get("/dashboard", ac.getDashboard);
+// Dashboard -- va antes del gate de "reportes" y con su propio gate, asi
+// queda independiente: un plan puede tener Dashboard sin Reportes o
+// viceversa. Como ya respondio la request, el router.use(...) de abajo no
+// llega a correr para /dashboard.
+router.get("/dashboard", requirePlanFeature("dashboard"), ac.getDashboard);
+
+router.use(requirePlanFeature("reportes"));
 
 // Sales
 router.get("/sales/summary", ac.getSalesSummary);

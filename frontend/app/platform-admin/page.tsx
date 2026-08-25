@@ -1,20 +1,39 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
 import type { Tenant, TenantSubscriptionStatus, BillingPlan, PlanFeatureKey } from '@/types';
 import { fmtDate, normalizeArray, daysRemaining } from '@/lib/helpers';
-import { Building2, Plus, X, Search, Eye, CreditCard, Gift, LogIn, ShoppingCart, ToggleLeft, ToggleRight, SlidersHorizontal } from 'lucide-react';
+import { Building2, Plus, X, Search, Eye, CreditCard, Gift, LogIn, ShoppingCart, ToggleLeft, ToggleRight, SlidersHorizontal, DollarSign, Save } from 'lucide-react';
 
 type MpPlanRow = { planId: string; mpPlanId: string; status: string };
 
-const FEATURE_KEYS: PlanFeatureKey[] = ['fidelidad', 'promociones', 'cuentasCorrientes'];
+// Debe cubrir TODOS los PlanFeatureKey (ver types/index.ts / config/billing.ts
+// en el backend) -- agrupados igual que el menu para que la grilla de
+// "Modulos por plan" sea legible con ~30 filas.
 const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
-  fidelidad: 'Fidelidad', promociones: 'Promociones', cuentasCorrientes: 'Cuentas corrientes',
+  dashboard: 'Dashboard', pos: 'POS — Ventas', ventas: 'Historial de Ventas', productos: 'Productos',
+  categorias: 'Categorías', clientes: 'Clientes', stock: 'Stock', alertas: 'Alertas', caja: 'Caja',
+  remitos: 'Remitos', facturacion: 'AFIP / Facturas', devoluciones: 'Devoluciones', compras: 'Compras',
+  ordenesCompra: 'Órdenes de Compra', proveedores: 'Proveedores', conteoStock: 'Conteo de Stock',
+  finanzas: 'Finanzas', gastosRecurrentes: 'Gastos Recurrentes', tipoCambio: 'Tipo de Cambio',
+  cuentasCorrientes: 'Cuentas Corrientes', reportes: 'Reportes', objetivosVentas: 'Objetivos de Ventas',
+  promociones: 'Promociones', fidelidad: 'Fidelidad', usuarios: 'Usuarios', auditoria: 'Auditoría',
+  sucursales: 'Sucursales', arca: 'ARCA / AFIP (config.)', empresa: 'Empresa', printbox: 'PrintBox',
 };
+
+const FEATURE_GROUPS: { label: string; keys: PlanFeatureKey[] }[] = [
+  { label: 'Ventas y caja', keys: ['pos', 'ventas', 'caja', 'facturacion', 'devoluciones', 'remitos'] },
+  { label: 'Catálogo y stock', keys: ['productos', 'categorias', 'stock', 'conteoStock', 'alertas'] },
+  { label: 'Clientes', keys: ['clientes', 'cuentasCorrientes', 'fidelidad', 'promociones'] },
+  { label: 'Compras', keys: ['compras', 'ordenesCompra', 'proveedores'] },
+  { label: 'Finanzas', keys: ['finanzas', 'gastosRecurrentes', 'tipoCambio'] },
+  { label: 'Analítica', keys: ['dashboard', 'reportes', 'objetivosVentas'] },
+  { label: 'Administración', keys: ['usuarios', 'auditoria', 'sucursales', 'arca', 'empresa', 'printbox'] },
+];
 
 const statusBadge = (s: TenantSubscriptionStatus) =>
   s === 'TRIAL' ? 'badge-blue' : s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
@@ -45,6 +64,8 @@ export default function PlatformAdminTenantsPage() {
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [impersonating, setImpersonating] = useState<string | null>(null);
   const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
+  const [priceForm, setPriceForm] = useState<Record<string, { priceArs: string; regularPriceArs: string }>>({});
+  const [savingPrice, setSavingPrice] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -63,14 +84,17 @@ export default function PlatformAdminTenantsPage() {
     } catch { /* silencioso: no bloquear el resto del panel */ }
   };
 
-  // Planes de config/billing.ts (precio/limites/features) - /billing/plans es
-  // publico, no hace falta el token de plataforma. Se usan para el selector
-  // de "Nuevo tenant" y para mostrar el plan de cada fila.
+  // Planes de config/billing.ts (precio/limites/features), valores CRUDOS
+  // (sin el ajuste de "precio de lanzamiento" que aplica /billing/plans para
+  // mostrar en la landing) -- son los que hay que editar tal cual. Se usan
+  // para el selector de "Nuevo tenant", la grilla de modulos y el form de
+  // precios.
   const loadBillingPlans = async () => {
     try {
-      const { data } = await api.get('/billing/plans');
+      const { data } = await api.get('/platform-admin/plans');
       const plans = normalizeArray<BillingPlan>(data);
       setBillingPlans(plans);
+      setPriceForm(Object.fromEntries(plans.map((p) => [p.id, { priceArs: String(p.priceArs), regularPriceArs: String(p.regularPriceArs) }])));
       const recommended = plans.find((p) => p.highlighted) ?? plans[0];
       if (recommended) setForm((p) => (p.planId ? p : { ...p, planId: recommended.id }));
     } catch { /* silencioso: no bloquear el resto del panel */ }
@@ -132,9 +156,9 @@ export default function PlatformAdminTenantsPage() {
 
   // Prende/apaga un modulo para un plan (ver planFeatureConfig.service.ts) --
   // optimista: se ve al toque en la grilla, se revierte si el PATCH falla.
-  // GET /billing/plans ya devuelve el override, asi que este mismo estado
-  // billingPlans es lo que despues usan el selector de "Nuevo tenant" y
-  // (en el proximo fetch de cada tenant) el gating real del backend.
+  // El gating real (requirePlanFeature en el backend) y GET /billing/plans
+  // (que consume el resto del sistema) leen el mismo override, asi que el
+  // cambio aplica al instante sin volver a tocar esta pantalla.
   const toggleFeature = async (planId: string, feature: PlanFeatureKey, enabled: boolean) => {
     const key = `${planId}:${feature}`;
     setTogglingFeature(key);
@@ -150,6 +174,25 @@ export default function PlatformAdminTenantsPage() {
       showToast(err?.response?.data?.message ?? 'No se pudo actualizar el módulo');
     } finally {
       setTogglingFeature(null);
+    }
+  };
+
+  const savePrice = async (planId: string) => {
+    const form = priceForm[planId];
+    if (!form) return;
+    setSavingPrice(planId);
+    try {
+      const { data } = await api.patch(`/platform-admin/plan-price/${planId}`, {
+        priceArs: Number(form.priceArs),
+        regularPriceArs: Number(form.regularPriceArs),
+      });
+      const updated = data.content ?? data;
+      setBillingPlans((plans) => plans.map((p) => (p.id === planId ? { ...p, ...updated } : p)));
+      showToast(`Precio de ${planName(planId)} actualizado`);
+    } catch (err: any) {
+      showToast(err?.response?.data?.message ?? 'No se pudo actualizar el precio');
+    } finally {
+      setSavingPrice(null);
     }
   };
 
@@ -210,6 +253,46 @@ export default function PlatformAdminTenantsPage() {
       {billingPlans.length > 0 && (
         <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <DollarSign size={14} style={{ color: 'var(--text3)' }} />
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Precio por plan</span>
+            <span style={{ fontSize: 11, color: 'var(--text3)' }}>— precio de lanzamiento y precio de lista (tachado), en ARS/mes</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px,1fr))', gap: 12 }}>
+            {billingPlans.map((p) => {
+              const form = priceForm[p.id] ?? { priceArs: String(p.priceArs), regularPriceArs: String(p.regularPriceArs) };
+              return (
+                <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{p.name}</div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="form-label" style={{ fontSize: 10 }}>Lanzamiento</label>
+                      <input
+                        type="number" min="0" value={form.priceArs}
+                        onChange={(e) => setPriceForm((prev) => ({ ...prev, [p.id]: { ...form, priceArs: e.target.value } }))}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className="form-label" style={{ fontSize: 10 }}>Lista</label>
+                      <input
+                        type="number" min="0" value={form.regularPriceArs}
+                        onChange={(e) => setPriceForm((prev) => ({ ...prev, [p.id]: { ...form, regularPriceArs: e.target.value } }))}
+                      />
+                    </div>
+                  </div>
+                  <button onClick={() => savePrice(p.id)} disabled={savingPrice === p.id} className="btn btn-secondary btn-sm" style={{ width: '100%', gap: 6 }}>
+                    {savingPrice === p.id ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <Save size={13} />}
+                    Guardar precio
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {billingPlans.length > 0 && (
+        <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <SlidersHorizontal size={14} style={{ color: 'var(--text3)' }} />
             <span style={{ fontWeight: 700, fontSize: 13 }}>Módulos por plan</span>
             <span style={{ fontSize: 11, color: 'var(--text3)' }}>— se aplica al instante a todos los tenants de ese plan</span>
@@ -223,33 +306,42 @@ export default function PlatformAdminTenantsPage() {
                 </tr>
               </thead>
               <tbody>
-                {FEATURE_KEYS.map((feature) => (
-                  <tr key={feature}>
-                    <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{FEATURE_LABELS[feature]}</td>
-                    {billingPlans.map((p) => {
-                      const enabled = !!p.features[feature];
-                      const key = `${p.id}:${feature}`;
-                      return (
-                        <td key={p.id}>
-                          <button
-                            onClick={() => toggleFeature(p.id, feature, !enabled)}
-                            disabled={togglingFeature === key}
-                            className="btn btn-ghost btn-xs"
-                            style={{ color: enabled ? 'var(--success)' : 'var(--text3)', gap: 6 }}
-                          >
-                            {togglingFeature === key ? (
-                              <span className="spinner" style={{ width: 13, height: 13 }} />
-                            ) : enabled ? (
-                              <ToggleRight size={18} />
-                            ) : (
-                              <ToggleLeft size={18} />
-                            )}
-                            <span style={{ fontSize: 11 }}>{enabled ? 'Activo' : 'Inactivo'}</span>
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
+                {FEATURE_GROUPS.map((group) => (
+                  <Fragment key={group.label}>
+                    <tr>
+                      <td colSpan={billingPlans.length + 1} style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, paddingTop: 14 }}>
+                        {group.label}
+                      </td>
+                    </tr>
+                    {group.keys.map((feature) => (
+                      <tr key={feature}>
+                        <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{FEATURE_LABELS[feature]}</td>
+                        {billingPlans.map((p) => {
+                          const enabled = !!p.features[feature];
+                          const key = `${p.id}:${feature}`;
+                          return (
+                            <td key={p.id}>
+                              <button
+                                onClick={() => toggleFeature(p.id, feature, !enabled)}
+                                disabled={togglingFeature === key}
+                                className="btn btn-ghost btn-xs"
+                                style={{ color: enabled ? 'var(--success)' : 'var(--text3)', gap: 6 }}
+                              >
+                                {togglingFeature === key ? (
+                                  <span className="spinner" style={{ width: 13, height: 13 }} />
+                                ) : enabled ? (
+                                  <ToggleRight size={18} />
+                                ) : (
+                                  <ToggleLeft size={18} />
+                                )}
+                                <span style={{ fontSize: 11 }}>{enabled ? 'Activo' : 'Inactivo'}</span>
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -371,10 +463,8 @@ export default function PlatformAdminTenantsPage() {
                   </div>
                   Sucursales: {selectedPlan.limits.maxBusinessLocations ?? 'ilimitadas'} · Productos: {selectedPlan.limits.maxProducts ?? 'ilimitados'} · Usuarios: {selectedPlan.limits.maxUsers ?? 'ilimitados'}
                   <br />
-                  Incluye: {(['fidelidad', 'promociones', 'cuentasCorrientes'] as const)
-                    .filter((k) => selectedPlan.features[k])
-                    .map((k) => ({ fidelidad: 'Fidelidad', promociones: 'Promociones', cuentasCorrientes: 'Cuentas corrientes' }[k]))
-                    .join(', ') || 'ninguno de los módulos premium'}
+                  Módulos incluidos: {Object.values(selectedPlan.features).filter(Boolean).length} de {Object.keys(selectedPlan.features).length}
+                  {' '}<span style={{ color: 'var(--text3)' }}>(configurable en &quot;Módulos por plan&quot; abajo)</span>
                 </div>
               )}
             </div>

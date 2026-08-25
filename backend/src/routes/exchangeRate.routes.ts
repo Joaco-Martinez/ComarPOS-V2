@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { authMiddleware, requireAnyRole } from "../middleware/auth";
+import { requirePlanFeature } from "../middleware/planFeature";
 import { exchangeRateController } from "../controllers/exchangeRate.controller";
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePlanFeature("tipoCambio"));
 
 router.get("/", exchangeRateController.getAll);
 router.get("/current", exchangeRateController.getCurrent);

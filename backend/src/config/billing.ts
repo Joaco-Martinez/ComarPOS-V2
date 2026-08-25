@@ -15,17 +15,89 @@ export type PlanLimits = {
   maxUsers: number | null;
 };
 
-// Modulos que se pueden prender/apagar por plan (ver
-// middleware/planFeature.ts y services/planFeature.service.ts para el
-// gating real). Distinto de PlanLimits: esto es todo-o-nada por
-// funcionalidad, no un tope numerico.
-export type PlanFeatureKey = "fidelidad" | "promociones" | "cuentasCorrientes";
+// Todos los modulos del sistema que se pueden prender/apagar por plan (uno
+// por item de navConfig.ts en el frontend, salvo "guia"/"ayuda" que son
+// paginas de soporte, no funcionalidad de negocio). El toggle vive en
+// /platform-admin ("Modulos por plan"), se guarda en PlanFeatureConfig
+// (override sobre el default de abajo) y se aplica en dos niveles:
+//   - Backend real (middleware/planFeature.ts, requirePlanFeature) para los
+//     modulos con ruta propia y sin dependencias cruzadas de otras pantallas
+//     (ver comentario en cada mount de app.ts/*.routes.ts).
+//   - Frontend (components/AppLayout.tsx bloquea la pantalla entera si el
+//     modulo de la ruta actual esta apagado, Sidebar.tsx la oculta del menu)
+//     para TODOS los modulos, incluidos los que comparten endpoint con otra
+//     pantalla (ej. pos/ventas/facturacion/devoluciones comparten /sales;
+//     productos/stock/promociones comparten /products) -- ahi separar el
+//     backend por modulo arriesgaba romper el flujo de venta/stock central,
+//     asi que el bloqueo real para esos es a nivel pantalla, no a nivel API.
+export type PlanFeatureKey =
+  | "dashboard"
+  | "pos"
+  | "ventas"
+  | "productos"
+  | "categorias"
+  | "clientes"
+  | "stock"
+  | "alertas"
+  | "caja"
+  | "remitos"
+  | "facturacion"
+  | "devoluciones"
+  | "compras"
+  | "ordenesCompra"
+  | "proveedores"
+  | "conteoStock"
+  | "finanzas"
+  | "gastosRecurrentes"
+  | "tipoCambio"
+  | "cuentasCorrientes"
+  | "reportes"
+  | "objetivosVentas"
+  | "promociones"
+  | "fidelidad"
+  | "usuarios"
+  | "auditoria"
+  | "sucursales"
+  | "arca"
+  | "empresa"
+  | "printbox";
 
 export const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
+  dashboard: "Dashboard",
+  pos: "POS — Ventas",
+  ventas: "Historial de Ventas",
+  productos: "Productos",
+  categorias: "Categorías",
+  clientes: "Clientes",
+  stock: "Stock",
+  alertas: "Alertas",
+  caja: "Caja",
+  remitos: "Remitos",
+  facturacion: "AFIP / Facturas",
+  devoluciones: "Devoluciones",
+  compras: "Compras",
+  ordenesCompra: "Órdenes de Compra",
+  proveedores: "Proveedores",
+  conteoStock: "Conteo de Stock",
+  finanzas: "Finanzas",
+  gastosRecurrentes: "Gastos Recurrentes",
+  tipoCambio: "Tipo de Cambio",
+  cuentasCorrientes: "Cuentas Corrientes (venta a fiado)",
+  reportes: "Reportes",
+  objetivosVentas: "Objetivos de Ventas",
+  promociones: "Promociones",
   fidelidad: "Fidelización de clientes",
-  promociones: "Promociones y descuentos automáticos",
-  cuentasCorrientes: "Cuentas corrientes (venta a fiado)",
+  usuarios: "Usuarios",
+  auditoria: "Auditoría",
+  sucursales: "Sucursales",
+  arca: "ARCA / AFIP (configuración)",
+  empresa: "Empresa",
+  printbox: "PrintBox",
 };
+
+const ALL_FEATURES_ON: Record<PlanFeatureKey, boolean> = Object.fromEntries(
+  (Object.keys(FEATURE_LABELS) as PlanFeatureKey[]).map((k) => [k, true])
+) as Record<PlanFeatureKey, boolean>;
 
 export type Plan = {
   id: string;
@@ -53,7 +125,7 @@ export const PLANS: Plan[] = [
     tagline: "Para arrancar con lo justo y necesario.",
     highlighted: false,
     limits: { maxBusinessLocations: 1, maxProducts: 300, maxUsers: 2 },
-    features: { fidelidad: false, promociones: false, cuentasCorrientes: false },
+    features: { ...ALL_FEATURES_ON, fidelidad: false, promociones: false, cuentasCorrientes: false },
   },
   {
     id: "profesional",
@@ -64,7 +136,7 @@ export const PLANS: Plan[] = [
     tagline: "El más elegido: todo lo que necesita un negocio en crecimiento.",
     highlighted: true,
     limits: { maxBusinessLocations: 3, maxProducts: null, maxUsers: null },
-    features: { fidelidad: true, promociones: true, cuentasCorrientes: true },
+    features: ALL_FEATURES_ON,
   },
   {
     id: "multisucursal",
@@ -75,7 +147,7 @@ export const PLANS: Plan[] = [
     tagline: "Para cadenas y negocios con varias sucursales.",
     highlighted: false,
     limits: { maxBusinessLocations: null, maxProducts: null, maxUsers: null },
-    features: { fidelidad: true, promociones: true, cuentasCorrientes: true },
+    features: ALL_FEATURES_ON,
   },
 ];
 

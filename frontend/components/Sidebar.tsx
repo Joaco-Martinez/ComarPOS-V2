@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
 import { NAV, ADMIN_NAV, type NavItem } from '@/lib/navConfig';
 import {
   PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight,
@@ -22,8 +23,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const params = useParams<{ tenant?: string }>();
   const { user, logout } = useAuthStore();
+  const { features } = usePlanFeaturesStore();
   const navRef = useRef<HTMLElement>(null);
   const tenantSlug = params?.tenant || user?.tenantSlug || '';
+  const visibleNav = NAV.filter((i) => isModuleAllowed(features, i.moduleKey));
+  const visibleAdminNav = ADMIN_NAV.filter((i) => isModuleAllowed(features, i.moduleKey));
 
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -171,9 +175,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             Principal
           </div>
         )}
-        {NAV.map(renderItem)}
+        {visibleNav.map(renderItem)}
 
-        {user?.role === 'ADMIN' && (
+        {user?.role === 'ADMIN' && visibleAdminNav.length > 0 && (
           <>
             {!collapsed && (
               <div style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', fontFamily: 'var(--mono)', padding: '14px 10px 4px', marginTop: 4 }}>
@@ -181,7 +185,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               </div>
             )}
             {collapsed && <div style={{ height: 10 }} />}
-            {ADMIN_NAV.map(renderItem)}
+            {visibleAdminNav.map(renderItem)}
           </>
         )}
       </nav>

@@ -1,29 +1,34 @@
 /**
  * Override editable desde /platform-admin de que modulos incluye cada plan
- * (ver PlanFeatureConfig en schema.prisma). PLANS (config/billing.ts) sigue
- * siendo el default hardcodeado -- esta tabla solo pisa "features" cuando
- * un super-admin lo cambia a mano. Se cachea en memoria (mismo patron que
- * tenantCache en middleware/tenant.ts) para no pegarle a la DB en cada
- * chequeo de plan feature en cada request; se invalida al escribir.
+ * y de su precio (ver PlanFeatureConfig en schema.prisma). PLANS
+ * (config/billing.ts) sigue siendo el default hardcodeado -- esta tabla solo
+ * pisa lo que un super-admin cambio a mano. Se cachea en memoria (mismo
+ * patron que tenantCache en middleware/tenant.ts) para no pegarle a la DB en
+ * cada chequeo de plan feature en cada request; se invalida al escribir.
  */
 import prisma from "../prisma";
-import { PLANS, PlanFeatureKey, Plan, getPlan } from "../config/billing";
+import { PLANS, PlanFeatureKey, Plan, FEATURE_LABELS, getPlan } from "../config/billing";
 
 type FeatureMap = Record<PlanFeatureKey, boolean>;
 
-const FEATURE_KEYS: PlanFeatureKey[] = ["fidelidad", "promociones", "cuentasCorrientes"];
+const FEATURE_KEYS = Object.keys(FEATURE_LABELS) as PlanFeatureKey[];
 
-let cache: Map<string, FeatureMap> | null = null;
+let cache: Map<string, Plan> | null = null;
 
-async function loadCache(): Promise<Map<string, FeatureMap>> {
+async function loadCache(): Promise<Map<string, Plan>> {
   if (cache) return cache;
 
   const rows = await prisma.planFeatureConfig.findMany();
-  const map = new Map<string, FeatureMap>();
+  const map = new Map<string, Plan>();
 
   for (const plan of PLANS) {
     const override = rows.find((r) => r.planId === plan.id);
-    map.set(plan.id, { ...plan.features, ...((override?.features as Partial<FeatureMap>) ?? {}) });
+    map.set(plan.id, {
+      ...plan,
+      features: { ...plan.features, ...((override?.features as Partial<FeatureMap>) ?? {}) },
+      priceArs: override?.priceArs ?? plan.priceArs,
+      regularPriceArs: override?.regularPriceArs ?? plan.regularPriceArs,
+    });
   }
 
   cache = map;
@@ -31,23 +36,27 @@ async function loadCache(): Promise<Map<string, FeatureMap>> {
 }
 
 export const planFeatureConfigService = {
-  async getEffectiveFeatures(planId: string): Promise<FeatureMap> {
+  async getEffectivePlan(planId: string): Promise<Plan> {
     const map = await loadCache();
-    return map.get(planId) ?? getPlan(planId).features;
+    return map.get(planId) ?? getPlan(planId);
   },
 
-  /** PLANS con "features" pisado por el override vigente -- usado por GET /billing/plans. */
+  async getEffectiveFeatures(planId: string): Promise<FeatureMap> {
+    return (await this.getEffectivePlan(planId)).features;
+  },
+
+  /** PLANS con "features"/precio pisado por el override vigente -- usado por GET /billing/plans. */
   async getAllEffectivePlans(): Promise<Plan[]> {
     const map = await loadCache();
-    return PLANS.map((p) => ({ ...p, features: map.get(p.id) ?? p.features }));
+    return PLANS.map((p) => map.get(p.id) ?? p);
   },
 
   async setFeature(planId: string, feature: PlanFeatureKey, enabled: boolean): Promise<FeatureMap> {
     if (!PLANS.some((p) => p.id === planId)) throw new Error("Plan inválido");
     if (!FEATURE_KEYS.includes(feature)) throw new Error("Módulo inválido");
 
-    const map = await loadCache();
-    const updated: FeatureMap = { ...(map.get(planId) ?? getPlan(planId).features), [feature]: enabled };
+    const current = await this.getEffectivePlan(planId);
+    const updated: FeatureMap = { ...current.features, [feature]: enabled };
 
     await prisma.planFeatureConfig.upsert({
       where: { planId },
@@ -58,5 +67,23 @@ export const planFeatureConfigService = {
     cache = null;
 
     return updated;
+  },
+
+  async setPrice(planId: string, priceArs: number, regularPriceArs: number): Promise<Plan> {
+    if (!PLANS.some((p) => p.id === planId)) throw new Error("Plan inválido");
+    if (!Number.isFinite(priceArs) || priceArs <= 0) throw new Error("El precio de lanzamiento debe ser mayor a 0");
+    if (!Number.isFinite(regularPriceArs) || regularPriceArs <= 0) throw new Error("El precio de lista debe ser mayor a 0");
+
+    const current = await this.getEffectivePlan(planId);
+
+    await prisma.planFeatureConfig.upsert({
+      where: { planId },
+      create: { planId, features: current.features, priceArs, regularPriceArs },
+      update: { priceArs, regularPriceArs },
+    });
+
+    cache = null;
+
+    return this.getEffectivePlan(planId);
   },
 };

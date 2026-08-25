@@ -117,6 +117,19 @@ export const platformAdminController = {
     }
   },
 
+  // Precios/features CRUDOS (sin el ajuste de "precio de lanzamiento" que
+  // aplica /billing/plans para mostrar) -- lo que edita el super-admin tiene
+  // que ser el numero real guardado, no el que se ve pisado en la landing
+  // una vez que LAUNCH_PRICE_ENDS_AT ya paso.
+  async listPlans(req: Request, res: Response, next: NextFunction) {
+    try {
+      const plans = await planFeatureConfigService.getAllEffectivePlans();
+      res.json({ ok: true, content: plans });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async updatePlanFeature(req: Request, res: Response, next: NextFunction) {
     try {
       const planId = getParamAsString(req.params.planId, "planId");
@@ -126,6 +139,20 @@ export const platformAdminController = {
       const features = await planFeatureConfigService.setFeature(planId, feature, enabled);
 
       res.json({ ok: true, content: { planId, features } });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async updatePlanPrice(req: Request, res: Response, next: NextFunction) {
+    try {
+      const planId = getParamAsString(req.params.planId, "planId");
+      const priceArs = Number(req.body.priceArs);
+      const regularPriceArs = Number(req.body.regularPriceArs);
+
+      const plan = await planFeatureConfigService.setPrice(planId, priceArs, regularPriceArs);
+
+      res.json({ ok: true, content: plan });
     } catch (err) {
       next(err);
     }

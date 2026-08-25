@@ -26,10 +26,16 @@ router.post(
 router.get("/mp-plans", platformAuthMiddleware, platformAdminController.listMpPlans);
 router.post("/mp-plans/sync", platformAuthMiddleware, platformAdminController.syncMpPlans);
 
+router.get("/plans", platformAuthMiddleware, platformAdminController.listPlans);
 router.patch(
   "/plan-features/:planId",
   platformAuthMiddleware,
   platformAdminController.updatePlanFeature
+);
+router.patch(
+  "/plan-price/:planId",
+  platformAuthMiddleware,
+  platformAdminController.updatePlanPrice
 );
 
 export default router;

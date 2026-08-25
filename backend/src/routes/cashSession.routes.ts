@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { authMiddleware, requireAnyRole } from "../middleware/auth";
+import { requirePlanFeature } from "../middleware/planFeature";
 import { cashSessionController } from "../controllers/cashSession.controller";
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePlanFeature("caja"));
 
 router.get("/", requireAnyRole(["ADMIN", "CONTADOR"]), cashSessionController.getHistory);
 router.get("/open", cashSessionController.getOpen);

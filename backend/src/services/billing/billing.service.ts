@@ -13,7 +13,7 @@
  */
 import prisma from "../../prisma";
 import { invalidateTenantCache } from "../../middleware/tenant";
-import { PLANS, getPlan, getEffectivePrice, isLaunchPriceActive, LAUNCH_PRICE_ENDS_AT, type Plan } from "../../config/billing";
+import { getEffectivePrice, isLaunchPriceActive, LAUNCH_PRICE_ENDS_AT, type Plan } from "../../config/billing";
 import { mercadoPagoClient } from "./mercadoPago.service";
 import { planFeatureConfigService } from "../planFeatureConfig.service";
 
@@ -64,8 +64,8 @@ export const billingService = {
 
     if (!tenant) throw new Error("Tenant no encontrado");
 
-    const features = await planFeatureConfigService.getEffectiveFeatures(tenant.planId);
-    return { ...tenant, plan: withEffectivePrice({ ...getPlan(tenant.planId), features }) };
+    const effectivePlan = await planFeatureConfigService.getEffectivePlan(tenant.planId);
+    return { ...tenant, plan: withEffectivePrice(effectivePlan) };
   },
 
   /**
@@ -82,7 +82,7 @@ export const billingService = {
       tenant = await prisma.tenant.update({ where: { id: tenantId }, data: { planId } });
     }
 
-    const plan = getPlan(tenant.planId);
+    const plan = await planFeatureConfigService.getEffectivePlan(tenant.planId);
 
     const preapproval = await mercadoPagoClient.createPreapproval({
       tenantId,
@@ -137,6 +137,7 @@ export const billingService = {
 
     const approvedAt = payment.date_approved ? new Date(payment.date_approved) : new Date();
     const paidUntil = addOneMonth(approvedAt);
+    const effectivePlan = await planFeatureConfigService.getEffectivePlan(tenant.planId);
 
     await prisma.$transaction([
       prisma.tenant.update({
@@ -148,7 +149,7 @@ export const billingService = {
           // Precio de lanzamiento fijo "de por vida": solo se graba en el
           // primer pago acreditado, un cambio futuro del precio de listado
           // no debe pisarlo en las renovaciones siguientes.
-          mpSubscriptionAmount: tenant.mpSubscriptionAmount ?? payment.transaction_amount ?? getEffectivePrice(getPlan(tenant.planId)),
+          mpSubscriptionAmount: tenant.mpSubscriptionAmount ?? payment.transaction_amount ?? getEffectivePrice(effectivePlan),
         },
       }),
       prisma.tenantPaymentLog.create({

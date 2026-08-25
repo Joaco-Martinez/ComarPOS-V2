@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
 import { NAV, ADMIN_NAV, type NavItem } from '@/lib/navConfig';
 import { buildEffectiveNav, effectiveNavToConfig } from '@/lib/quickAccess';
 import { Grid2x2, LogOut, X, ChevronDown, Pencil } from 'lucide-react';
@@ -13,12 +14,13 @@ export default function BottomNav() {
   const pathname = usePathname();
   const params = useParams<{ tenant?: string }>();
   const { user, logout, updateQuickAccessConfig } = useAuthStore();
+  const { features } = usePlanFeaturesStore();
   const tenantSlug = params?.tenant || user?.tenantSlug || '';
   const [moreOpen, setMoreOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
 
-  const allItems = [...NAV, ...(user?.role === 'ADMIN' ? ADMIN_NAV : [])];
+  const allItems = [...NAV, ...(user?.role === 'ADMIN' ? ADMIN_NAV : [])].filter((i) => isModuleAllowed(features, i.moduleKey));
   const effective = buildEffectiveNav(allItems, user?.quickAccessConfig);
   const tabs = effective.tabs;
   const restItems = effective.loose;

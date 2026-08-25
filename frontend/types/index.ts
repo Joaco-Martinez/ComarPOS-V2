@@ -485,7 +485,15 @@ export interface Tenant {
   productsCount?: number;
 }
 
-export type PlanFeatureKey = 'fidelidad' | 'promociones' | 'cuentasCorrientes';
+// Debe matchear PlanFeatureKey en backend/src/config/billing.ts -- un modulo
+// por item de navConfig.ts (salvo guia/ayuda, que no son "features" de
+// negocio). Ver store/planFeatures.ts y components/AppLayout.tsx.
+export type PlanFeatureKey =
+  | 'dashboard' | 'pos' | 'ventas' | 'productos' | 'categorias' | 'clientes' | 'stock' | 'alertas'
+  | 'caja' | 'remitos' | 'facturacion' | 'devoluciones' | 'compras' | 'ordenesCompra' | 'proveedores'
+  | 'conteoStock' | 'finanzas' | 'gastosRecurrentes' | 'tipoCambio' | 'cuentasCorrientes' | 'reportes'
+  | 'objetivosVentas' | 'promociones' | 'fidelidad' | 'usuarios' | 'auditoria' | 'sucursales'
+  | 'arca' | 'empresa' | 'printbox';
 
 export interface BillingPlan {
   id: string;

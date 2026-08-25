@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { authMiddleware, requireAnyRole } from "../middleware/auth";
+import { requirePlanFeature } from "../middleware/planFeature";
 import { purchaseOrderController } from "../controllers/purchaseOrder.controller";
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePlanFeature("ordenesCompra"));
 
 router.get("/", purchaseOrderController.getAll);
 router.get("/:id", purchaseOrderController.getById);

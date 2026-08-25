@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { authMiddleware, requireAnyRole } from "../middleware/auth";
+import { requirePlanFeature } from "../middleware/planFeature";
 import { recurringExpenseController } from "../controllers/recurringExpense.controller";
 
 const router = Router();
 router.use(authMiddleware, requireAnyRole(["ADMIN", "CONTADOR"]));
+router.use(requirePlanFeature("gastosRecurrentes"));
 
 router.get("/", recurringExpenseController.getAll);
 router.post("/", recurringExpenseController.create);
