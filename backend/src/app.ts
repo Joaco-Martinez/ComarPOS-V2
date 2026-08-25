@@ -55,6 +55,7 @@ import platformAdminRoutes from "./routes/platformAdmin.routes";
 import trialSignupRoutes from "./routes/trialSignup.routes";
 import billingRoutes from "./routes/billing.routes";
 import onboardingRoutes from "./routes/onboarding.routes";
+import repairOrderRoutes from "./routes/repairOrder.routes";
 dotenv.config();
 
 const app = express();
@@ -205,6 +206,7 @@ app.use("/printbox", printboxRoutes);
 app.use("/platform-admin", platformAdminRoutes);
 app.use("/trial-signup", trialSignupRoutes);
 app.use("/billing", billingRoutes);
+app.use("/repair-orders", repairOrderRoutes);
 
 // 🔹 Swagger
 swaggerDocs(app);

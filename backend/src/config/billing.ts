@@ -40,6 +40,7 @@ export type PlanFeatureKey =
   | "stock"
   | "alertas"
   | "caja"
+  | "servicios"
   | "remitos"
   | "facturacion"
   | "devoluciones"
@@ -72,6 +73,7 @@ export const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
   stock: "Stock",
   alertas: "Alertas",
   caja: "Caja",
+  servicios: "Servicios / Reparaciones",
   remitos: "Remitos",
   facturacion: "AFIP / Facturas",
   devoluciones: "Devoluciones",

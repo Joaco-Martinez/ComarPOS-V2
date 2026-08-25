@@ -140,6 +140,15 @@ export function DevolucionesIcon(props: ComarIconProps) {
   );
 }
 
+export function ServiciosIcon(props: ComarIconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M14.7 9.3L19 5A4.5 4.5 0 0113.5 10.5L5.5 18.5A1.8 1.8 0 013 16L11 8A4.5 4.5 0 0116.5 2.5L12.2 6.8" />
+      <circle cx="4.3" cy="19.7" r="1" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
 export function GuiaIcon(props: ComarIconProps) {
   return (
     <Svg {...props}>

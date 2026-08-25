@@ -17,6 +17,7 @@ type MpPlanRow = { planId: string; mpPlanId: string; status: string };
 const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
   dashboard: 'Dashboard', pos: 'POS — Ventas', ventas: 'Historial de Ventas', productos: 'Productos',
   categorias: 'Categorías', clientes: 'Clientes', stock: 'Stock', alertas: 'Alertas', caja: 'Caja',
+  servicios: 'Servicios / Reparaciones',
   remitos: 'Remitos', facturacion: 'AFIP / Facturas', devoluciones: 'Devoluciones', compras: 'Compras',
   ordenesCompra: 'Órdenes de Compra', proveedores: 'Proveedores', conteoStock: 'Conteo de Stock',
   finanzas: 'Finanzas', gastosRecurrentes: 'Gastos Recurrentes', tipoCambio: 'Tipo de Cambio',
@@ -26,7 +27,7 @@ const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
 };
 
 const FEATURE_GROUPS: { label: string; keys: PlanFeatureKey[] }[] = [
-  { label: 'Ventas y caja', keys: ['pos', 'ventas', 'caja', 'facturacion', 'devoluciones', 'remitos'] },
+  { label: 'Ventas y caja', keys: ['pos', 'ventas', 'caja', 'servicios', 'facturacion', 'devoluciones', 'remitos'] },
   { label: 'Catálogo y stock', keys: ['productos', 'categorias', 'stock', 'conteoStock', 'alertas'] },
   { label: 'Clientes', keys: ['clientes', 'cuentasCorrientes', 'fidelidad', 'promociones'] },
   { label: 'Compras', keys: ['compras', 'ordenesCompra', 'proveedores'] },

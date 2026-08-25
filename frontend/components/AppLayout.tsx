@@ -7,6 +7,7 @@ import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
 import { moduleKeyForPath } from '@/lib/navConfig';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
+import WhatsNewModal from './WhatsNewModal';
 import NotificationsBell from './NotificationsBell';
 import BottomNav from './mobile/BottomNav';
 import HelpCenter from './HelpCenter';
@@ -206,6 +207,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
 
       <BottomNav />
       <Toasts toasts={toasts} />
+      <WhatsNewModal />
     </div>
   );
 }

@@ -429,6 +429,58 @@ export interface Return {
   createdAt: string;
 }
 
+export type RepairOrderStatus =
+  | 'RECEIVED' | 'BUDGETED' | 'APPROVED' | 'REJECTED' | 'IN_PROGRESS' | 'READY' | 'DELIVERED' | 'CANCELLED';
+export type RepairOrderItemType = 'PART' | 'LABOR';
+
+export interface RepairOrderItem {
+  id: string;
+  repairOrderId?: string;
+  type: RepairOrderItemType;
+  productId?: string | null;
+  product?: { id: string; name: string; sku?: string | null } | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  createdAt?: string;
+}
+
+export interface RepairOrder {
+  id: string;
+  clientId?: string | null;
+  client?: Client | null;
+  userId?: string | null;
+  user?: { id: string; name: string } | null;
+  businessLocationId?: string | null;
+  businessLocation?: { id: string; name: string } | null;
+  deviceType: string;
+  deviceBrand?: string | null;
+  deviceModel?: string | null;
+  deviceSerial?: string | null;
+  deviceAccessories?: string | null;
+  deviceConditionNotes?: string | null;
+  reportedIssue: string;
+  diagnosis?: string | null;
+  status: RepairOrderStatus;
+  totalAmount: number;
+  approvalToken?: string | null;
+  approvalTokenExpiresAt?: string | null;
+  budgetedAt?: string | null;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
+  estimatedDeliveryDate?: string | null;
+  receivedAt?: string;
+  deliveredAt?: string | null;
+  saleId?: string | null;
+  sale?: { id: string; total: number; status: SaleStatus; invoiceStatus?: string; receiptType: ReceiptType; createdAt: string } | null;
+  notes?: string | null;
+  items: RepairOrderItem[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface Notification {
   id: string;
   userId?: string | null;
@@ -490,7 +542,7 @@ export interface Tenant {
 // negocio). Ver store/planFeatures.ts y components/AppLayout.tsx.
 export type PlanFeatureKey =
   | 'dashboard' | 'pos' | 'ventas' | 'productos' | 'categorias' | 'clientes' | 'stock' | 'alertas'
-  | 'caja' | 'remitos' | 'facturacion' | 'devoluciones' | 'compras' | 'ordenesCompra' | 'proveedores'
+  | 'caja' | 'servicios' | 'remitos' | 'facturacion' | 'devoluciones' | 'compras' | 'ordenesCompra' | 'proveedores'
   | 'conteoStock' | 'finanzas' | 'gastosRecurrentes' | 'tipoCambio' | 'cuentasCorrientes' | 'reportes'
   | 'objetivosVentas' | 'promociones' | 'fidelidad' | 'usuarios' | 'auditoria' | 'sucursales'
   | 'arca' | 'empresa' | 'printbox';
