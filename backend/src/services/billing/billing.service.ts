@@ -70,16 +70,34 @@ export const billingService = {
 
   /**
    * planId es opcional: si se pasa (ej. el visitante eligió un plan
-   * distinto al que ya tenía guardado desde /trial-signup), pisa
+   * distinto al que ya tenía guardado desde /trial-signup, o un tenant ya
+   * suscripto quiere cambiarse de plan desde /suscripcion) pisa
    * Tenant.planId ANTES de armar el checkout, para que el monto cobrado
    * corresponda al plan que realmente eligió.
+   *
+   * Cambio de plan con suscripción MP ya activa: cancela la preapproval
+   * vieja y arma una nueva para el plan nuevo, todo en esta misma llamada
+   * (un solo botón en /suscripcion, sin pasos manuales). El precio
+   * "congelado" (mpSubscriptionAmount) se resetea para que la preapproval
+   * nueva cobre el precio efectivo del plan nuevo, no el viejo. El orden
+   * importa: primero se deja Tenant.mpPreapprovalId apuntando a la
+   * preapproval NUEVA, recien despues se cancela la vieja -- si no, el
+   * webhook de la cancelación (topic "preapproval") podría llegar antes y,
+   * sin el guard de handlePreapprovalStatus, suspender al tenant en medio
+   * del cambio.
    */
   async createCheckout(tenantId: string, payerEmail: string, planId?: string) {
     let tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new Error("Tenant no encontrado");
 
-    if (planId && planId !== tenant.planId) {
-      tenant = await prisma.tenant.update({ where: { id: tenantId }, data: { planId } });
+    const isPlanChange = !!planId && planId !== tenant.planId;
+    const oldPreapprovalId = tenant.mpPreapprovalId;
+
+    if (isPlanChange) {
+      tenant = await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { planId, mpSubscriptionAmount: null },
+      });
     }
 
     const plan = await planFeatureConfigService.getEffectivePlan(tenant.planId);
@@ -96,6 +114,16 @@ export const billingService = {
       where: { id: tenantId },
       data: { mpPreapprovalId: preapproval.id },
     });
+
+    if (isPlanChange && oldPreapprovalId && oldPreapprovalId !== preapproval.id) {
+      try {
+        await mercadoPagoClient.cancelPreapproval(oldPreapprovalId);
+      } catch (err) {
+        // No bloquea el cambio de plan -- puede ya estar cancelada/vencida
+        // del lado de MP. Igual queda reemplazada en Tenant.mpPreapprovalId.
+        console.warn(`⚠️ No se pudo cancelar la preapproval vieja ${oldPreapprovalId} al cambiar de plan:`, err);
+      }
+    }
 
     if (!preapproval.init_point) {
       throw new Error("Mercado Pago no devolvió un link de pago");
@@ -179,6 +207,14 @@ export const billingService = {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
       console.warn(`⚠️ Webhook MP: preapproval ${preapprovalId} referencia un tenant inexistente (${tenantId})`);
+      return;
+    }
+
+    // Si esta preapproval ya no es la vigente del tenant, es un evento
+    // tardío de una preapproval vieja reemplazada por un cambio de plan
+    // (ver createCheckout) -- ignorar, si no un "cancelled" de la vieja
+    // suspendería al tenant justo cuando está activo con la nueva.
+    if (tenant.mpPreapprovalId !== preapprovalId) {
       return;
     }
 

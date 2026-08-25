@@ -112,6 +112,20 @@ export const mercadoPagoClient = {
     return data;
   },
 
+  /**
+   * Cancela una preapproval existente (deja de cobrarse) -- usado al
+   * cambiar de plan (ver billing.service.ts, changePlan): no tiene sentido
+   * dejar la suscripcion vieja autorizada facturando en paralelo con la
+   * nueva. PUT status:"cancelled" es el mismo mecanismo que usa el propio
+   * MP cuando el usuario cancela desde su cuenta.
+   */
+  async cancelPreapproval(id: string): Promise<MpPreapproval> {
+    const { data } = await client().put(`/preapproval/${encodeURIComponent(id)}`, {
+      status: "cancelled",
+    });
+    return data;
+  },
+
   async getPayment(id: string | number): Promise<MpPayment> {
     const { data } = await client().get(`/v1/payments/${encodeURIComponent(String(id))}`);
     return data;
