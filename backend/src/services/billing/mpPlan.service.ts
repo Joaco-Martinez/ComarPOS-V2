@@ -35,7 +35,11 @@ export const mpPlanService = {
         });
       }
 
-      results.push({ ...plan, mpPlanId: record.mpPlanId, mpStatus: record.status });
+      // Mismo shape que list() ({planId, mpPlanId, status}) -- el panel de
+      // super-admin usa el resultado de sync tal cual para pintar el cartel
+      // "Planes en Mercado Pago" sin volver a pedir list() aparte, asi que
+      // si este shape difiere quedan campos undefined en pantalla.
+      results.push({ planId: record.planId, mpPlanId: record.mpPlanId, status: record.status });
     }
 
     return results;
