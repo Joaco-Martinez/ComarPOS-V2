@@ -802,6 +802,9 @@ export default function VentasPage() {
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">DNI / CUIT receptor</label>
                 <input value={invoiceModal.dni} onChange={(e) => setInvoiceModal((p) => p && ({ ...p, dni: e.target.value }))} placeholder="DNI o CUIT" />
+                <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+                  Es opcional: si lo dejás vacío, se factura como Consumidor Final sin cliente.
+                </p>
               </div>
               <div style={{ fontSize: 14, fontFamily: 'var(--mono)', textAlign: 'right', color: 'var(--accent)', fontWeight: 800 }}>
                 Total: {fmtMoney(invoiceModal.sale.total)}

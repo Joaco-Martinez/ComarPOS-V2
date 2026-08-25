@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
+import ClientFormModal from '@/components/ClientFormModal';
 import api from '@/lib/api';
 import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, Product, ProductCategory, SalePayment } from '@/types';
 import { categoryName, clientName, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
@@ -56,6 +57,7 @@ export default function PosPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientSearch, setClientSearch] = useState('');
+  const [newClientQuery, setNewClientQuery] = useState<string | null>(null);
   const [showClientPicker, setShowClientPicker] = useState(false);
   const [discountType, setDiscountType] = useState<DiscountType>('PERCENTAGE');
   const [discountValue, setDiscountValue] = useState('');
@@ -133,8 +135,8 @@ export default function PosPage() {
     if (!q) return clients.slice(0, 8);
     return clients.filter((c) =>
       c.nombre.toLowerCase().includes(q) ||
-      c.apellido.toLowerCase().includes(q) ||
-      c.dni.includes(q)
+      c.apellido?.toLowerCase().includes(q) ||
+      c.dni?.includes(q)
     ).slice(0, 8);
   }, [clients, clientSearch]);
 
@@ -725,6 +727,14 @@ export default function PosPage() {
                       <span style={{ color: 'var(--text3)', fontSize: 10, marginLeft: 'auto' }}>{c.category}</span>
                     </button>
                   ))}
+                  <button
+                    onClick={() => { setNewClientQuery(clientSearch); setShowClientPicker(false); }}
+                    className="btn btn-ghost btn-xs"
+                    style={{ justifyContent: 'flex-start', gap: 6, color: 'var(--accent)', borderTop: '1px solid var(--border)', marginTop: 2, paddingTop: 6 }}
+                  >
+                    <Plus size={11} />
+                    <span>{clientSearch.trim() ? `Crear cliente "${clientSearch.trim()}"` : 'Crear cliente nuevo'}</span>
+                  </button>
                 </div>
               </div>
             ) : (
@@ -1110,6 +1120,18 @@ export default function PosPage() {
           </div>
         </div>
       )}
+
+      <ClientFormModal
+        open={newClientQuery !== null}
+        onClose={() => setNewClientQuery(null)}
+        initialQuery={newClientQuery ?? ''}
+        onCreated={(client) => {
+          setClients((prev) => [client, ...prev]);
+          setSelectedClient(client);
+          setClientSearch('');
+          setNewClientQuery(null);
+        }}
+      />
 
       <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
     </AppLayout>

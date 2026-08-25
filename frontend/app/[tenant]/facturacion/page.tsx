@@ -236,6 +236,9 @@ export default function FacturacionPage() {
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">DNI / CUIT receptor</label>
                 <input value={modal.dni} onChange={(e) => setModal((p) => p && ({ ...p, dni: e.target.value }))} placeholder="DNI o CUIT" />
+                <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+                  Es opcional: si lo dejás vacío, se factura como Consumidor Final sin cliente.
+                </p>
               </div>
               <div style={{ fontSize: 14, fontFamily: 'var(--mono)', textAlign: 'right', color: 'var(--accent)', fontWeight: 800 }}>
                 Total: {fmtMoney(modal.sale.total)}

@@ -136,7 +136,7 @@ async function buildPdfBuffer(order: {
   diagnosis: string | null;
   totalAmount: number;
   tenantId: string | null;
-  client?: { nombre: string; apellido: string; dni?: string | null; telefono?: string | null } | null;
+  client?: { nombre: string; apellido: string | null; dni?: string | null; telefono?: string | null } | null;
   items: { description: string; quantity: number; unitPrice: number; subtotal: number; ivaRate: number }[];
 }) {
   const tenant = order.tenantId

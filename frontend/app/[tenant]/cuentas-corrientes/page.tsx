@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import ClientFormModal from '@/components/ClientFormModal';
 import api from '@/lib/api';
 import type { AccountMovement, Client } from '@/types';
 import { clientName, fmtDate, fmtMoney, normalizeArray, num, getPlanLockMessage } from '@/lib/helpers';
@@ -27,6 +28,7 @@ export default function CuentasCorrientesPage() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [clientSearch, setClientSearch] = useState('');
+  const [newClientQuery, setNewClientQuery] = useState<string | null>(null);
   const [modal, setModal] = useState<'payment' | 'adjustment' | null>(null);
   const [form, setForm] = useState({ amount: '', type: 'PAYMENT' as any, paymentMethod: 'EFECTIVO', description: '' });
   const [adjForm, setAdjForm] = useState({ amount: '', type: 'POSITIVE' as 'POSITIVE' | 'NEGATIVE', description: '' });
@@ -105,7 +107,7 @@ export default function CuentasCorrientesPage() {
     const q = clientSearch.toLowerCase();
     if (!q) return clients;
     return clients.filter((c) =>
-      `${c.nombre} ${c.apellido}`.toLowerCase().includes(q) || c.dni.includes(q)
+      `${c.nombre} ${c.apellido ?? ''}`.toLowerCase().includes(q) || c.dni?.includes(q)
     );
   }, [clients, clientSearch]);
 
@@ -147,6 +149,16 @@ export default function CuentasCorrientesPage() {
                   </div>
                 </button>
               ))
+            )}
+            {!loading && (
+              <button
+                onClick={() => setNewClientQuery(clientSearch)}
+                className="btn btn-ghost btn-sm"
+                style={{ justifyContent: 'flex-start', gap: 6, color: 'var(--accent)', marginTop: 4 }}
+              >
+                <Plus size={13} />
+                {clientSearch.trim() ? `Crear cliente "${clientSearch.trim()}"` : 'Crear cliente nuevo'}
+              </button>
             )}
           </div>
         </div>
@@ -317,6 +329,22 @@ export default function CuentasCorrientesPage() {
           </div>
         </div>
       )}
+
+      <ClientFormModal
+        open={newClientQuery !== null}
+        onClose={() => setNewClientQuery(null)}
+        initialQuery={newClientQuery ?? ''}
+        defaultAccountEnabled
+        onCreated={(client) => {
+          if (client.isAccountEnabled) {
+            setClients((prev) => [client, ...prev]);
+            selectClient(client);
+          }
+          setClientSearch('');
+          setNewClientQuery(null);
+          showToast('Cliente creado');
+        }}
+      />
     </AppLayout>
   );
 }

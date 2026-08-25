@@ -243,8 +243,12 @@ model Client {
   tenantId          String?
   tenant            Tenant?           @relation(fields: [tenantId], references: [id])
   nombre            String
-  apellido          String
-  dni               String
+  // Unico dato realmente obligatorio para el alta rapida (ver
+  // client.registration.ts#createClient) -- pensado para poder cargar un
+  // cliente al vuelo desde el buscador de POS/Servicios/Cuentas Corrientes
+  // sin frenar la operacion pidiendo datos que todavia no se tienen.
+  apellido          String?
+  dni               String?
   telefono          String?
   gmail             String?
   category          CategoryClient    @default(Price)
@@ -811,6 +815,15 @@ model ReturnItem {
 }
 
 // === PrintBox (impresion de tickets via ESP32, HTTP directo) ===
+// DESKTOP_AGENT = mismo contrato (pairing/poll/ack/heartbeat), pero el
+// cliente es la app de escritorio (desktop-agent/) en vez de un ESP32
+// fisico -- imprime via el driver de Windows en vez de ESC/POS directo a
+// una IP, asi que no completa printerIp. Ver desktop-agent/README.md.
+enum PrintboxDeviceKind {
+  ESP32
+  DESKTOP_AGENT
+}
+
 enum PrintboxDeviceStatus {
   PENDING_PAIRING
   ACTIVE
@@ -840,6 +853,7 @@ model PrintboxDevice {
   tenantId             String
   tenant               Tenant               @relation(fields: [tenantId], references: [id])
   name                 String
+  kind                 PrintboxDeviceKind   @default(ESP32)
   status               PrintboxDeviceStatus @default(PENDING_PAIRING)
   hardwareId           String?              @unique
   printerIp            String?

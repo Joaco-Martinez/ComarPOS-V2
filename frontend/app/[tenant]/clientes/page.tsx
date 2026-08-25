@@ -54,8 +54,8 @@ export default function ClientesPage() {
       const q = search.toLowerCase();
       c = c.filter((x) =>
         x.nombre.toLowerCase().includes(q) ||
-        x.apellido.toLowerCase().includes(q) ||
-        x.dni.includes(q) ||
+        x.apellido?.toLowerCase().includes(q) ||
+        x.dni?.includes(q) ||
         x.gmail?.toLowerCase().includes(q) ||
         x.telefono?.includes(q)
       );
@@ -72,7 +72,7 @@ export default function ClientesPage() {
   const openEdit = (c: Client) => {
     setSelected(c);
     setForm({
-      nombre: c.nombre, apellido: c.apellido, dni: c.dni,
+      nombre: c.nombre, apellido: c.apellido ?? '', dni: c.dni ?? '',
       telefono: c.telefono ?? '', gmail: c.gmail ?? '',
       category: c.category,
       addressStreet: c.addressStreet ?? '', addressNumber: c.addressNumber ?? '',
@@ -84,7 +84,7 @@ export default function ClientesPage() {
   };
 
   const save = async () => {
-    if (!form.nombre.trim() || !form.dni.trim()) return;
+    if (!form.nombre.trim()) return;
     setSaving(true);
     try {
       const body = {
@@ -156,7 +156,7 @@ export default function ClientesPage() {
                   </>
                 ),
               },
-              { key: 'dni', header: 'DNI', render: (c) => <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{c.dni}</span> },
+              { key: 'dni', header: 'DNI', render: (c) => <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{c.dni || '—'}</span> },
               {
                 key: 'contacto', header: 'Contacto', render: (c) => (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -187,7 +187,7 @@ export default function ClientesPage() {
                 <div className="mobile-card-head">
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{c.nombre} {c.apellido}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>DNI {c.dni}{c.addressCity ? ` · ${c.addressCity}` : ''}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>DNI {c.dni || '—'}{c.addressCity ? ` · ${c.addressCity}` : ''}</div>
                   </div>
                   <span className={`badge ${catBadge(c.category)}`}>{c.category}</span>
                 </div>
@@ -228,13 +228,13 @@ export default function ClientesPage() {
                   <input value={form.nombre} onChange={f('nombre')} placeholder="Nombre" />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Apellido *</label>
+                  <label className="form-label">Apellido</label>
                   <input value={form.apellido} onChange={f('apellido')} placeholder="Apellido" />
                 </div>
               </div>
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">DNI *</label>
+                  <label className="form-label">DNI</label>
                   <input value={form.dni} onChange={f('dni')} placeholder="DNI" />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -292,7 +292,7 @@ export default function ClientesPage() {
             </div>
             <div className="modal-footer">
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
-              <button onClick={save} disabled={saving || !form.nombre.trim() || !form.dni.trim()} className="btn btn-primary btn-sm">
+              <button onClick={save} disabled={saving || !form.nombre.trim()} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : modal === 'create' ? 'Crear cliente' : 'Guardar cambios'}
               </button>
             </div>
@@ -307,7 +307,7 @@ export default function ClientesPage() {
             <div className="modal-header">
               <div>
                 <div style={{ fontWeight: 800, fontSize: 15 }}>{selected.nombre} {selected.apellido}</div>
-                <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', marginTop: 2 }}>DNI: {selected.dni}</div>
+                <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', marginTop: 2 }}>DNI: {selected.dni || '—'}</div>
               </div>
               <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>

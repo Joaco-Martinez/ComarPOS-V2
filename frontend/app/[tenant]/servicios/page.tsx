@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import SearchableSelect from '@/components/SearchableSelect';
+import ClientFormModal from '@/components/ClientFormModal';
 import api from '@/lib/api';
 import type { Client, Product, RepairOrder, RepairOrderStatus, PaymentMethod, ReceiptType } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num, clientName } from '@/lib/helpers';
@@ -81,6 +82,7 @@ export default function ServiciosPage() {
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
   const [form, setForm] = useState(emptyForm);
+  const [newClientQuery, setNewClientQuery] = useState<string | null>(null);
 
   const [itemMode, setItemMode] = useState<'product' | 'text'>('text');
   const [itemForm, setItemForm] = useState({ productId: '', description: '', quantity: '1', unitPrice: '', ivaRate: '21' });
@@ -393,7 +395,14 @@ export default function ServiciosPage() {
 
             <div className="form-group">
               <label className="form-label">Cliente</label>
-              <SearchableSelect value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} options={clientOptions} placeholder="Sin cliente asignado" />
+              <SearchableSelect
+                value={form.clientId}
+                onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+                options={clientOptions}
+                placeholder="Sin cliente asignado"
+                onCreateNew={(q) => setNewClientQuery(q)}
+                createNewLabel={(q) => q ? `Crear cliente "${q}"` : 'Crear cliente nuevo'}
+              />
             </div>
 
             <div className="form-row">
@@ -685,6 +694,18 @@ export default function ServiciosPage() {
           </div>
         </div>
       )}
+
+      <ClientFormModal
+        open={newClientQuery !== null}
+        onClose={() => setNewClientQuery(null)}
+        initialQuery={newClientQuery ?? ''}
+        onCreated={(client) => {
+          setClients((prev) => [client, ...prev]);
+          setForm((f) => ({ ...f, clientId: client.id }));
+          setNewClientQuery(null);
+          showToast('Cliente creado');
+        }}
+      />
 
       <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
     </AppLayout>

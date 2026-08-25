@@ -131,8 +131,8 @@ export interface BusinessLocation {
 export interface Client {
   id: string;
   nombre: string;
-  apellido: string;
-  dni: string;
+  apellido?: string | null;
+  dni?: string | null;
   telefono?: string | null;
   gmail?: string | null;
   addressStreet?: string | null;
@@ -562,10 +562,12 @@ export interface BillingPlan {
 }
 
 export type PrintboxDeviceStatus = 'PENDING_PAIRING' | 'ACTIVE' | 'REVOKED';
+export type PrintboxDeviceKind = 'ESP32' | 'DESKTOP_AGENT';
 
 export interface PrintboxDevice {
   id: string;
   name: string;
+  kind: PrintboxDeviceKind;
   status: PrintboxDeviceStatus;
   hardwareId?: string | null;
   printerIp?: string | null;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Search, ChevronDown, X } from 'lucide-react';
+import { Search, ChevronDown, X, Plus } from 'lucide-react';
 
 interface Option {
   value: string;
@@ -15,6 +15,10 @@ interface SearchableSelectProps {
   /** Texto para "sin selección" -- tambien aparece como primera opción de la lista, para volver a "todas". */
   placeholder: string;
   style?: React.CSSProperties;
+  /** Si se pasa, agrega una fila "+ crear nuevo" al final de la lista (ej. cliente no encontrado -> alta rápida). Recibe lo tipeado en el buscador. */
+  onCreateNew?: (query: string) => void;
+  /** Label de esa fila -- default "Crear nuevo". Recibe lo tipeado para poder mostrar ej. `Crear "Juan Mayer"`. */
+  createNewLabel?: (query: string) => string;
 }
 
 /**
@@ -23,7 +27,7 @@ interface SearchableSelectProps {
  * las primeras letras. Filtra client-side (la lista de opciones ya viene
  * cargada entera, no hace falta pedirle nada al backend).
  */
-export default function SearchableSelect({ value, onChange, options, placeholder, style }: SearchableSelectProps) {
+export default function SearchableSelect({ value, onChange, options, placeholder, style, onCreateNew, createNewLabel }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -96,7 +100,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
           >
             {placeholder}
           </button>
-          {filtered.length === 0 ? (
+          {filtered.length === 0 && !onCreateNew ? (
             <div style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text3)' }}>Sin resultados</div>
           ) : (
             filtered.map((o) => (
@@ -113,6 +117,20 @@ export default function SearchableSelect({ value, onChange, options, placeholder
                 {o.label}
               </button>
             ))
+          )}
+          {onCreateNew && (
+            <button
+              type="button"
+              onClick={() => { const q = query.trim(); setOpen(false); setQuery(''); onCreateNew(q); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', padding: '8px 10px', fontSize: 13,
+                background: 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', color: 'var(--accent)', fontWeight: 600,
+                borderTop: filtered.length > 0 ? '1px solid var(--border)' : undefined, marginTop: filtered.length > 0 ? 4 : 0,
+              }}
+            >
+              <Plus size={13} />
+              {(createNewLabel ?? ((q) => q ? `Crear "${q}"` : 'Crear nuevo'))(query.trim())}
+            </button>
           )}
         </div>
       )}

@@ -76,8 +76,8 @@ export async function updateClient(
   data: Partial<
     {
       nombre: string;
-      apellido: string;
-      dni: string;
+      apellido: string | null;
+      dni: string | null;
       telefono: string | null;
       gmail: string | null;
       category: ClientCategory;
@@ -100,8 +100,8 @@ export async function updateClient(
   const cleanData: any = {};
 
   if (data.nombre !== undefined) cleanData.nombre = String(data.nombre).trim();
-  if (data.apellido !== undefined) cleanData.apellido = String(data.apellido).trim();
-  if (data.dni !== undefined) cleanData.dni = String(data.dni).trim();
+  if (data.apellido !== undefined) cleanData.apellido = cleanString(data.apellido);
+  if (data.dni !== undefined) cleanData.dni = cleanString(data.dni);
   if (data.telefono !== undefined) cleanData.telefono = cleanString(data.telefono);
   if (data.gmail !== undefined) cleanData.gmail = cleanEmail(data.gmail);
   if (data.category !== undefined) cleanData.category = normalizeCategory(data.category);
@@ -131,7 +131,7 @@ export async function updateClient(
       }
 
       const nombre = cleanData.nombre ?? existing.nombre;
-      const apellido = cleanData.apellido ?? existing.apellido;
+      const apellido = cleanData.apellido ?? existing.apellido ?? "";
       const hashedPassword = await bcrypt.hash(DEFAULT_CLIENT_PASSWORD, 10);
 
       const user = await tx.user.create({
@@ -167,7 +167,7 @@ export async function updateClient(
         data: {
           email: cleanData.gmail,
           name: `${cleanData.nombre ?? existing.nombre} ${
-            cleanData.apellido ?? existing.apellido
+            cleanData.apellido ?? existing.apellido ?? ""
           }`.trim(),
         },
       });

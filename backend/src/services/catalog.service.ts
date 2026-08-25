@@ -38,7 +38,7 @@ type CustomerContext = {
   clientId?: string;
   category: CategoryClient;
   customerName?: string;
-  dni?: string;
+  dni?: string | null;
   phone?: string | null;
   email?: string | null;
 };
