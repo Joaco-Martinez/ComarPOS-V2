@@ -11,14 +11,33 @@
 #include <time.h>
 #include "mbedtls/md.h" // HMAC-SHA256 -- parte del core ESP32 (ESP-IDF), no hace falta agregarla a lib_deps
 
+// ================= Pines por variante de placa =================
+// Dos targets de PlatformIO comparten este firmware (ver platformio.ini):
+// [env:esp32-s3] (placa ya probada contra hardware real) y
+// [env:esp32-classic] (ESP32 "DevKitV1"/NodeMCU-32S con CP2102, sin probar
+// todavia contra hardware real -- ver PRINTBOX_BOARD_CLASSIC, definido por
+// build_flags del env). Los pines de la S3 NO sirven en el ESP32 clasico:
+// GPIO6-11 estan reservados ahi para la flash SPI interna (usarlos cuelga
+// o no bootea la placa), asi que hay un set completo de pines por variante
+// en vez de compartir numeros. Ver WIRING.md para el detalle de cableado
+// de cada variante.
+
 // ================= OLED (128x64, I2C) =================
-// Volvio a GPIO8/9 -- es el unico par de pines que detecto el modulo de
-// forma consistente en el scan I2C (0x3c, dos modulos distintos). Se
-// probo mover a 5/6 pero ahi el scan dejo de detectar cualquier cosa, lo
-// que apunta a un problema de cableado en ESE cambio puntual, no a que
-// 8/9 este mal -- no tocar de nuevo sin retestear el scan primero.
-#define OLED_SDA 8
-#define OLED_SCL 9
+#if defined(PRINTBOX_BOARD_CLASSIC)
+  // Pines default de Wire.h en el ESP32 clasico (documentados/estandar) --
+  // sin la historia de prueba/error que tuvo el par de la S3 (ver abajo),
+  // pero tampoco confirmados todavia contra hardware real de esta variante.
+  #define OLED_SDA 21
+  #define OLED_SCL 22
+#else
+  // Volvio a GPIO8/9 -- es el unico par de pines que detecto el modulo de
+  // forma consistente en el scan I2C (0x3c, dos modulos distintos). Se
+  // probo mover a 5/6 pero ahi el scan dejo de detectar cualquier cosa, lo
+  // que apunta a un problema de cableado en ESE cambio puntual, no a que
+  // 8/9 este mal -- no tocar de nuevo sin retestear el scan primero.
+  #define OLED_SDA 8
+  #define OLED_SCL 9
+#endif
 #define OLED_WIDTH 128
 #define OLED_HEIGHT 64
 #define OLED_ADDR 0x3C
@@ -61,9 +80,20 @@ enum class DeviceStatus { BOOTING, PAIRING, CONNECTING, READY, PRINTING, ERROR_ 
 // diagnosticar en hardware, ver historial) -- 3 LEDs simples con su
 // resistencia limitadora (220-330 ohm) en serie hacia GND cada uno, sin
 // nada de I2C de por medio.
-#define LED_RED_PIN   15
-#define LED_BLUE_PIN  16
-#define LED_GREEN_PIN 17
+#if defined(PRINTBOX_BOARD_CLASSIC)
+  // 15/16/17 no sirven tal cual en el ESP32 clasico: GPIO15 es un
+  // strapping pin (MTDO, afecta el nivel de log de boot) y GPIO16/17 en
+  // muchos DevKitV1 de 30 pines estan reservados para el PSRAM/flash
+  // (variante WROVER) o directamente no salen al header. 25/26/27 son
+  // GPIO de proposito general sin restricciones de boot en esta placa.
+  #define LED_RED_PIN   25
+  #define LED_BLUE_PIN  26
+  #define LED_GREEN_PIN 27
+#else
+  #define LED_RED_PIN   15
+  #define LED_BLUE_PIN  16
+  #define LED_GREEN_PIN 17
+#endif
 
 DeviceStatus currentDeviceStatus = DeviceStatus::BOOTING;
 
@@ -154,18 +184,29 @@ void showStatus(DeviceStatus status, const String &detail = "") {
 }
 
 
-#define W5500_CS    10
-#define W5500_SCK   12
-#define W5500_MISO  13
-#define W5500_MOSI  11
+#if defined(PRINTBOX_BOARD_CLASSIC)
+  // Pinout SPI (VSPI) clasico de ESP32+W5500 -- el que usa casi todo
+  // tutorial/proyecto de esta combinacion, sin pines de strapping de boot
+  // de por medio (5 es strap de timing SDIO, pero solo afecta ese modo,
+  // no el boot normal -- uso comun como CS en decenas de proyectos SPI).
+  #define W5500_CS    5
+  #define W5500_SCK   18
+  #define W5500_MISO  19
+  #define W5500_MOSI  23
+#else
+  #define W5500_CS    10
+  #define W5500_SCK   12
+  #define W5500_MISO  13
+  #define W5500_MOSI  11
+#endif
 
-// Boton de factory reset (WiFi/pairing) -- GPIO4 esta libre en el
-// ESP32-S3-DevKitC-1 (no es pin de strapping de boot como el 0/3/45/46,
-// ni de PSRAM/flash como el 26-32/35-37), asi que no hay riesgo de que
-// interfiera con el arranque si llega a estar en LOW en el momento de
-// prender el device. Wiring: un pulsador normal-abierto entre GPIO4 y
-// GND, nada mas -- se usa el pull-up interno (INPUT_PULLUP, ver setup()),
-// no hace falta resistencia externa.
+// Boton de factory reset (WiFi/pairing) -- GPIO4 esta libre tanto en el
+// ESP32-S3-DevKitC-1 como en el ESP32 clasico (no es pin de strapping de
+// boot en ninguno de los dos), asi que no hay riesgo de que interfiera con
+// el arranque si llega a estar en LOW en el momento de prender el device.
+// Wiring: un pulsador normal-abierto entre GPIO4 y GND, nada mas -- se usa
+// el pull-up interno (INPUT_PULLUP, ver setup()), no hace falta resistencia
+// externa.
 #define FACTORY_RESET_PIN 4
 #define FACTORY_RESET_HOLD_MS 5000UL
 
