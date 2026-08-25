@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next';
 import PwaRegister from '@/components/PwaRegister';
 import KeyboardInsetWatcher from '@/components/KeyboardInsetWatcher';
 import GoogleAnalytics from '@/components/GoogleAnalytics';
+import CookieBanner from '@/components/CookieBanner';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
@@ -91,6 +92,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <KeyboardInsetWatcher />
         <GoogleAnalytics />
         <Analytics />
+        <CookieBanner />
       </body>
     </html>
   );

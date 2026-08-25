@@ -92,14 +92,17 @@ export default function PrivacidadPage() {
       <H2>5. Cookies y analítica</H2>
       <P>
         Usamos una cookie de sesión propia, necesaria para mantenerte logueado — sin ella el sistema no
-        funciona. Además usamos:
+        funciona, así que no requiere tu consentimiento. Además, solo si lo aceptás en el aviso de cookies
+        que aparece al entrar al sitio, usamos:
       </P>
       <Ul>
         <li><strong>Google Analytics</strong>, que usa cookies para medir visitas y uso del sitio de forma estadística.</li>
-        <li><strong>Vercel Analytics</strong>, una analítica sin cookies (no identifica individualmente a cada visitante).</li>
+        <li><strong>Vercel Analytics</strong>, una analítica sin cookies (no identifica individualmente a cada visitante) — no requiere consentimiento y corre siempre.</li>
       </Ul>
       <P>
-        Podés bloquear las cookies de analítica desde la configuración de tu navegador sin que eso afecte el
+        Podés aceptar o rechazar las cookies de Google Analytics cuando te lo preguntamos, y cambiar tu
+        elección cuando quieras desde el link <strong>&quot;Preferencias de cookies&quot;</strong> al pie de
+        esta página. También podés bloquearlas desde la configuración de tu navegador, sin que eso afecte el
         funcionamiento del sistema.
       </P>
 
