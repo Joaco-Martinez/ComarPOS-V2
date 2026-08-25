@@ -113,11 +113,9 @@ export default function PruebaGratisPage() {
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 900, display: 'flex', gap: 40, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 320px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 24 }}>
-            <img src="/brand/isologo.png" alt="ComarPOS" width={38} height={38} style={{ objectFit: 'contain', flexShrink: 0 }} />
-            <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.5, color: 'var(--text)' }}>
-              omar<span style={{ color: 'var(--accent)' }}>POS</span>
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+            <img src="/brand/logo-horizontal-negativo.png" alt="ComarPOS" className="brand-logo-dark" style={{ height: 30, width: 'auto', objectFit: 'contain' }} />
+            <img src="/brand/logo-horizontal-positivo.png" alt="ComarPOS" className="brand-logo-light" style={{ height: 30, width: 'auto', objectFit: 'contain' }} />
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 12 }}>
             {mode === 'trial' ? 'Probá ComarPOS gratis durante 7 días' : 'Suscribite a ComarPOS'}

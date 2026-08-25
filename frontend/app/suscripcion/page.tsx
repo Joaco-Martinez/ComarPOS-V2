@@ -141,11 +141,9 @@ export default function SuscripcionPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 460 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 24 }}>
-          <img src="/brand/isologo.png" alt="ComarPOS" width={36} height={36} style={{ objectFit: 'contain', flexShrink: 0 }} />
-          <span style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.5, color: 'var(--text)' }}>
-            omar<span style={{ color: 'var(--accent)' }}>POS</span>
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+          <img src="/brand/logo-horizontal-negativo.png" alt="ComarPOS" className="brand-logo-dark" style={{ height: 28, width: 'auto', objectFit: 'contain' }} />
+          <img src="/brand/logo-horizontal-positivo.png" alt="ComarPOS" className="brand-logo-light" style={{ height: 28, width: 'auto', objectFit: 'contain' }} />
         </div>
 
         <div className="card" style={{ padding: 28 }}>

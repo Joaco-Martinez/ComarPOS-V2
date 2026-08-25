@@ -86,11 +86,9 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
       <header style={{ position: 'sticky', top: 0, zIndex: 30, background: 'rgba(247,249,252,0.85)', backdropFilter: 'blur(10px)', borderBottom: '1px solid var(--border)' }}>
         <Section style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap' }}>
-            <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}>
-              <img src="/brand/isologo.png" alt="ComarPOS" width={34} height={34} style={{ objectFit: 'contain', flexShrink: 0 }} />
-              <span style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.5, color: 'var(--text)' }}>
-                omar<span style={{ color: 'var(--accent)' }}>POS</span>
-              </span>
+            <a href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+              <img src="/brand/logo-horizontal-negativo.png" alt="ComarPOS" className="brand-logo-dark" style={{ height: 28, width: 'auto', objectFit: 'contain' }} />
+              <img src="/brand/logo-horizontal-positivo.png" alt="ComarPOS" className="brand-logo-light" style={{ height: 28, width: 'auto', objectFit: 'contain' }} />
             </a>
             <nav style={{ gap: 20 }} className="hidden md:flex">
               {NAV_LINKS.map((l) => (
@@ -431,11 +429,9 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
       {/* Brand identity */}
       <Section style={{ padding: '0 24px 88px', textAlign: 'center' }}>
         <Reveal>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <img src="/brand/isologo.png" alt="ComarPOS" width={96} height={96} style={{ objectFit: 'contain' }} />
-            <span style={{ fontSize: 56, fontWeight: 800, letterSpacing: -1.5, color: 'var(--text)' }}>
-              omar<span style={{ color: 'var(--accent)' }}>POS</span>
-            </span>
+          <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <img src="/brand/logo-horizontal-negativo.png" alt="ComarPOS" className="brand-logo-dark" style={{ height: 80, width: 'auto', objectFit: 'contain' }} />
+            <img src="/brand/logo-horizontal-positivo.png" alt="ComarPOS" className="brand-logo-light" style={{ height: 80, width: 'auto', objectFit: 'contain' }} />
           </div>
         </Reveal>
       </Section>

@@ -35,10 +35,10 @@ export default function LegalLayout({ title, updatedAt, children }: { title: str
       <header style={{ position: 'sticky', top: 0, zIndex: 30, background: 'rgba(247,249,252,0.85)', backdropFilter: 'blur(10px)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ maxWidth: 1120, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}>
-            <img src="/brand/isologo.png" alt="ComarPOS" width={30} height={30} style={{ objectFit: 'contain', flexShrink: 0 }} />
-            <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: -0.5, color: 'var(--text)' }}>
-              omar<span style={{ color: 'var(--accent)' }}>POS</span>
-            </span>
+            {/* Header de esta pagina es siempre claro (rgba near-white de mas
+                abajo), independiente del tema global -- por eso el logo
+                positivo fijo, no el swap dark/light. */}
+            <img src="/brand/logo-horizontal-positivo.png" alt="ComarPOS" style={{ height: 24, width: 'auto', objectFit: 'contain' }} />
           </a>
           <a href="/" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>Volver al inicio</a>
         </div>

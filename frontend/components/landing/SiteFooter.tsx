@@ -19,11 +19,9 @@ export default function SiteFooter({ productLinks }: { productLinks?: Array<{ hr
     <footer style={{ borderTop: '1px solid var(--border)', padding: '40px 24px 24px', position: 'relative' }}>
       <Section style={{ display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ maxWidth: 280 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 14 }}>
-            <img src="/brand/isologo.png" alt="ComarPOS" width={40} height={40} style={{ objectFit: 'contain' }} />
-            <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.6, color: 'var(--text)' }}>
-              omar<span style={{ color: 'var(--accent)' }}>POS</span>
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
+            <img src="/brand/logo-horizontal-negativo.png" alt="ComarPOS" className="brand-logo-dark" style={{ height: 32, width: 'auto', objectFit: 'contain' }} />
+            <img src="/brand/logo-horizontal-positivo.png" alt="ComarPOS" className="brand-logo-light" style={{ height: 32, width: 'auto', objectFit: 'contain' }} />
           </div>
           <p style={{ fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.6, marginBottom: 8 }}>
             Sistema de gestión (ERP + punto de venta) para comercios de cualquier rubro,

@@ -104,6 +104,11 @@ html.light {
 .login-root .brand-logo-dark  { display: none; }
 .login-root .brand-logo-light { display: block; }
 
+/* Landing (marketing): igual que login-root, paleta siempre clara --
+   el logo oscuro (texto blanco) quedaria invisible sobre este fondo. */
+.landing-root .brand-logo-dark  { display: none; }
+.landing-root .brand-logo-light { display: block; }
+
 /* --- Mobile: antes esto forzaba una paleta clara/suave sin importar el tema
    (dark o light) - el toggle de tema no tenia ningun efecto visual en mobile.
    Ahora los colores de mobile-claro solo se aplican bajo html.light (el tema
