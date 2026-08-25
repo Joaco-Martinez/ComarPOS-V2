@@ -11,7 +11,7 @@ import { fmtDate, fmtMoney, normalizeArray, num, clientName } from '@/lib/helper
 import { todayInputAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import {
-  Wrench, Plus, X, Eye, RefreshCcw, Trash2, Share2, CreditCard, Copy, Check, Download,
+  Wrench, Plus, X, RefreshCcw, Trash2, Share2, CreditCard, Copy, Check, Download,
 } from 'lucide-react';
 
 const STATUS_LABEL: Record<RepairOrderStatus, string> = {
@@ -352,6 +352,7 @@ export default function ServiciosPage() {
           <ResponsiveTable
             data={orders}
             keyFor={(o) => o.id}
+            onRowClick={openDetail}
             emptyIcon={Wrench}
             emptyMessage="Sin reparaciones registradas"
             columns={[
@@ -361,10 +362,9 @@ export default function ServiciosPage() {
               { key: 'falla', header: 'Falla reportada', render: (o) => <span style={{ fontSize: 12, color: 'var(--text3)' }}>{o.reportedIssue}</span> },
               { key: 'estado', header: 'Estado', render: (o) => <span className={`badge ${STATUS_BADGE[o.status]}`}>{STATUS_LABEL[o.status]}</span> },
               { key: 'total', header: 'Presupuesto', style: { textAlign: 'right' }, render: (o) => <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--accent)' }}>{fmtMoney(o.totalAmount)}</span> },
-              { key: 'acciones', header: '', render: (o) => <button onClick={() => openDetail(o)} className="btn btn-ghost btn-xs"><Eye size={12} /></button> },
             ] as ResponsiveTableColumn<RepairOrder>[]}
             renderMobileCard={(o) => (
-              <div onClick={() => openDetail(o)} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div className="mobile-card-head">
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text3)' }}>{fmtDate(o.createdAt)}</span>
                   <span className={`badge ${STATUS_BADGE[o.status]}`}>{STATUS_LABEL[o.status]}</span>
