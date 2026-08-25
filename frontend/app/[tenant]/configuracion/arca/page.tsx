@@ -147,11 +147,13 @@ const REMITO_MODE_OPTIONS: { label: string; value: RemitoMode }[] = [
 // ─── Empty forms ──────────────────────────────────────────────────────────────
 
 const emptyFiscal = {
-  businessName: '', cuit: '', ivaCondition: 'IVA RESPONSABLE INSCRIPTO',
+  businessName: '', fantasyName: '', cuit: '', ivaCondition: 'IVA RESPONSABLE INSCRIPTO',
   fiscalAddress: '', iibb: '', activityStart: '',
   environment: 'HOMOLOGACION' as ArcaEnvironment,
   defaultPointOfSale: '1', defaultCurrencyId: 'PES', defaultConcept: '1',
 };
+
+type TenantEmpresaInfo = { name: string; ticketBusinessName: string | null; ticketCuit: string | null; ticketAddress: string | null };
 
 const emptyPoint = {
   id: '', number: '', description: '', enabled: true, isDefault: true,
@@ -232,6 +234,7 @@ export default function ArcaPage() {
   const [config, setConfig]       = useState<ArcaConfig | null>(null);
   const [points, setPoints]       = useState<ArcaPointOfSale[]>([]);
   const [remitoCais, setRemitoCais] = useState<RemitoCaiConfig[]>([]);
+  const [tenantInfo, setTenantInfo] = useState<TenantEmpresaInfo | null>(null);
 
   const [fiscalForm, setFiscalForm]       = useState(emptyFiscal);
   const [pointForm, setPointForm]         = useState(emptyPoint);
@@ -265,9 +268,10 @@ export default function ArcaPage() {
     return err?.response?.data?.message ?? err?.response?.data?.error ?? err?.message ?? fallback;
   }
 
-  function fillFiscal(c: ArcaConfig) {
-    setFiscalForm({
+  function fillFiscal(c: ArcaConfig, fantasyName?: string) {
+    setFiscalForm((prev) => ({
       businessName: c.businessName ?? '',
+      fantasyName: fantasyName ?? prev.fantasyName,
       cuit: c.cuit ?? '',
       ivaCondition: c.ivaCondition ?? 'IVA RESPONSABLE INSCRIPTO',
       fiscalAddress: c.fiscalAddress ?? '',
@@ -277,24 +281,42 @@ export default function ArcaPage() {
       defaultPointOfSale: String(c.defaultPointOfSale ?? 1),
       defaultCurrencyId: c.defaultCurrencyId ?? 'PES',
       defaultConcept: String(c.defaultConcept ?? 1),
-    });
+    }));
+  }
+
+  // Trae los datos ya cargados en Configuracion > Empresa para no tener que
+  // retipearlos aca -- no guarda nada solo, el usuario todavia tiene que
+  // apretar "Guardar datos fiscales".
+  function autocompleteFromEmpresa() {
+    if (!tenantInfo) { showToast('Todavía no se cargaron los datos de Empresa', 'err'); return; }
+    setFiscalForm((prev) => ({
+      ...prev,
+      businessName: tenantInfo.name || prev.businessName,
+      fantasyName: tenantInfo.ticketBusinessName || prev.fantasyName,
+      cuit: tenantInfo.ticketCuit ? normalizeCuit(tenantInfo.ticketCuit) : prev.cuit,
+      fiscalAddress: tenantInfo.ticketAddress || prev.fiscalAddress,
+    }));
+    showToast('Autocompletado con los datos de Empresa', 'info');
   }
 
   async function loadAll() {
     setLoading(true);
     try {
-      const [cfgRes, pvRes, caiRes] = await Promise.all([
+      const [cfgRes, pvRes, caiRes, tenantRes] = await Promise.all([
         api.get('/arca-config/config').catch(() => null),
         api.get('/arca-config/puntos-venta').catch(() => null),
         api.get('/arca-config/remitos-cai').catch(() => null),
+        api.get('/tenant/me').catch(() => null),
       ]);
       const cfg  = cfgRes  ? getContent<ArcaConfig | null>(cfgRes.data)           : null;
       const pvs  = pvRes   ? getContent<ArcaPointOfSale[]>(pvRes.data)             : [];
       const cais = caiRes  ? getContent<RemitoCaiConfig[]>(caiRes.data)            : [];
+      const tenant = tenantRes?.data?.tenant as TenantEmpresaInfo | undefined;
       setConfig(cfg);
       setPoints(Array.isArray(pvs) ? pvs : []);
       setRemitoCais(Array.isArray(cais) ? cais : []);
-      if (cfg) fillFiscal(cfg);
+      if (tenant) setTenantInfo(tenant);
+      if (cfg) fillFiscal(cfg, tenant?.ticketBusinessName ?? undefined);
     } catch (err: any) {
       showToast(getErr(err, 'Error al cargar la configuración ARCA'), 'err');
     } finally { setLoading(false); }
@@ -325,6 +347,18 @@ export default function ArcaPage() {
       const saved = getContent<ArcaConfig>(data);
       setConfig(saved);
       fillFiscal(saved);
+
+      // El nombre de fantasia es dato de Tenant (mismo campo que Configuracion
+      // > Empresa, ver ticket.service.ts), no de ArcaConfig -- se guarda aparte.
+      // Best-effort: requiere rol ADMIN (PATCH /tenant/me), asi que un
+      // CONTADOR puede guardar los datos fiscales igual aunque esto falle.
+      if (fiscalForm.fantasyName.trim() !== (tenantInfo?.ticketBusinessName ?? '')) {
+        try {
+          const { data: tenantRes } = await api.patch('/tenant/me', { ticketBusinessName: fiscalForm.fantasyName.trim() || null });
+          if (tenantRes?.tenant) setTenantInfo(tenantRes.tenant);
+        } catch { /* ver comentario arriba */ }
+      }
+
       const pvRes = await api.get('/arca-config/puntos-venta').catch(() => null);
       if (pvRes) setPoints(getContent<ArcaPointOfSale[]>(pvRes.data) ?? []);
       showToast('Configuración fiscal guardada', 'ok');
@@ -614,6 +648,11 @@ export default function ArcaPage() {
             title="Datos fiscales"
             subtitle="Aparecen en facturas, tickets fiscales y remitos"
             icon={<Building2 size={18} color="var(--accent2)" />}
+            right={
+              <button onClick={autocompleteFromEmpresa} className="btn btn-secondary btn-sm" style={{ gap: 6 }} type="button">
+                <Building2 size={13} /> Autocompletar con Empresa
+              </button>
+            }
           >
             {fiscalForm.environment === 'PRODUCCION' && (
               <div style={{ background: 'rgba(243,156,18,0.1)', border: '1px solid rgba(243,156,18,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--warn)', display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 16 }}>
@@ -624,6 +663,9 @@ export default function ArcaPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 14 }}>
               <HelpField label="Razón social *" help="Nombre legal o razón social que se imprime en los comprobantes.">
                 <input value={fiscalForm.businessName} onChange={e => fp('businessName', e.target.value)} placeholder="Mi Negocio S.R.L." />
+              </HelpField>
+              <HelpField label="Nombre de fantasía" help="Nombre comercial del negocio. Es el mismo dato que Configuración > Empresa.">
+                <input value={fiscalForm.fantasyName} onChange={e => fp('fantasyName', e.target.value)} placeholder="Mi Negocio" />
               </HelpField>
               <HelpField label="CUIT *" help="Podés pegarlo con guiones (ej: 30-71938650-0), se limpia solo.">
                 <input value={fiscalForm.cuit} onChange={e => fp('cuit', normalizeCuit(e.target.value))} placeholder="30719386500" />

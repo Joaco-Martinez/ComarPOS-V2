@@ -7,6 +7,7 @@ function cleanString(value?: string | null) {
 }
 
 type TenantSelfServiceInput = {
+  name?: string | null;
   ticketBusinessName?: string | null;
   ticketCuit?: string | null;
   ticketAddress?: string | null;
@@ -50,6 +51,14 @@ export const tenantService = {
     if (!tenantId) throw new Error("No hay negocio en contexto");
 
     const cleanData: Record<string, string | number | null> = {};
+    // Razon social (legal). A diferencia de los campos ticket* (nullable,
+    // caen a esto como fallback -- ver ticket.service.ts), Tenant.name no
+    // puede quedar vacio: si mandan un string en blanco se ignora en vez de
+    // pisarlo con "".
+    if (data.name !== undefined) {
+      const name = cleanString(data.name);
+      if (name) cleanData.name = name;
+    }
     if (data.ticketBusinessName !== undefined) {
       cleanData.ticketBusinessName = cleanString(data.ticketBusinessName);
     }

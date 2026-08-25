@@ -42,7 +42,7 @@ export async function regenerarFacturaPDFService(
     currentTenantId()
       ? prisma.tenant.findUnique({
           where: { id: currentTenantId()! },
-          select: { name: true, ticketPhone: true, ticketAddress: true },
+          select: { name: true, ticketBusinessName: true, ticketPhone: true, ticketAddress: true },
         })
       : null,
   ]);
@@ -70,7 +70,11 @@ export async function regenerarFacturaPDFService(
 
     empresa: {
       name: arcaConfig?.businessName || tenant?.name || process.env.BUSINESS_NAME || "Mi Negocio",
-      subtitle: process.env.BUSINESS_SUBTITLE || "ComarPOS",
+      // Nombre de fantasia del tenant (Tenant.ticketBusinessName, ver
+      // Configuracion > Empresa) -- antes esto era un env var fijo
+      // ("ComarPOS" para TODOS los tenants), asi que cada negocio veia su
+      // propia razon social pero el subtitulo de la marca de otro.
+      subtitle: tenant?.ticketBusinessName || process.env.BUSINESS_SUBTITLE || "ComarPOS",
       cuit: invoice.cuit || arcaConfig?.cuit || process.env.BUSINESS_CUIT || "",
       address:
         arcaConfig?.fiscalAddress ||

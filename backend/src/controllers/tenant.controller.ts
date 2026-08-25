@@ -14,6 +14,7 @@ export const tenantController = {
   async updateMe(req: Request, res: Response, next: NextFunction) {
     try {
       const tenant = await tenantService.updateMe({
+        name: req.body.name,
         ticketBusinessName: req.body.ticketBusinessName,
         ticketCuit: req.body.ticketCuit,
         ticketAddress: req.body.ticketAddress,

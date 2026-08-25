@@ -14,6 +14,7 @@ const MAX_SIZE = 5 * 1024 * 1024;
 const LOGO_IMAGE_SIZE = 512;
 
 type TenantInfo = {
+  name: string;
   ticketBusinessName: string | null;
   ticketCuit: string | null;
   ticketAddress: string | null;
@@ -23,6 +24,7 @@ type TenantInfo = {
 };
 
 const emptyInfo: TenantInfo = {
+  name: '',
   ticketBusinessName: '',
   ticketCuit: '',
   ticketAddress: '',
@@ -69,6 +71,7 @@ export default function EmpresaPage() {
     try {
       const { data } = await api.get('/tenant/me');
       setInfo({
+        name: data.tenant?.name ?? '',
         ticketBusinessName: data.tenant?.ticketBusinessName ?? '',
         ticketCuit: data.tenant?.ticketCuit ?? '',
         ticketAddress: data.tenant?.ticketAddress ?? '',
@@ -184,11 +187,27 @@ export default function EmpresaPage() {
             <div className="form-group">
               <label className="form-label">Razón social</label>
               <input
-                value={info.ticketBusinessName ?? ''}
-                onChange={(e) => setInfo((i) => ({ ...i, ticketBusinessName: e.target.value }))}
+                value={info.name}
+                onChange={(e) => setInfo((i) => ({ ...i, name: e.target.value }))}
                 placeholder="Ej: Almacén Don José S.R.L."
                 disabled={saving}
+                required
               />
+              <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+                Nombre legal del negocio. Es el que se usa por defecto para ARCA/AFIP.
+              </p>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Nombre de fantasía</label>
+              <input
+                value={info.ticketBusinessName ?? ''}
+                onChange={(e) => setInfo((i) => ({ ...i, ticketBusinessName: e.target.value }))}
+                placeholder="Ej: Almacén Don José"
+                disabled={saving}
+              />
+              <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+                Es el que aparece como nombre del negocio en tickets y comprobantes. Si lo dejás vacío, se usa la razón social.
+              </p>
             </div>
             <div className="form-group">
               <label className="form-label">CUIT</label>
@@ -246,7 +265,7 @@ export default function EmpresaPage() {
               </p>
             </div>
 
-            <button type="submit" className="btn btn-primary btn-sm" style={{ marginTop: 16, gap: 6 }} disabled={saving}>
+            <button type="submit" className="btn btn-primary btn-sm" style={{ marginTop: 16, gap: 6 }} disabled={saving || !info.name.trim()}>
               {saving ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <Save size={13} />}
               Guardar
             </button>

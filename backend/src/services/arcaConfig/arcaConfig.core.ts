@@ -20,10 +20,18 @@ import {
   type GenerateCsrInput,
 } from "./arcaConfig.helpers";
 import { upsertPointOfSale } from "./arcaConfig.pointsOfSale";
+import { businessLocationService } from "../businessLocation.service";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
 
 export { getConfig };
+
+async function ensureDefaultBusinessLocation() {
+  const existingCount = await prisma.businessLocation.count({ where: { ...tenantScope() } });
+  if (existingCount > 0) return;
+
+  await businessLocationService.create({ name: "Casa Central", isDefault: true });
+}
 
 export async function list() {
   return prisma.arcaConfig.findMany({
@@ -136,6 +144,15 @@ export async function upsertConfig(data: UpdateArcaConfigInput) {
         isActive: false,
       },
       include: { pointsOfSale: true, tokens: true, remitoCais: true },
+    });
+
+    // Primera vez que este tenant carga datos fiscales -- si todavia no
+    // tiene ninguna sucursal/deposito, le creamos una por defecto para que
+    // no tenga que pasar por Configuracion > Sucursales antes de poder
+    // vender (puede crear mas despues, sujeto al limite de su plan). No
+    // bloquea el guardado de ARCA si falla por cualquier motivo.
+    await ensureDefaultBusinessLocation().catch((err) => {
+      console.error("No se pudo crear la sucursal por defecto tras configurar ARCA:", err);
     });
   }
 
