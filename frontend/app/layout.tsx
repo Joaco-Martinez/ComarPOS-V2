@@ -9,7 +9,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', display: 'swap' });
 
-const SITE_URL = 'https://comarpos.com.ar';
+const SITE_URL = 'https://www.comarpos.com';
 const SITE_DESCRIPTION = 'Punto de venta, facturación electrónica AFIP, stock, caja y reportes en un solo sistema. Para kioscos, veterinarias, ferreterías y cualquier otro rubro.';
 
 export const metadata: Metadata = {

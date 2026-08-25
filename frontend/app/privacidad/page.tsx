@@ -8,14 +8,14 @@ export const metadata: Metadata = {
 
 export default function PrivacidadPage() {
   return (
-    <LegalLayout title="Política de privacidad" updatedAt="24 de agosto de 2026">
+    <LegalLayout title="Política de privacidad" updatedAt="25 de agosto de 2026">
       <P>
         Esta política explica qué datos recopila ComarPOS ("nosotros", "el Servicio"), para qué los usa,
         con quién los comparte y qué derechos tenés sobre ellos. Aplica tanto al sitio público
-        (comarpos.com.ar) como al sistema en sí (web, PWA y las apps de Android/iOS).
+        (comarpos.com) como al sistema en sí (web, PWA y las apps de Android/iOS).
       </P>
       <P>
-        Responsable del tratamiento: <strong>[COMPLETAR: razón social / nombre y CUIT del titular del servicio]</strong>.
+        Responsable del tratamiento: <strong>Joaquín Martínez, CUIT 20-46587629-9, domicilio en Córdoba, Argentina</strong>.
         Contacto para cualquier consulta o reclamo sobre tus datos: <Mail />.
       </P>
 

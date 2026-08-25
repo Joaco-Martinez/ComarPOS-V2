@@ -7,6 +7,7 @@ function Section({ children, style }: { children: React.ReactNode; style?: React
 const LEGAL_LINKS = [
   { href: '/terminos', label: 'Términos y condiciones' },
   { href: '/privacidad', label: 'Política de privacidad' },
+  { href: '/arrepentimiento', label: 'Botón de Arrepentimiento' },
 ];
 
 // Compartido entre la landing y las paginas legales -- antes el footer
@@ -24,9 +25,12 @@ export default function SiteFooter({ productLinks }: { productLinks?: Array<{ hr
               omar<span style={{ color: 'var(--accent)' }}>POS</span>
             </span>
           </div>
-          <p style={{ fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.6, marginBottom: 8 }}>
             Sistema de gestión (ERP + punto de venta) para comercios de cualquier rubro,
             con facturación electrónica AFIP integrada.
+          </p>
+          <p style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.6, fontFamily: 'var(--mono)' }}>
+            Joaquín Martínez · CUIT 20-46587629-9 · Córdoba, Argentina
           </p>
         </div>
         {productLinks && (

@@ -142,6 +142,11 @@ export const billingService = {
    * cancelarla en MP) es lo que hace que el webhook tardío de esa
    * cancelación no dispare handlePreapprovalStatus (guard: preapprovalId ya
    * no coincide con ninguna del tenant).
+   *
+   * Devuelve tambien un "numero de constancia" (derivado del id del
+   * TenantPaymentLog que queda como registro permanente) -- la Resolucion
+   * 424/2020 espera que el consumidor se lleve algun comprobante de haber
+   * ejercido el derecho de arrepentimiento, no solo un mensaje en pantalla.
    */
   async cancelSubscription(tenantId: string) {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -157,7 +162,7 @@ export const billingService = {
       console.warn(`⚠️ No se pudo cancelar la preapproval ${tenant.mpPreapprovalId} en Mercado Pago:`, err);
     }
 
-    await prisma.$transaction([
+    const [, log] = await prisma.$transaction([
       prisma.tenant.update({
         where: { id: tenantId },
         data: { mpPreapprovalId: null },
@@ -174,7 +179,10 @@ export const billingService = {
       }),
     ]);
 
-    return this.getStatus(tenantId);
+    const claimCode = `ARR-${log.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+    const status = await this.getStatus(tenantId);
+
+    return { ...status, claimCode };
   },
 
   /** Topic "payment" del webhook: un cobro puntual (alta o renovacion mensual) generado por una preapproval. */

@@ -8,10 +8,10 @@ export const metadata: Metadata = {
 
 export default function TerminosPage() {
   return (
-    <LegalLayout title="Términos y condiciones" updatedAt="24 de agosto de 2026">
+    <LegalLayout title="Términos y condiciones" updatedAt="25 de agosto de 2026">
       <P>
         Estos términos regulan el uso de ComarPOS, un sistema de gestión (ERP + punto de venta) provisto por{' '}
-        <strong>[COMPLETAR: razón social / nombre y CUIT del titular del servicio]</strong> ("nosotros", "ComarPOS").
+        <strong>Joaquín Martínez (CUIT 20-46587629-9), domicilio en Córdoba, Argentina</strong> ("nosotros", "ComarPOS").
         Al crear una cuenta o usar el sistema, aceptás estos términos. Si no estás de acuerdo, no uses el servicio.
       </P>
 
@@ -31,7 +31,7 @@ export default function TerminosPage() {
 
       <H2>3. Planes, precios y facturación</H2>
       <P>
-        El precio vigente del plan se muestra en comarpos.com.ar antes de suscribirte. Podemos modificar los
+        El precio vigente del plan se muestra en comarpos.com antes de suscribirte. Podemos modificar los
         precios hacia adelante, avisándote con anticipación razonable — los cambios de precio nunca aplican de
         forma retroactiva a un período ya pagado. El cobro se procesa a través de Mercado Pago; nosotros no
         almacenamos los datos de tu tarjeta.
@@ -43,9 +43,17 @@ export default function TerminosPage() {
 
       <H2>4. Cancelación</H2>
       <P>
-        Podés cancelar tu suscripción cuando quieras desde el sistema o escribiéndonos. La cancelación aplica
-        hacia adelante; no reembolsamos el período ya en curso salvo que la normativa de defensa del consumidor
-        aplicable indique lo contrario.
+        Podés cancelar tu suscripción cuando quieras desde el sistema (Suscripción) o escribiéndonos. La baja
+        cancela el cobro automático de inmediato; seguís teniendo acceso al sistema hasta el final del período
+        que ya pagaste, sin renovación automática posterior.
+      </P>
+      <P>
+        Además, como consumidor tenés derecho de revocación conforme el art. 34 de la Ley 24.240: podés
+        arrepentirte de la contratación dentro de los <strong>10 (diez) días hábiles</strong> desde que
+        contrataste, sin necesidad de justificar el motivo y sin costo. Podés ejercerlo con el mismo botón de
+        baja del sistema o desde{' '}
+        <a href="/arrepentimiento" style={{ color: 'var(--accent)' }}>nuestro Botón de Arrepentimiento</a>,
+        conforme la Resolución 424/2020 de la Secretaría de Comercio Interior.
       </P>
 
       <H2>5. Tus datos y los datos de tus clientes</H2>
@@ -108,7 +116,10 @@ export default function TerminosPage() {
       <P>
         Estos términos se rigen por las leyes de la República Argentina. Cualquier controversia se someterá a
         los tribunales ordinarios competentes, sin perjuicio de tu derecho como consumidor a reclamar ante el
-        tribunal de tu domicilio.
+        tribunal de tu domicilio. También podés hacer un reclamo administrativo ante la{' '}
+        <a href="https://www.argentina.gob.ar/produccion/defensadelconsumidor" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+          Ventanilla Única Federal de Defensa del Consumidor
+        </a>.
       </P>
 
       <H2>13. Contacto</H2>

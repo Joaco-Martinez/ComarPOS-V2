@@ -107,10 +107,11 @@ export default function SuscripcionPage() {
       const updated = data.content ?? data;
       setStatus(updated);
       setConfirmingCancel(false);
+      const claimLine = updated?.claimCode ? ` Constancia: ${updated.claimCode}.` : '';
       setCancelMessage(
-        updated?.paidUntil
+        (updated?.paidUntil
           ? `Diste de baja tu suscripción. Vas a poder seguir usando ComarPOS hasta el ${fmtDate(updated.paidUntil)}, no se te va a cobrar de nuevo.`
-          : 'Diste de baja tu suscripción. No se te va a cobrar de nuevo.'
+          : 'Diste de baja tu suscripción. No se te va a cobrar de nuevo.') + claimLine
       );
     } catch (err: any) {
       setError(err?.response?.data?.message ?? 'No pudimos procesar la baja. Probá de nuevo o escribinos.');

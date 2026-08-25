@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     alternates: { canonical: `/para/${vertical.slug}` },
-    openGraph: { title, description, url: `https://comarpos.com.ar/para/${vertical.slug}` },
+    openGraph: { title, description, url: `https://www.comarpos.com/para/${vertical.slug}` },
     twitter: { title, description },
   };
 }

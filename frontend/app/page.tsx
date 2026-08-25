@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     alternates: { canonical: '/' },
-    openGraph: { title, description, url: 'https://comarpos.com.ar' },
+    openGraph: { title, description, url: 'https://www.comarpos.com' },
     twitter: { title, description },
   };
 }
@@ -46,7 +46,7 @@ const SOFTWARE_APP_JSON_LD = {
     name: `Plan ${plan.name}`,
     price: plan.priceArs,
     priceCurrency: 'ARS',
-    url: 'https://comarpos.com.ar/prueba-gratis',
+    url: 'https://www.comarpos.com/prueba-gratis',
   })),
 };
 

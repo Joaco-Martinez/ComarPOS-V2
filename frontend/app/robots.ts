@@ -14,9 +14,9 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: '*',
-      allow: ['/$', '/para/', '/prueba-gratis', '/suscripcion', '/terminos', '/privacidad', '/login', '/instalar'],
+      allow: ['/$', '/para/', '/prueba-gratis', '/suscripcion', '/terminos', '/privacidad', '/arrepentimiento', '/login', '/instalar'],
       disallow: '/',
     },
-    sitemap: 'https://comarpos.com.ar/sitemap.xml',
+    sitemap: 'https://www.comarpos.com/sitemap.xml',
   };
 }
