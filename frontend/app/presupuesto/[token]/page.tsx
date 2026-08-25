@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import api from '@/lib/api';
 import { fmtMoney, fmtDate } from '@/lib/helpers';
-import { CheckCircle2, XCircle, Wrench, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, Wrench, AlertTriangle, Download } from 'lucide-react';
 
 type PublicRepairOrder = {
   id: string;
@@ -58,6 +58,20 @@ export default function PresupuestoPublicoPage() {
     } catch (err: any) {
       setError(err?.response?.data?.message ?? 'No pudimos registrar la aprobación.');
     } finally { setActing(false); }
+  };
+
+  const downloadPdf = async () => {
+    try {
+      const res = await api.get(`/repair-orders/public/${token}/pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'presupuesto-reparacion.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('No se pudo descargar el PDF.');
+    }
   };
 
   const reject = async () => {
@@ -153,10 +167,14 @@ export default function PresupuestoPublicoPage() {
         </table>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text2)' }}>Total</span>
         <span style={{ fontSize: 20, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--accent)' }}>{fmtMoney(order.totalAmount)}</span>
       </div>
+
+      <button className="btn btn-secondary" style={{ width: '100%', gap: 6, marginBottom: 18 }} onClick={downloadPdf}>
+        <Download size={15} /> Descargar en PDF
+      </button>
 
       {pending ? (
         <>

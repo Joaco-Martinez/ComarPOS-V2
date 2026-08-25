@@ -12,6 +12,7 @@ import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { AppError } from "../utils/asyncHandler";
 import { saleService } from "./sale.service";
+import { generarPresupuestoReparacionPDF } from "../utils/generarPresupuestoReparacionPDF";
 
 const SERVICE_LABOR_SKU = "SERVICIO-TECNICO";
 const APPROVAL_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
@@ -111,6 +112,53 @@ async function ensureServiceLaborProduct() {
       clientPrice: 0,
       wholesalePrice: 0,
       tenantId: currentTenantId(),
+    },
+  });
+}
+
+async function buildPdfBuffer(order: {
+  id: string;
+  createdAt: Date;
+  status: RepairOrderStatus;
+  deviceType: string;
+  deviceBrand: string | null;
+  deviceModel: string | null;
+  deviceSerial: string | null;
+  deviceAccessories: string | null;
+  reportedIssue: string;
+  diagnosis: string | null;
+  totalAmount: number;
+  tenantId: string | null;
+  client?: { nombre: string; apellido: string; dni?: string | null; telefono?: string | null } | null;
+  items: { description: string; quantity: number; unitPrice: number; subtotal: number }[];
+}) {
+  const tenant = order.tenantId
+    ? await prisma.tenant.findUnique({
+        where: { id: order.tenantId },
+        select: { name: true, logoUrl: true, ticketBusinessName: true, ticketCuit: true, ticketAddress: true, ticketPhone: true },
+      })
+    : null;
+
+  return generarPresupuestoReparacionPDF({
+    id: order.id,
+    createdAt: order.createdAt,
+    status: order.status,
+    deviceType: order.deviceType,
+    deviceBrand: order.deviceBrand,
+    deviceModel: order.deviceModel,
+    deviceSerial: order.deviceSerial,
+    deviceAccessories: order.deviceAccessories,
+    reportedIssue: order.reportedIssue,
+    diagnosis: order.diagnosis,
+    totalAmount: order.totalAmount,
+    client: order.client,
+    items: order.items,
+    business: {
+      name: tenant?.ticketBusinessName || tenant?.name || "Mi Negocio",
+      cuit: tenant?.ticketCuit ?? null,
+      address: tenant?.ticketAddress ?? null,
+      phone: tenant?.ticketPhone ?? null,
+      logoUrl: tenant?.logoUrl ?? null,
     },
   });
 }
@@ -479,6 +527,18 @@ export const repairOrderService = {
     });
 
     return findOrThrow(id);
+  },
+
+  async generatePdf(id: string) {
+    const order = await findOrThrow(id);
+    const buffer = await buildPdfBuffer(order);
+    return { buffer, filename: `presupuesto-reparacion-${order.id.slice(-8)}.pdf` };
+  },
+
+  async generatePdfByToken(token: string) {
+    const order = await repairOrderService.getByToken(token);
+    const buffer = await buildPdfBuffer(order as any);
+    return { buffer, filename: `presupuesto-reparacion-${order.id.slice(-8)}.pdf` };
   },
 
   async remove(id: string) {

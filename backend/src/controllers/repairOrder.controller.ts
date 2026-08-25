@@ -65,6 +65,18 @@ export const repairOrderController = {
 
   remove: wrap(async (req) => repairOrderService.remove(req.params.id as string)),
 
+  getPdf: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { buffer, filename } = await repairOrderService.generatePdf(req.params.id as string);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", buffer.length);
+      res.send(buffer);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   // --- Publico (sin login) ---
 
   getPublicByToken: wrap(async (req) => repairOrderService.getByToken(req.params.token as string)),
@@ -74,4 +86,16 @@ export const repairOrderController = {
   rejectPublic: wrap(async (req) =>
     repairOrderService.rejectByToken(req.params.token as string, req.body?.reason)
   ),
+
+  getPublicPdf: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { buffer, filename } = await repairOrderService.generatePdfByToken(req.params.token as string);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", buffer.length);
+      res.send(buffer);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

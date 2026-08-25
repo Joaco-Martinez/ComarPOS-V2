@@ -11,7 +11,7 @@ import { fmtDate, fmtMoney, normalizeArray, num, clientName } from '@/lib/helper
 import { todayInputAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import {
-  Wrench, Plus, X, Eye, RefreshCcw, Trash2, Share2, CreditCard, Copy, Check,
+  Wrench, Plus, X, Eye, RefreshCcw, Trash2, Share2, CreditCard, Copy, Check, Download,
 } from 'lucide-react';
 
 const STATUS_LABEL: Record<RepairOrderStatus, string> = {
@@ -229,6 +229,21 @@ export default function ServiciosPage() {
       setShareLink(url);
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? 'Error al generar el link');
+    }
+  };
+
+  const downloadPdf = async () => {
+    if (!selected) return;
+    try {
+      const res = await api.get(`/repair-orders/${selected.id}/pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `presupuesto-reparacion-${selected.id.slice(-8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast('No se pudo generar el PDF');
     }
   };
 
@@ -477,6 +492,9 @@ export default function ServiciosPage() {
               )}
               {selected.items.length > 0 && !LOCKED_STATUSES.has(selected.status) && (
                 <button className="btn btn-secondary btn-sm" onClick={generateLink} style={{ gap: 6 }}><Share2 size={13} /> Compartir presupuesto</button>
+              )}
+              {selected.items.length > 0 && (
+                <button className="btn btn-secondary btn-sm" onClick={downloadPdf} style={{ gap: 6 }}><Download size={13} /> Descargar PDF</button>
               )}
               {CHECKOUT_STATUSES.has(selected.status) && !selected.saleId && (
                 <button className="btn btn-primary btn-sm" onClick={openCheckout} style={{ gap: 6 }}><CreditCard size={13} /> Cobrar</button>

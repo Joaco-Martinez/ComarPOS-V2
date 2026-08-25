@@ -9,6 +9,7 @@ const router = Router();
 // su reparacion desde un link con token, sin necesitar una cuenta. Van
 // montadas ANTES de authMiddleware para no exigir sesion.
 router.get("/public/:token", repairOrderController.getPublicByToken);
+router.get("/public/:token/pdf", repairOrderController.getPublicPdf);
 router.post("/public/:token/approve", repairOrderController.approvePublic);
 router.post("/public/:token/reject", repairOrderController.rejectPublic);
 
@@ -24,6 +25,7 @@ router.post("/:id/items", requireAnyRole(["ADMIN", "EMPLEADO"]), repairOrderCont
 router.patch("/:id/items/:itemId", requireAnyRole(["ADMIN", "EMPLEADO"]), repairOrderController.updateItem);
 router.delete("/:id/items/:itemId", requireAnyRole(["ADMIN", "EMPLEADO"]), repairOrderController.removeItem);
 router.post("/:id/approval-link", requireAnyRole(["ADMIN", "EMPLEADO"]), repairOrderController.createApprovalLink);
+router.get("/:id/pdf", repairOrderController.getPdf);
 router.post("/:id/checkout", requireAnyRole(["ADMIN", "EMPLEADO"]), repairOrderController.checkout);
 router.delete("/:id", requireAnyRole(["ADMIN"]), repairOrderController.remove);
 
