@@ -1,7 +1,4 @@
-'use client';
-
 import { waLink } from './siteConfig';
-import { openCookiePreferences } from '../CookieBanner';
 
 function Section({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return <section style={{ maxWidth: 1120, margin: '0 auto', padding: '0 24px', ...style }}>{children}</section>;
@@ -57,13 +54,6 @@ export default function SiteFooter({ productLinks }: { productLinks?: Array<{ hr
             {LEGAL_LINKS.map((l) => (
               <a key={l.href} href={l.href} style={{ fontSize: 13, color: 'var(--text2)' }}>{l.label}</a>
             ))}
-            <button
-              type="button"
-              onClick={openCookiePreferences}
-              style={{ fontSize: 13, color: 'var(--text2)', background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}
-            >
-              Preferencias de cookies
-            </button>
           </div>
         </div>
       </Section>
