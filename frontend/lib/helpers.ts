@@ -20,11 +20,24 @@ export const num = (v: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+// Detecta el 403 que devuelve requirePlanFeature (backend/src/middleware/planFeature.ts)
+// cuando el modulo no esta incluido en el plan del tenant -- distinto de un
+// error generico, asi las paginas de Fidelidad/Promociones/Cuentas
+// Corrientes pueden mostrar "no incluido en tu plan" en vez de un estado
+// vacio/roto sin explicacion.
+export const getPlanLockMessage = (err: unknown): string | null => {
+  const e = err as { response?: { status?: number; data?: { code?: string; message?: string } } };
+  if (e?.response?.status === 403 && e.response.data?.code === 'PLAN_FEATURE_LOCKED') {
+    return e.response.data.message ?? 'Esta función no está disponible en tu plan actual.';
+  }
+  return null;
+};
+
 export const normalizeArray = <T,>(response: unknown): T[] => {
   if (Array.isArray(response)) return response as T[];
   if (!response || typeof response !== 'object') return [];
   const rec = response as Record<string, unknown>;
-  for (const key of ['content', 'data', 'items', 'results', 'rows', 'clients', 'products', 'movements', 'sales', 'locations', 'businessLocations']) {
+  for (const key of ['content', 'data', 'items', 'results', 'rows', 'clients', 'products', 'movements', 'sales', 'locations', 'businessLocations', 'plans']) {
     const val = rec[key];
     if (Array.isArray(val)) return val as T[];
     const nested = normalizeArray<T>(val);

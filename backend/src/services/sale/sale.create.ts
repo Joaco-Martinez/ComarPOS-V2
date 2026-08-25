@@ -24,6 +24,7 @@ import { addHours, resolveQuotationHours, queueSalePdfGeneration } from "./sale.
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
 import { promotionService } from "../promotion.service";
+import { planFeatureService } from "../planFeature.service";
 
 export async function create(data: CreateSaleInput) {
   if (!Array.isArray(data.items) || data.items.length === 0) {
@@ -170,6 +171,11 @@ export async function create(data: CreateSaleInput) {
 
   if (paymentState.isAccountSale && !data.clientId) {
     throw new Error("Para vender en cuenta corriente necesitás seleccionar un cliente");
+  }
+
+  if (paymentState.isAccountSale) {
+    const featureCheck = await planFeatureService.checkFeature(currentTenantId(), "cuentasCorrientes");
+    if (!featureCheck.ok) throw new Error(featureCheck.message);
   }
 
   const stockLocationId = await requireStockLocationId(data.stockLocationId);

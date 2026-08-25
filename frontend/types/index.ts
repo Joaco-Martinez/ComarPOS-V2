@@ -465,6 +465,7 @@ export interface Tenant {
   slug: string;
   isActive: boolean;
   subscriptionStatus: TenantSubscriptionStatus;
+  planId: string;
   paidUntil?: string | null;
   suspendedAt?: string | null;
   trialEndsAt?: string | null;
@@ -475,6 +476,27 @@ export interface Tenant {
   createdAt: string;
   paymentLogs?: TenantPaymentLog[];
   users?: User[];
+  // Uso real (ver platformTenant.service.ts): calculados server-side, no
+  // son columnas de la tabla Tenant.
+  lastLoginAt?: string | null;
+  salesCount?: number;
+  lastSaleAt?: string | null;
+  totalRevenue?: number;
+  productsCount?: number;
+}
+
+export type PlanFeatureKey = 'fidelidad' | 'promociones' | 'cuentasCorrientes';
+
+export interface BillingPlan {
+  id: string;
+  name: string;
+  priceArs: number;
+  regularPriceArs: number;
+  currency: string;
+  tagline: string;
+  highlighted: boolean;
+  limits: { maxBusinessLocations: number | null; maxProducts: number | null; maxUsers: number | null };
+  features: Record<PlanFeatureKey, boolean>;
 }
 
 export type PrintboxDeviceStatus = 'PENDING_PAIRING' | 'ACTIVE' | 'REVOKED';

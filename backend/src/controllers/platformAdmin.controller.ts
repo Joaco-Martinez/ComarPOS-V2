@@ -69,6 +69,7 @@ export const platformAdminController = {
           note: req.body.note,
           paidUntil: req.body.paidUntil,
           trialEndsAt: req.body.trialEndsAt,
+          planId: req.body.planId,
         },
         platformAdminId
       );
@@ -81,14 +82,34 @@ export const platformAdminController = {
 
   async createTenant(req: Request, res: Response, next: NextFunction) {
     try {
-      const tenant = await platformTenantService.createTenant({
-        name: req.body.name,
-        slug: req.body.slug,
-        adminEmail: req.body.adminEmail,
-        adminPassword: req.body.adminPassword,
-      });
+      const platformAdminId = (req as any).platformAdmin?.id;
+      const tenant = await platformTenantService.createTenant(
+        {
+          name: req.body.name,
+          slug: req.body.slug,
+          adminEmail: req.body.adminEmail,
+          adminPassword: req.body.adminPassword,
+          planId: req.body.planId,
+        },
+        platformAdminId
+      );
 
       res.status(201).json({ ok: true, content: tenant });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async impersonateTenant(req: Request, res: Response, next: NextFunction) {
+    try {
+      const platformAdminId = (req as any).platformAdmin?.id;
+      const user = await platformTenantService.impersonate(
+        getParamAsString(req.params.id, "id"),
+        platformAdminId,
+        res
+      );
+
+      res.json({ ok: true, content: user });
     } catch (err) {
       next(err);
     }

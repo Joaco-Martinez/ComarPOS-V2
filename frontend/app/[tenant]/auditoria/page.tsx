@@ -23,10 +23,11 @@ interface AuditLog {
 }
 
 const actionBadge = (a: string) =>
-  a === 'CREATE' ? 'badge-green' : a === 'DELETE' ? 'badge-red' : 'badge-amber';
+  a === 'CREATE' ? 'badge-green' : a === 'DELETE' ? 'badge-red' : a === 'IMPERSONATE_START' ? 'badge-cyan' : 'badge-amber';
 
 const actionLabel: Record<string, string> = {
   CREATE: 'Crear', UPDATE: 'Actualizar', DELETE: 'Eliminar',
+  IMPERSONATE_START: 'Acceso de soporte (super-admin)',
 };
 
 function diffSummary(oldV: any, newV: any): string {

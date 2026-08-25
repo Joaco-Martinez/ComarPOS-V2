@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { authMiddleware, requireAnyRole } from "../middleware/auth";
+import { requirePlanFeature } from "../middleware/planFeature";
 import { promotionController } from "../controllers/promotion.controller";
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePlanFeature("promociones"));
 
 router.get("/", promotionController.getAll);
 router.get("/active", promotionController.getActive);

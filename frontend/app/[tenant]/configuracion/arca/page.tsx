@@ -10,7 +10,7 @@ import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile
 import {
   ShieldCheck, Building2, FileKey2, FileText, CheckCircle2, XCircle,
   AlertCircle, HelpCircle, RefreshCcw, Save, Plus, Edit2, Trash2,
-  Download, Upload, BadgeCheck, Loader2,
+  Download, Upload, BadgeCheck, Loader2, Video,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -563,6 +563,23 @@ export default function ArcaPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 860 }}>
+
+          {/* ── Video tutorial ── */}
+          <SectionCard
+            title="Video: cómo configurar ARCA / AFIP"
+            subtitle="Guía paso a paso para completar esta pantalla"
+            icon={<Video size={18} color="var(--accent)" />}
+          >
+            <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: 10, overflow: 'hidden', background: '#000' }}>
+              <iframe
+                src="https://www.youtube.com/embed/TCHLPytU47Q"
+                title="Cómo configurar ARCA / AFIP"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+              />
+            </div>
+          </SectionCard>
 
           {/* ── Estado general ── */}
           <SectionCard

@@ -17,6 +17,11 @@ router.patch(
   platformAdminController.updateSubscription
 );
 router.post("/tenants", platformAuthMiddleware, platformAdminController.createTenant);
+router.post(
+  "/tenants/:id/impersonate",
+  platformAuthMiddleware,
+  platformAdminController.impersonateTenant
+);
 
 router.get("/mp-plans", platformAuthMiddleware, platformAdminController.listMpPlans);
 router.post("/mp-plans/sync", platformAuthMiddleware, platformAdminController.syncMpPlans);

@@ -5,9 +5,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
-import type { Tenant, TenantSubscriptionStatus } from '@/types';
+import type { Tenant, TenantSubscriptionStatus, BillingPlan } from '@/types';
 import { fmtDate, normalizeArray, daysRemaining } from '@/lib/helpers';
-import { Building2, Plus, X, Search, Eye, CreditCard } from 'lucide-react';
+import { Building2, Plus, X, Search, Eye, CreditCard, Gift, LogIn, ShoppingCart } from 'lucide-react';
 
 type MpPlanRow = { planId: string; mpPlanId: string; status: string };
 
@@ -24,7 +24,7 @@ const trialLabel = (t: Tenant) => {
   return d > 0 ? `${d}d restantes` : 'Vencida';
 };
 
-const emptyForm = { name: '', slug: '', adminEmail: '', adminPassword: '' };
+const emptyForm = { name: '', slug: '', adminEmail: '', adminPassword: '', planId: '' };
 
 export default function PlatformAdminTenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -37,6 +37,8 @@ export default function PlatformAdminTenantsPage() {
 
   const [mpPlans, setMpPlans] = useState<MpPlanRow[]>([]);
   const [syncingMpPlans, setSyncingMpPlans] = useState(false);
+  const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
+  const [impersonating, setImpersonating] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -55,7 +57,23 @@ export default function PlatformAdminTenantsPage() {
     } catch { /* silencioso: no bloquear el resto del panel */ }
   };
 
-  useEffect(() => { load(); loadMpPlans(); }, []);
+  // Planes de config/billing.ts (precio/limites/features) - /billing/plans es
+  // publico, no hace falta el token de plataforma. Se usan para el selector
+  // de "Nuevo tenant" y para mostrar el plan de cada fila.
+  const loadBillingPlans = async () => {
+    try {
+      const { data } = await api.get('/billing/plans');
+      const plans = normalizeArray<BillingPlan>(data);
+      setBillingPlans(plans);
+      const recommended = plans.find((p) => p.highlighted) ?? plans[0];
+      if (recommended) setForm((p) => (p.planId ? p : { ...p, planId: recommended.id }));
+    } catch { /* silencioso: no bloquear el resto del panel */ }
+  };
+
+  useEffect(() => { load(); loadMpPlans(); loadBillingPlans(); }, []);
+
+  const planName = (planId: string) => billingPlans.find((p) => p.id === planId)?.name ?? planId;
+  const selectedPlan = billingPlans.find((p) => p.id === form.planId) ?? null;
 
   // Crea (una sola vez, ver mpPlan.service.ts) los 3 planes de
   // config/billing.ts como planes reales en Mercado Pago -- necesita
@@ -75,7 +93,7 @@ export default function PlatformAdminTenantsPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
-  const f = (k: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const f = (k: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
 
   const toggleSuspend = async (tenant: Tenant) => {
@@ -89,14 +107,31 @@ export default function PlatformAdminTenantsPage() {
     }
   };
 
+  // Genera una sesion real del primer ADMIN activo del tenant (ver
+  // platformTenant.service.ts, impersonate) y navega ahi -- hard navigation
+  // a proposito, para que el store de auth de negocio arranque de cero con
+  // la cookie nueva en vez de arrastrar estado del panel de plataforma.
+  const impersonate = async (tenant: Tenant) => {
+    setImpersonating(tenant.id);
+    try {
+      const { data } = await api.post(`/platform-admin/tenants/${tenant.id}/impersonate`);
+      const user = data.content ?? data;
+      if (!user?.tenantSlug) throw new Error('sin tenantSlug');
+      window.location.href = `/${user.tenantSlug}/pos`;
+    } catch (err: any) {
+      showToast(err?.response?.data?.message ?? 'No se pudo entrar como este tenant');
+      setImpersonating(null);
+    }
+  };
+
   const createTenant = async () => {
     if (!form.name.trim() || !form.slug.trim() || !form.adminEmail.trim() || !form.adminPassword.trim()) return;
     setSaving(true);
     try {
       await api.post('/platform-admin/tenants', form);
-      showToast('Tenant creado');
+      showToast('Tenant creado gratis, sin pasar por Mercado Pago');
       setCreateOpen(false);
-      setForm(emptyForm);
+      setForm((p) => ({ ...emptyForm, planId: p.planId }));
       load();
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? 'Error al crear tenant');
@@ -159,32 +194,32 @@ export default function PlatformAdminTenantsPage() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Negocio</th><th>Slug</th><th>Vence</th><th>Creado</th><th>Cuentas</th><th>Estado</th><th></th></tr>
+                <tr><th>Negocio</th><th>Slug</th><th>Plan</th><th>Último acceso</th><th>Ventas</th><th>Vence</th><th>Cuentas</th><th>Estado</th><th></th></tr>
               </thead>
               <tbody>
                 {filtered.map((t) => (
                   <tr key={t.id}>
                     <td style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{t.name}</td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text2)' }}>{t.slug}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text2)' }}>{planName(t.planId)}</td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: t.lastLoginAt ? 'var(--text2)' : 'var(--text3)' }}>
+                      {t.lastLoginAt ? fmtDate(t.lastLoginAt) : 'Nunca'}
+                    </td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }} title={t.lastSaleAt ? `Última venta: ${fmtDate(t.lastSaleAt)}` : 'Sin ventas'}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: (t.salesCount ?? 0) > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                        <ShoppingCart size={11} /> {t.salesCount ?? 0}
+                      </span>
+                    </td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>
                       {t.subscriptionStatus === 'TRIAL'
                         ? (t.trialEndsAt ? fmtDate(t.trialEndsAt) : '—')
                         : (t.paidUntil ? fmtDate(t.paidUntil) : '—')}
                     </td>
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtDate(t.createdAt)}</td>
                     <td
                       style={{ fontSize: 12, color: 'var(--text2)' }}
                       title={t.users?.map((u) => `${u.email}${u.lastLoginAt ? ` (último ingreso ${fmtDate(u.lastLoginAt)})` : ' (nunca ingresó)'}`).join('\n')}
                     >
                       {t.users?.length ?? 0}
-                      {(t.users?.length ?? 0) > 0 && (
-                        <span
-                          style={{
-                            display: 'inline-block', width: 6, height: 6, borderRadius: '50%', marginLeft: 6,
-                            background: t.users?.some((u) => u.lastLoginAt) ? 'var(--success)' : 'var(--text3)',
-                          }}
-                        />
-                      )}
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -197,7 +232,17 @@ export default function PlatformAdminTenantsPage() {
                       </div>
                     </td>
                     <td>
-                      <Link href={`/platform-admin/tenants/${t.id}`} className="btn btn-ghost btn-xs"><Eye size={12} /></Link>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <Link href={`/platform-admin/tenants/${t.id}`} className="btn btn-ghost btn-xs" title="Ver detalle"><Eye size={12} /></Link>
+                        <button
+                          onClick={() => impersonate(t)}
+                          disabled={impersonating === t.id}
+                          className="btn btn-ghost btn-xs"
+                          title="Entrar como este tenant"
+                        >
+                          {impersonating === t.id ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <LogIn size={12} />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -231,6 +276,28 @@ export default function PlatformAdminTenantsPage() {
                 <label className="form-label">Contraseña del admin *</label>
                 <input type="password" value={form.adminPassword} onChange={f('adminPassword')} placeholder="••••••••" />
               </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Plan</label>
+                <select value={form.planId} onChange={f('planId')}>
+                  {billingPlans.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}{p.highlighted ? ' (recomendado)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedPlan && (
+                <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, color: 'var(--success)', fontWeight: 700 }}>
+                    <Gift size={13} /> Se crea gratis, sin Mercado Pago
+                  </div>
+                  Sucursales: {selectedPlan.limits.maxBusinessLocations ?? 'ilimitadas'} · Productos: {selectedPlan.limits.maxProducts ?? 'ilimitados'} · Usuarios: {selectedPlan.limits.maxUsers ?? 'ilimitados'}
+                  <br />
+                  Incluye: {(['fidelidad', 'promociones', 'cuentasCorrientes'] as const)
+                    .filter((k) => selectedPlan.features[k])
+                    .map((k) => ({ fidelidad: 'Fidelidad', promociones: 'Promociones', cuentasCorrientes: 'Cuentas corrientes' }[k]))
+                    .join(', ') || 'ninguno de los módulos premium'}
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button onClick={() => setCreateOpen(false)} className="btn btn-secondary btn-sm">Cancelar</button>
@@ -239,7 +306,7 @@ export default function PlatformAdminTenantsPage() {
                 disabled={saving || !form.name.trim() || !form.slug.trim() || !form.adminEmail.trim() || !form.adminPassword.trim()}
                 className="btn btn-primary btn-sm"
               >
-                {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Crear tenant'}
+                {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Crear tenant gratis'}
               </button>
             </div>
           </div>

@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import type { AccountMovement, Client } from '@/types';
-import { clientName, fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { CreditCard, Search, Plus, X, RefreshCcw, Eye } from 'lucide-react';
+import { clientName, fmtDate, fmtMoney, normalizeArray, num, getPlanLockMessage } from '@/lib/helpers';
+import { CreditCard, Search, Plus, X, RefreshCcw, Eye, Lock } from 'lucide-react';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 
 const typeBadge = (t: string) => {
@@ -32,6 +32,7 @@ export default function CuentasCorrientesPage() {
   const [adjForm, setAdjForm] = useState({ amount: '', type: 'POSITIVE' as 'POSITIVE' | 'NEGATIVE', description: '' });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [lockMessage, setLockMessage] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -44,10 +45,15 @@ export default function CuentasCorrientesPage() {
   useEffect(() => { load(); }, []);
 
   const loadMovements = async (clientId: string) => {
+    setLockMessage(null);
     try {
       const { data } = await api.get(`/accounts/clients/${clientId}`);
       setMovements(normalizeArray<AccountMovement>(data?.movements ?? data));
-    } catch { setMovements([]); }
+    } catch (err: any) {
+      const lockMsg = getPlanLockMessage(err);
+      if (lockMsg) setLockMessage(lockMsg);
+      setMovements([]);
+    }
   };
 
   const selectClient = (c: Client) => {
@@ -151,6 +157,13 @@ export default function CuentasCorrientesPage() {
             <div className="card empty-state" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <CreditCard size={36} />
               <p>Seleccioná un cliente para ver su cuenta corriente</p>
+            </div>
+          ) : lockMessage ? (
+            <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 10, padding: 28 }}>
+              <Lock size={28} style={{ color: 'var(--text3)' }} />
+              <div style={{ fontWeight: 700, fontSize: 14 }}>No incluido en tu plan</div>
+              <p style={{ fontSize: 13, color: 'var(--text3)', maxWidth: 360 }}>{lockMessage}</p>
+              <a href="/suscripcion" className="btn btn-primary btn-sm" style={{ marginTop: 6 }}>Ver planes</a>
             </div>
           ) : (
             <>

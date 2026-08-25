@@ -26,6 +26,8 @@ import {
 import { calculatePaymentState } from "./sale.payment";
 import { buildSaleInclude, queueSalePdfGeneration } from "./sale.query";
 import { tenantScope } from "../../utils/tenantScope";
+import { currentTenantId } from "../../context/tenantContext";
+import { planFeatureService } from "../planFeature.service";
 
 export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
   if (!Array.isArray(data.items) || data.items.length === 0) {
@@ -189,6 +191,11 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
 
   if (paymentState.isAccountSale && !clientId) {
     throw new Error("Para vender en cuenta corriente necesitás seleccionar un cliente");
+  }
+
+  if (paymentState.isAccountSale) {
+    const featureCheck = await planFeatureService.checkFeature(currentTenantId(), "cuentasCorrientes");
+    if (!featureCheck.ok) throw new Error(featureCheck.message);
   }
 
   const oldDebt = round2(Number(sale.accountDebtAmount ?? 0));

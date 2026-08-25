@@ -5,10 +5,10 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import type { Product, ProductCategory, Promotion, PromotionType } from '@/types';
-import { fmtMoney, normalizeArray } from '@/lib/helpers';
+import { fmtMoney, normalizeArray, getPlanLockMessage } from '@/lib/helpers';
 import { todayInputAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
-import { Tag, Plus, X, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Tag, Plus, X, Edit2, Trash2, ToggleLeft, ToggleRight, Lock } from 'lucide-react';
 
 const typeLabel: Record<PromotionType, string> = {
   PRODUCT_DISCOUNT: 'Desc. producto', CATEGORY_DISCOUNT: 'Desc. categoría', CART_DISCOUNT: 'Desc. carrito',
@@ -35,16 +35,24 @@ export default function PromocionesPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toast, setToast] = useState('');
+  const [lockMessage, setLockMessage] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setLockMessage(null);
     try {
-      const [promoRes, prodRes, catRes] = await Promise.all([
-        api.get('/promotions', { params: { limit: 100 } }),
+      const promoRes = await api.get('/promotions', { params: { limit: 100 } });
+      setPromos(normalizeArray<Promotion>(promoRes.data));
+    } catch (err: any) {
+      const lockMsg = getPlanLockMessage(err);
+      if (lockMsg) { setLockMessage(lockMsg); setLoading(false); return; }
+      setPromos([]);
+    }
+    try {
+      const [prodRes, catRes] = await Promise.all([
         api.get('/products', { params: { limit: 500, isActive: true } }),
         api.get('/categories'),
       ]);
-      setPromos(normalizeArray<Promotion>(promoRes.data));
       setProducts(normalizeArray<Product>(prodRes.data));
       setCategories(normalizeArray<ProductCategory>(catRes.data).filter((c) => c.isActive));
     } finally { setLoading(false); }
@@ -129,15 +137,25 @@ export default function PromocionesPage() {
       title="Promociones"
       subtitle={`${promos.length} promociones registradas`}
       actions={
-        <button onClick={openCreate} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
-          <Plus size={13} /> Nueva promoción
-        </button>
+        lockMessage ? undefined : (
+          <button onClick={openCreate} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+            <Plus size={13} /> Nueva promoción
+          </button>
+        )
       }
     >
       {toast && (
         <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
       )}
 
+      {lockMessage ? (
+        <div className="card" style={{ padding: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 10 }}>
+          <Lock size={28} style={{ color: 'var(--text3)' }} />
+          <div style={{ fontWeight: 700, fontSize: 14 }}>No incluido en tu plan</div>
+          <p style={{ fontSize: 13, color: 'var(--text3)', maxWidth: 420 }}>{lockMessage}</p>
+          <a href="/suscripcion" className="btn btn-primary btn-sm" style={{ marginTop: 6 }}>Ver planes</a>
+        </div>
+      ) : (
       <div className="card">
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>
@@ -223,6 +241,7 @@ export default function PromocionesPage() {
           />
         )}
       </div>
+      )}
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(false)}>

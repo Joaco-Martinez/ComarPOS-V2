@@ -170,6 +170,34 @@ export const authService = {
     return cleanUser;
   },
 
+  /**
+   * Genera una sesion de tenant valida para un usuario sin pedir password --
+   * usado solo desde platformTenant.service.ts (impersonar un tenant desde
+   * el panel de super-admin). El caller es responsable de verificar que
+   * quien pide esto es realmente un PlatformAdmin autenticado
+   * (platformAuthMiddleware) antes de llamar esto.
+   */
+  async impersonate(targetUserId: string, res: Response) {
+    const user = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      include: { client: true, tenant: { select: { slug: true, name: true } } },
+    });
+
+    if (!user) throw new Error("Usuario no encontrado");
+    if (user.isActive === false) throw new Error("Usuario deshabilitado");
+
+    const token = jwt.sign(
+      { userId: user.id, role: user.role, tenantId: user.tenantId },
+      JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    const cleanUser = sanitizeUser(user);
+    setAuthCookies(res, cleanUser, token);
+
+    return cleanUser;
+  },
+
   async changePassword(
     userId: string,
     currentPasswordValue: string,

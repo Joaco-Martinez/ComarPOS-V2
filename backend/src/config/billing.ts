@@ -15,6 +15,18 @@ export type PlanLimits = {
   maxUsers: number | null;
 };
 
+// Modulos que se pueden prender/apagar por plan (ver
+// middleware/planFeature.ts y services/planFeature.service.ts para el
+// gating real). Distinto de PlanLimits: esto es todo-o-nada por
+// funcionalidad, no un tope numerico.
+export type PlanFeatureKey = "fidelidad" | "promociones" | "cuentasCorrientes";
+
+export const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
+  fidelidad: "Fidelización de clientes",
+  promociones: "Promociones y descuentos automáticos",
+  cuentasCorrientes: "Cuentas corrientes (venta a fiado)",
+};
+
 export type Plan = {
   id: string;
   name: string;
@@ -24,6 +36,7 @@ export type Plan = {
   tagline: string;
   highlighted: boolean;
   limits: PlanLimits;
+  features: Record<PlanFeatureKey, boolean>;
 };
 
 export const LAUNCH_PRICE_ENDS_AT = new Date("2026-09-24T00:00:00-03:00");
@@ -40,6 +53,7 @@ export const PLANS: Plan[] = [
     tagline: "Para arrancar con lo justo y necesario.",
     highlighted: false,
     limits: { maxBusinessLocations: 1, maxProducts: 300, maxUsers: 2 },
+    features: { fidelidad: false, promociones: false, cuentasCorrientes: false },
   },
   {
     id: "profesional",
@@ -50,6 +64,7 @@ export const PLANS: Plan[] = [
     tagline: "El más elegido: todo lo que necesita un negocio en crecimiento.",
     highlighted: true,
     limits: { maxBusinessLocations: 3, maxProducts: null, maxUsers: null },
+    features: { fidelidad: true, promociones: true, cuentasCorrientes: true },
   },
   {
     id: "multisucursal",
@@ -60,11 +75,16 @@ export const PLANS: Plan[] = [
     tagline: "Para cadenas y negocios con varias sucursales.",
     highlighted: false,
     limits: { maxBusinessLocations: null, maxProducts: null, maxUsers: null },
+    features: { fidelidad: true, promociones: true, cuentasCorrientes: true },
   },
 ];
 
 export function getPlan(id?: string | null): Plan {
   return PLANS.find((p) => p.id === id) ?? PLANS.find((p) => p.id === DEFAULT_PLAN_ID)!;
+}
+
+export function hasPlanFeature(plan: Plan, feature: PlanFeatureKey): boolean {
+  return !!plan.features[feature];
 }
 
 export function isLaunchPriceActive(): boolean {
