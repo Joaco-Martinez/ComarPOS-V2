@@ -1,0 +1,43 @@
+{
+  "name": "comarpos-agent",
+  "version": "1.0.0",
+  "description": "Agente de escritorio ComarPOS: imprime tickets en la impresora conectada a esta PC, sin necesitar un PrintBox (ESP32) fisico",
+  "author": "ComarPOS",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.comarpos.agent",
+    "productName": "ComarPOS Agent",
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "ComarPOS-Agent-Setup.exe"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist-installer"
+    }
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  }
+}

@@ -14,8 +14,13 @@ function generatePairingCode() {
 }
 
 export const printboxPairingService = {
-  /** Llamado desde el panel (ADMIN) para dar de alta un PrintBox nuevo. */
-  async createPendingDevice(tenantId: string, name: string) {
+  /**
+   * Llamado desde el panel (ADMIN) para dar de alta un PrintBox nuevo --
+   * `kind` distingue el ESP32 fisico (default) del agente de escritorio
+   * (desktop-agent/), que se empareja con el mismo pairingCode pero no
+   * necesita el setup WiFi/impresora por IP del ESP32.
+   */
+  async createPendingDevice(tenantId: string, name: string, kind: "ESP32" | "DESKTOP_AGENT" = "ESP32") {
     let pairingCode = generatePairingCode();
 
     // pairingCode es @unique: en la practica nunca choca (1 en 900k), pero
@@ -30,6 +35,7 @@ export const printboxPairingService = {
       data: {
         tenantId,
         name,
+        kind,
         pairingCode,
         pairingCodeExpiresAt: new Date(Date.now() + PAIRING_CODE_TTL_MS),
       },

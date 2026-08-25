@@ -28,18 +28,20 @@ export const printboxController = {
     try {
       const tenantId = requireCurrentTenantId();
       const name = String(req.body?.name || "").trim();
+      const kind = req.body?.kind === "DESKTOP_AGENT" ? "DESKTOP_AGENT" : "ESP32";
 
       if (!name) {
         throw new AppError("NAME_REQUIRED", "El PrintBox necesita un nombre (ej. 'Caja 1').", 400);
       }
 
-      const device = await printboxPairingService.createPendingDevice(tenantId, name);
+      const device = await printboxPairingService.createPendingDevice(tenantId, name, kind);
 
       res.status(201).json({
         ok: true,
         device: {
           id: device.id,
           name: device.name,
+          kind: device.kind,
           status: device.status,
           pairingCode: device.pairingCode,
           pairingCodeExpiresAt: device.pairingCodeExpiresAt,
