@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth';
 import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
 import { NAV, ADMIN_NAV, type NavItem } from '@/lib/navConfig';
 import { buildEffectiveNav, effectiveNavToConfig } from '@/lib/quickAccess';
-import { Grid2x2, LogOut, X, ChevronDown, Pencil } from 'lucide-react';
+import { Grid2x2, LogOut, X, ChevronDown, Pencil, Lock } from 'lucide-react';
 import QuickAccessEditor from './QuickAccessEditor';
 
 export default function BottomNav() {
@@ -20,7 +20,7 @@ export default function BottomNav() {
   const [editing, setEditing] = useState(false);
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
 
-  const allItems = [...NAV, ...(user?.role === 'ADMIN' ? ADMIN_NAV : [])].filter((i) => isModuleAllowed(features, i.moduleKey));
+  const allItems = [...NAV, ...(user?.role === 'ADMIN' ? ADMIN_NAV : [])];
   const effective = buildEffectiveNav(allItems, user?.quickAccessConfig);
   const tabs = effective.tabs;
   const restItems = effective.loose;
@@ -34,12 +34,19 @@ export default function BottomNav() {
   const left = tabs.slice(0, midIndex);
   const right = tabs.slice(midIndex);
 
-  const renderTab = ({ href, icon: Icon, label }: NavItem) => {
+  const renderTab = ({ href, icon: Icon, label, moduleKey }: NavItem) => {
     const active = isActive(href);
+    const locked = !isModuleAllowed(features, moduleKey);
     const shortLabel = label.split(' — ')[0].split(' / ')[0];
     return (
-      <Link key={href} href={`/${tenantSlug}${href}`} className={`bottom-nav-item${active ? ' active' : ''}`}>
+      <Link
+        key={href}
+        href={`/${tenantSlug}${href}`}
+        className={`bottom-nav-item${active ? ' active' : ''}`}
+        style={locked ? { opacity: 0.55, position: 'relative' } : undefined}
+      >
         <Icon size={19} />
+        {locked && <Lock size={9} style={{ position: 'absolute', top: 2, right: '30%', color: 'var(--text3)' }} />}
         <span>{shortLabel}</span>
       </Link>
     );
@@ -109,19 +116,24 @@ export default function BottomNav() {
                       </button>
                       {isOpen && (
                         <div className="more-sheet-grid" style={{ marginTop: 6 }}>
-                          {folder.items.map(({ href, icon: Icon, label, color }) => (
-                            <Link
-                              key={href}
-                              href={`/${tenantSlug}${href}`}
-                              className="more-sheet-item"
-                              onClick={() => setMoreOpen(false)}
-                            >
-                              <span className="more-sheet-icon" style={{ background: `${color}1F`, color }}>
-                                <Icon size={18} />
-                              </span>
-                              {label}
-                            </Link>
-                          ))}
+                          {folder.items.map(({ href, icon: Icon, label, color, moduleKey }) => {
+                            const locked = !isModuleAllowed(features, moduleKey);
+                            return (
+                              <Link
+                                key={href}
+                                href={`/${tenantSlug}${href}`}
+                                className="more-sheet-item"
+                                onClick={() => setMoreOpen(false)}
+                                style={locked ? { opacity: 0.55 } : undefined}
+                              >
+                                <span className="more-sheet-icon" style={{ background: `${color}1F`, color, position: 'relative' }}>
+                                  <Icon size={18} />
+                                  {locked && <Lock size={10} style={{ position: 'absolute', bottom: -2, right: -2, color: 'var(--text3)', background: 'var(--surface)', borderRadius: '50%', padding: 1 }} />}
+                                </span>
+                                {label}
+                              </Link>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -129,19 +141,24 @@ export default function BottomNav() {
                 })}
 
                 <div className="more-sheet-grid">
-                  {restItems.map(({ href, icon: Icon, label, color }) => (
-                    <Link
-                      key={href}
-                      href={`/${tenantSlug}${href}`}
-                      className="more-sheet-item"
-                      onClick={() => setMoreOpen(false)}
-                    >
-                      <span className="more-sheet-icon" style={{ background: `${color}1F`, color }}>
-                        <Icon size={18} />
-                      </span>
-                      {label}
-                    </Link>
-                  ))}
+                  {restItems.map(({ href, icon: Icon, label, color, moduleKey }) => {
+                    const locked = !isModuleAllowed(features, moduleKey);
+                    return (
+                      <Link
+                        key={href}
+                        href={`/${tenantSlug}${href}`}
+                        className="more-sheet-item"
+                        onClick={() => setMoreOpen(false)}
+                        style={locked ? { opacity: 0.55 } : undefined}
+                      >
+                        <span className="more-sheet-icon" style={{ background: `${color}1F`, color, position: 'relative' }}>
+                          <Icon size={18} />
+                          {locked && <Lock size={10} style={{ position: 'absolute', bottom: -2, right: -2, color: 'var(--text3)', background: 'var(--surface)', borderRadius: '50%', padding: 1 }} />}
+                        </span>
+                        {label}
+                      </Link>
+                    );
+                  })}
                 </div>
                 <button
                   type="button"

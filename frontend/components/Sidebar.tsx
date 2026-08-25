@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth';
 import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
 import { NAV, ADMIN_NAV, type NavItem } from '@/lib/navConfig';
 import {
-  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight,
+  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, Lock,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'comarpos-sidebar-collapsed';
@@ -26,8 +26,6 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const { features } = usePlanFeaturesStore();
   const navRef = useRef<HTMLElement>(null);
   const tenantSlug = params?.tenant || user?.tenantSlug || '';
-  const visibleNav = NAV.filter((i) => isModuleAllowed(features, i.moduleKey));
-  const visibleAdminNav = ADMIN_NAV.filter((i) => isModuleAllowed(features, i.moduleKey));
 
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -52,15 +50,20 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
   const w = collapsed ? 72 : 236;
 
-  const renderItem = ({ href, icon: Icon, label, color }: NavItem) => {
+  const renderItem = ({ href, icon: Icon, label, color, moduleKey }: NavItem) => {
     const fullHref = `/${tenantSlug}${href}`;
     const active = pathname === fullHref || (href !== '/dashboard' && pathname.startsWith(fullHref));
+    // Bloqueado != oculto: sigue en el menu (y sigue siendo un link normal a
+    // la pantalla real, que ya se encarga de mostrar "no incluido en tu
+    // plan" -- ver AppLayout) para que el negocio vea que existe y lo
+    // tiente a mejorar el plan, en vez de desaparecer sin explicacion.
+    const locked = !isModuleAllowed(features, moduleKey);
     return (
       <Link
         key={href}
         href={fullHref}
         onClick={onClose}
-        title={collapsed ? label : undefined}
+        title={collapsed ? (locked ? `${label} (no incluido en tu plan)` : label) : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -70,7 +73,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           textDecoration: 'none',
           fontSize: 13,
           fontWeight: 600,
-          color: active ? 'var(--text)' : 'var(--text2)',
+          color: locked ? 'var(--text3)' : active ? 'var(--text)' : 'var(--text2)',
+          opacity: locked ? 0.6 : 1,
           background: active ? 'rgba(13,89,231,0.14)' : 'transparent',
           border: `1px solid ${active ? 'rgba(13,89,231,0.25)' : 'transparent'}`,
           transition: 'all 0.12s',
@@ -88,14 +92,18 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           }} />
         )}
 
-        <Icon size={collapsed ? 17 : 15} style={{ color: active ? color : 'var(--text3)', flexShrink: 0 }} />
+        <Icon size={collapsed ? 17 : 15} style={{ color: locked ? 'var(--text3)' : active ? color : 'var(--text3)', flexShrink: 0 }} />
 
         {!collapsed && (
           <>
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {label}
             </span>
-            {active && <ChevronRight size={11} style={{ color: 'var(--text3)', marginLeft: 'auto' }} />}
+            {locked ? (
+              <Lock size={11} style={{ color: 'var(--text3)', marginLeft: 'auto', flexShrink: 0 }} />
+            ) : (
+              active && <ChevronRight size={11} style={{ color: 'var(--text3)', marginLeft: 'auto' }} />
+            )}
           </>
         )}
       </Link>
@@ -175,9 +183,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             Principal
           </div>
         )}
-        {visibleNav.map(renderItem)}
+        {NAV.map(renderItem)}
 
-        {user?.role === 'ADMIN' && visibleAdminNav.length > 0 && (
+        {user?.role === 'ADMIN' && (
           <>
             {!collapsed && (
               <div style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', fontFamily: 'var(--mono)', padding: '14px 10px 4px', marginTop: 4 }}>
@@ -185,7 +193,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               </div>
             )}
             {collapsed && <div style={{ height: 10 }} />}
-            {visibleAdminNav.map(renderItem)}
+            {ADMIN_NAV.map(renderItem)}
           </>
         )}
       </nav>
