@@ -1098,6 +1098,24 @@ model Purchase {
   invoiceNumber      String?
   description        String?
   totalAmount        Float             @default(0)
+  // Datos fiscales del comprobante recibido -- para armar el archivo de
+  // Compras del Libro IVA Digital (RG 4597). Todo nullable/con default:
+  // una compra sin estos datos sigue funcionando igual que antes, solo
+  // queda afuera del export de Libro IVA hasta que se complete.
+  // Snapshot del CUIT del proveedor (aunque este vinculado a un Supplier,
+  // que puede cambiar de CUIT despues) -- ver Supplier.cuit.
+  providerCuit                String?
+  // Codigo de tipo de comprobante AFIP (1 Factura A, 6 B, 11 C, etc; ver
+  // backend/src/services/libroIvaDigital/purchaseInvoiceTypes.ts).
+  invoiceType                 Int?
+  invoicePointOfSale          Int?
+  nonTaxedAmount              Float             @default(0)
+  exemptAmount                Float             @default(0)
+  ivaPerceptionAmount         Float             @default(0)
+  nationalTaxPerceptionAmount Float             @default(0)
+  iibbPerceptionAmount        Float             @default(0)
+  municipalPerceptionAmount   Float             @default(0)
+  internalTaxAmount           Float             @default(0)
   paymentMethod      PaymentMethod?
   to                 Location          @default(DEPOSITO)
   // Reemplaza `to` (enum Location fijo) - ver doc de migracion
@@ -1139,6 +1157,10 @@ model PurchaseItem {
   quantityKg          Float?
   unitCost            Float
   subtotal            Float
+  // Alicuota de IVA de este item -- se usa para armar
+  // LIBRO_IVA_DIGITAL_COMPRAS_ALICUOTAS agrupando por tasa (mismo criterio
+  // que SaleItem.ivaRate del lado de ventas).
+  ivaRate             Float    @default(21)
   productNameSnapshot String?
   productSkuSnapshot  String?
   createdAt           DateTime @default(now())

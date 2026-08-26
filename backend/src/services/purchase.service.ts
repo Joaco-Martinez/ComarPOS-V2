@@ -19,6 +19,7 @@ type PurchaseItemInput = {
   quantity?: number | string;
   quantityKg?: number | string;
   unitCost?: number | string;
+  ivaRate?: number | string;
 };
 
 type CreatePurchaseInput = {
@@ -31,7 +32,24 @@ type CreatePurchaseInput = {
   supplierId?: string;
   purchaseOrderId?: string;
   items: PurchaseItemInput[];
+  // Datos fiscales del comprobante recibido -- ver Purchase en schema.prisma
+  // y libroIvaDigital/compras.service.ts (para que sirven).
+  providerCuit?: string;
+  invoiceType?: number | string;
+  invoicePointOfSale?: number | string;
+  nonTaxedAmount?: number | string;
+  exemptAmount?: number | string;
+  ivaPerceptionAmount?: number | string;
+  nationalTaxPerceptionAmount?: number | string;
+  iibbPerceptionAmount?: number | string;
+  municipalPerceptionAmount?: number | string;
+  internalTaxAmount?: number | string;
 };
+
+function toMoneyOrZero(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? roundMoney(n) : 0;
+}
 
 function toNumber(value: unknown) {
   const n = Number(value);
@@ -139,6 +157,16 @@ export const purchaseService = {
           tenantId: currentTenantId(),
           supplierId: data.supplierId ?? null,
           purchaseOrderId: data.purchaseOrderId ?? null,
+          providerCuit: data.providerCuit?.trim() || null,
+          invoiceType: data.invoiceType !== undefined && data.invoiceType !== "" ? Number(data.invoiceType) : null,
+          invoicePointOfSale: data.invoicePointOfSale !== undefined && data.invoicePointOfSale !== "" ? Number(data.invoicePointOfSale) : null,
+          nonTaxedAmount: toMoneyOrZero(data.nonTaxedAmount),
+          exemptAmount: toMoneyOrZero(data.exemptAmount),
+          ivaPerceptionAmount: toMoneyOrZero(data.ivaPerceptionAmount),
+          nationalTaxPerceptionAmount: toMoneyOrZero(data.nationalTaxPerceptionAmount),
+          iibbPerceptionAmount: toMoneyOrZero(data.iibbPerceptionAmount),
+          municipalPerceptionAmount: toMoneyOrZero(data.municipalPerceptionAmount),
+          internalTaxAmount: toMoneyOrZero(data.internalTaxAmount),
         },
       });
 
@@ -159,6 +187,15 @@ export const purchaseService = {
           item.unitCost !== undefined && item.unitCost !== null && item.unitCost !== ""
             ? item.unitCost
             : (product as any).purchasePrice ?? 0;
+
+        const rawIvaRate =
+          item.ivaRate !== undefined && item.ivaRate !== null && item.ivaRate !== ""
+            ? item.ivaRate
+            : (product as any).ivaRate ?? 21;
+        const ivaRate = toNumber(rawIvaRate);
+        if (!Number.isFinite(ivaRate) || ivaRate < 0) {
+          throw new Error(`Alícuota de IVA inválida para "${product.name}"`);
+        }
 
         const unitCost = toNumber(rawUnitCost);
         if (!Number.isFinite(unitCost) || unitCost < 0) {
@@ -237,6 +274,7 @@ export const purchaseService = {
             quantityKg,
             unitCost,
             subtotal,
+            ivaRate,
             productNameSnapshot: product.name,
             productSkuSnapshot: product.sku,
           },

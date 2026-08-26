@@ -8,6 +8,9 @@ router.use(authMiddleware);
 router.use(requirePlanFeature("compras"));
 
 router.get("/", purchaseController.getAll);
+router.get("/libro-iva-digital/compras", requireRole("ADMIN"), purchaseController.getLibroIvaDigitalCompras);
+router.get("/libro-iva-digital/compras-cbte.csv", requireRole("ADMIN"), purchaseController.downloadLibroIvaDigitalComprasCbte);
+router.get("/libro-iva-digital/compras-alicuotas.csv", requireRole("ADMIN"), purchaseController.downloadLibroIvaDigitalComprasAlicuotas);
 router.get("/:id", purchaseController.getById);
 
 router.post("/", requireRole("ADMIN"), purchaseController.create);

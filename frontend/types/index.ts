@@ -313,12 +313,24 @@ export interface Purchase {
   purchaseOrderId?: string | null;
   date: string;
   totalAmount: number;
+  invoiceNumber?: string | null;
   description?: string | null;
   businessLocationId?: string | null;
   businessLocation?: BusinessLocation | null;
   items?: PurchaseItem[];
   createdAt: string;
   updatedAt: string;
+  // Datos fiscales del comprobante recibido, para el Libro IVA Digital.
+  providerCuit?: string | null;
+  invoiceType?: number | null;
+  invoicePointOfSale?: number | null;
+  nonTaxedAmount?: number;
+  exemptAmount?: number;
+  ivaPerceptionAmount?: number;
+  nationalTaxPerceptionAmount?: number;
+  iibbPerceptionAmount?: number;
+  municipalPerceptionAmount?: number;
+  internalTaxAmount?: number;
 }
 
 export interface PurchaseItem {
@@ -330,6 +342,7 @@ export interface PurchaseItem {
   quantityKg?: number | null;
   unitCost: number;
   subtotal: number;
+  ivaRate?: number;
 }
 
 export interface Supplier {
