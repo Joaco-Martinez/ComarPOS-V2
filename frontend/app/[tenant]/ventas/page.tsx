@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Product, Sale, SalePayment } from '@/types';
 import { clientName, fmtDate, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
 import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
@@ -62,7 +63,6 @@ export default function VentasPage() {
   // Acciones de venta
   const [actionsSale, setActionsSale] = useState<Sale | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
-  const [toast, setToast] = useState('');
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [quotingId, setQuotingId] = useState<string | null>(null);
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
@@ -87,7 +87,6 @@ export default function VentasPage() {
   const [ncSubmitting, setNcSubmitting] = useState(false);
   const [downloadingNCId, setDownloadingNCId] = useState<string | null>(null);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const canEditItems = (s: Sale) => s.status === 'PENDING' && !s.invoiceAfip?.cae;
   const isInvoiced = (s: Sale) => !!s.invoiceAfip?.cae;
@@ -104,10 +103,10 @@ export default function VentasPage() {
       setUpdatingStatusId(s.id);
       try {
         await api.patch(`/sales/${s.id}/status`, { status: next });
-        showToast(next === 'CANCELLED' ? 'Venta cancelada' : 'Venta confirmada');
+        toast.success(next === 'CANCELLED' ? 'Venta cancelada' : 'Venta confirmada');
         fetchSales(page);
       } catch (err: any) {
-        showToast(err?.response?.data?.message ?? 'No se pudo actualizar la venta');
+        toast.error(err?.response?.data?.message ?? 'No se pudo actualizar la venta');
       } finally {
         setUpdatingStatusId(null);
       }
@@ -129,12 +128,12 @@ export default function VentasPage() {
     setPrintingId(s.id);
     try {
       await api.post(`/tickets/sale/${s.id}/print`);
-      showToast('Ticket enviado a impresión');
+      toast.success('Ticket enviado a impresión');
     } catch (err: any) {
       // El backend devuelve el mensaje en .error, no en .message (ver
       // ticket.controller.ts) -- sin este fallback nunca se veia el
       // mensaje real (ej. "no tenés ninguna impresora conectada").
-      showToast(err?.response?.data?.error ?? err?.response?.data?.message ?? 'No se pudo imprimir el ticket');
+      toast.error(err?.response?.data?.error ?? err?.response?.data?.message ?? 'No se pudo imprimir el ticket');
     } finally {
       setPrintingId(null);
     }
@@ -151,7 +150,7 @@ export default function VentasPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      showToast('No se pudo generar la cotización');
+      toast.error('No se pudo generar la cotización');
     } finally {
       setQuotingId(null);
     }
@@ -172,7 +171,7 @@ export default function VentasPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      showToast('No se pudo descargar la factura');
+      toast.error('No se pudo descargar la factura');
     } finally {
       setDownloadingInvoiceId(null);
     }
@@ -192,16 +191,16 @@ export default function VentasPage() {
     try {
       const payments = editPayments.filter((p) => num(p.amount) > 0);
       if (!payments.length) {
-        showToast('Ingresá al menos un monto mayor a 0');
+        toast.error('Ingresá al menos un monto mayor a 0');
         setSavingPayments(false);
         return;
       }
       await api.patch(`/sales/${paymentsSale.id}/payments`, { payments, setAsPrimary: true });
-      showToast('Pagos actualizados');
+      toast.success('Pagos actualizados');
       setPaymentsSale(null);
       fetchSales(page);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'No se pudieron actualizar los pagos');
+      toast.error(err?.response?.data?.message ?? 'No se pudieron actualizar los pagos');
     } finally {
       setSavingPayments(false);
     }
@@ -220,7 +219,7 @@ export default function VentasPage() {
 
   const openItems = (s: Sale) => {
     if (!canEditItems(s)) {
-      showToast('Solo se puede editar una venta pendiente y sin factura');
+      toast.error('Solo se puede editar una venta pendiente y sin factura');
       return;
     }
     setItemsSale(s);
@@ -257,7 +256,7 @@ export default function VentasPage() {
 
   const saveItems = async () => {
     if (!itemsSale) return;
-    if (!editItems.length) { showToast('La venta debe tener al menos un producto'); return; }
+    if (!editItems.length) { toast.error('La venta debe tener al menos un producto'); return; }
     setSavingItems(true);
     try {
       await api.patch(`/sales/${itemsSale.id}/items`, {
@@ -270,11 +269,11 @@ export default function VentasPage() {
         deliveryMethod: itemsSale.deliveryMethod ?? 'PICKUP',
         deliveryStatus: itemsSale.deliveryStatus ?? 'NONE',
       });
-      showToast('Productos actualizados');
+      toast.success('Productos actualizados');
       setItemsSale(null);
       fetchSales(page);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'No se pudieron actualizar los productos');
+      toast.error(err?.response?.data?.message ?? 'No se pudieron actualizar los productos');
     } finally {
       setSavingItems(false);
     }
@@ -291,11 +290,11 @@ export default function VentasPage() {
         tipoComprobante: invoiceModal.invoiceType,
         receiverDoc: invoiceModal.dni,
       });
-      showToast('Factura emitida correctamente');
+      toast.success('Factura emitida correctamente');
       setInvoiceModal(null);
       fetchSales(page);
     } catch (err: any) {
-      showToast(`Error AFIP: ${err?.response?.data?.message ?? 'desconocido'}`);
+      toast.error(`Error AFIP: ${err?.response?.data?.message ?? 'desconocido'}`);
     } finally {
       setInvoicing(false);
     }
@@ -313,14 +312,14 @@ export default function VentasPage() {
       });
       const content = data.content ?? data;
       if (content?.resultado === 'A' && content?.cae) {
-        showToast('Nota de crédito aprobada por AFIP');
+        toast.success('Nota de crédito aprobada por AFIP');
         setNcModal(null);
         fetchSales(page);
       } else {
-        showToast('AFIP no aprobó la nota de crédito');
+        toast.error('AFIP no aprobó la nota de crédito');
       }
     } catch (err: any) {
-      showToast(err?.response?.data?.error ?? err?.response?.data?.message ?? 'No se pudo generar la nota de crédito');
+      toast.error(err?.response?.data?.error ?? err?.response?.data?.message ?? 'No se pudo generar la nota de crédito');
     } finally {
       setNcSubmitting(false);
     }
@@ -337,7 +336,7 @@ export default function VentasPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      showToast('No se pudo descargar la nota de crédito');
+      toast.error('No se pudo descargar la nota de crédito');
     } finally {
       setDownloadingNCId(null);
     }
@@ -392,10 +391,6 @@ export default function VentasPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       {/* Filters */}
       <div style={{ marginBottom: 16 }}>
         <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Buscar..." collapsible>

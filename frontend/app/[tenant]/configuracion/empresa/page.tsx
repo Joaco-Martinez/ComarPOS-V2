@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ImageCropModal from '@/components/ImageCropModal';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
 import { Building2, UploadCloud, Trash2, ImageOff, Save } from 'lucide-react';
 
@@ -43,7 +44,6 @@ export default function EmpresaPage() {
   const [progress, setProgress] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [toast, setToast] = useState('');
   const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -51,7 +51,6 @@ export default function EmpresaPage() {
   const [infoLoading, setInfoLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const load = async () => {
     if (!tenantId) { setLoading(false); return; }
@@ -94,9 +93,9 @@ export default function EmpresaPage() {
     setSaving(true);
     try {
       await api.patch('/tenant/me', info);
-      showToast('Datos guardados correctamente');
+      toast.success('Datos guardados correctamente');
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar los datos');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar los datos');
     } finally {
       setSaving(false);
     }
@@ -104,11 +103,11 @@ export default function EmpresaPage() {
 
   const validateFile = (file: File) => {
     if (!ALLOWED_TYPES.includes(file.type)) {
-      showToast('Formato inválido. Usá JPG, PNG o WEBP.');
+      toast.error('Formato inválido. Usá JPG, PNG o WEBP.');
       return false;
     }
     if (file.size > MAX_SIZE) {
-      showToast('La imagen no puede superar los 5MB.');
+      toast.error('La imagen no puede superar los 5MB.');
       return false;
     }
     return true;
@@ -128,9 +127,9 @@ export default function EmpresaPage() {
         },
       });
       setLogoUrl(data.logoUrl ?? null);
-      showToast('Logo actualizado correctamente');
+      toast.success('Logo actualizado correctamente');
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al subir el logo');
+      toast.error(err?.response?.data?.message ?? 'Error al subir el logo');
     } finally {
       setUploading(false);
       setProgress(0);
@@ -143,9 +142,9 @@ export default function EmpresaPage() {
     try {
       await api.delete(`/uploads/logo/${tenantId}`);
       setLogoUrl(null);
-      showToast('Logo eliminado');
+      toast.success('Logo eliminado');
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al eliminar el logo');
+      toast.error(err?.response?.data?.message ?? 'Error al eliminar el logo');
     } finally {
       setDeleting(false);
     }
@@ -170,10 +169,6 @@ export default function EmpresaPage() {
 
   return (
     <AppLayout title="Datos de la Empresa" subtitle="Razón social, CUIT, logo y marca para documentos">
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div className="card" style={{ padding: 22, maxWidth: 560, marginBottom: 20 }}>
         <h2 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>Datos del negocio</h2>
         <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 18 }}>

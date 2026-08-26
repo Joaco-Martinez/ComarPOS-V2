@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { User } from '@/types';
 import { fmtDate, normalizeArray } from '@/lib/helpers';
 import { UserCog, Plus, Edit2, X, ShieldCheck } from 'lucide-react';
@@ -23,7 +24,6 @@ export default function UsuariosPage() {
   const [editing, setEditing] = useState<User | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -35,7 +35,6 @@ export default function UsuariosPage() {
 
   useEffect(() => { load(); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const f = (k: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -55,15 +54,15 @@ export default function UsuariosPage() {
       if (form.password) body.password = form.password;
       if (modal === 'create') {
         await api.post('/users', { ...body, password: form.password });
-        showToast('Usuario creado');
+        toast.success('Usuario creado');
       } else if (editing) {
         await api.put(`/users/${editing.id}`, body);
-        showToast('Usuario actualizado');
+        toast.success('Usuario actualizado');
       }
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally { setSaving(false); }
   };
 
@@ -71,7 +70,7 @@ export default function UsuariosPage() {
     try {
       await api.put(`/users/${u.id}`, { isActive: !u.isActive });
       load();
-    } catch { showToast('Error al cambiar estado'); }
+    } catch { toast.error('Error al cambiar estado'); }
   };
 
   const filtered = search.trim()
@@ -88,10 +87,6 @@ export default function UsuariosPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div style={{ marginBottom: 14 }}>
         <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Buscar usuario..." />
       </div>

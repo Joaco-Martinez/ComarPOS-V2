@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Client, LoyaltyTransaction } from '@/types';
 import { clientName, fmtMoney, normalizeArray, num, getPlanLockMessage } from '@/lib/helpers';
 import { formatDateAR } from '@/lib/dateAR';
@@ -22,7 +23,6 @@ export default function FidelidadPage() {
   const [modal, setModal] = useState<'redeem' | 'adjust' | null>(null);
   const [form, setForm] = useState({ points: '', description: '' });
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
   const [lockMessage, setLockMessage] = useState<string | null>(null);
 
   const load = async () => {
@@ -52,7 +52,6 @@ export default function FidelidadPage() {
     loadTransactions(c.id);
   };
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const save = async () => {
     if (!selectedClient || !form.points) return;
@@ -60,17 +59,17 @@ export default function FidelidadPage() {
     try {
       if (modal === 'redeem') {
         await api.post(`/loyalty/${selectedClient.id}/redeem`, { points: Number(form.points) });
-        showToast('Puntos canjeados');
+        toast.success('Puntos canjeados');
       } else {
         await api.post(`/loyalty/${selectedClient.id}/adjust`, { points: Number(form.points), reason: form.description || 'Ajuste manual' });
-        showToast('Puntos ajustados');
+        toast.success('Puntos ajustados');
       }
       setModal(null);
       setForm({ points: '', description: '' });
       load();
       loadTransactions(selectedClient.id);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     } finally { setSaving(false); }
   };
 
@@ -83,10 +82,6 @@ export default function FidelidadPage() {
 
   return (
     <AppLayout title="Fidelidad" subtitle="Programa de puntos y recompensas">
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Clientes en programa', value: String(clients.length), color: 'var(--accent)' },

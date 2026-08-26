@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Tenant, TenantSubscriptionStatus, BillingPlan } from '@/types';
 import { fmtDate, daysRemaining, normalizeArray, fmtMoney } from '@/lib/helpers';
 import { ArrowLeft, History, Save, Users, LogIn, Activity } from 'lucide-react';
@@ -26,7 +27,6 @@ export default function PlatformAdminTenantDetailPage() {
   const [trialEndsAt, setTrialEndsAt] = useState('');
   const [planId, setPlanId] = useState('');
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [impersonating, setImpersonating] = useState(false);
 
@@ -55,7 +55,6 @@ export default function PlatformAdminTenantDetailPage() {
 
   useEffect(() => { if (id) load(); loadBillingPlans(); }, [id]);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const impersonate = async () => {
     setImpersonating(true);
@@ -65,7 +64,7 @@ export default function PlatformAdminTenantDetailPage() {
       if (!user?.tenantSlug) throw new Error('sin tenantSlug');
       window.location.href = `/${user.tenantSlug}/pos`;
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'No se pudo entrar como este tenant');
+      toast.error(err?.response?.data?.message ?? 'No se pudo entrar como este tenant');
       setImpersonating(false);
     }
   };
@@ -80,10 +79,10 @@ export default function PlatformAdminTenantDetailPage() {
         ...(paidUntil ? { paidUntil } : {}),
         ...(trialEndsAt ? { trialEndsAt } : {}),
       });
-      showToast('Estado actualizado');
+      toast.success('Estado actualizado');
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -113,10 +112,6 @@ export default function PlatformAdminTenantDetailPage() {
         </div>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)' }}>{toast}</div>
-      )}
-
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
           <Activity size={15} style={{ color: 'var(--text3)' }} />

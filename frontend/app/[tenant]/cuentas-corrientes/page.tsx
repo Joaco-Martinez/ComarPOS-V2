@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ClientFormModal from '@/components/ClientFormModal';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { AccountMovement, Client } from '@/types';
 import { clientName, fmtDate, fmtMoney, normalizeArray, num, getPlanLockMessage } from '@/lib/helpers';
 import { CreditCard, Search, Plus, X, RefreshCcw, Eye, Lock } from 'lucide-react';
@@ -33,7 +34,6 @@ export default function CuentasCorrientesPage() {
   const [form, setForm] = useState({ amount: '', type: 'PAYMENT' as any, paymentMethod: 'EFECTIVO', description: '' });
   const [adjForm, setAdjForm] = useState({ amount: '', type: 'POSITIVE' as 'POSITIVE' | 'NEGATIVE', description: '' });
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
   const [lockMessage, setLockMessage] = useState<string | null>(null);
 
   const load = async () => {
@@ -63,7 +63,6 @@ export default function CuentasCorrientesPage() {
     loadMovements(c.id);
   };
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const savePayment = async () => {
     if (!selectedClient || !form.amount) return;
@@ -74,13 +73,13 @@ export default function CuentasCorrientesPage() {
         method: form.paymentMethod,
         description: form.description || undefined,
       });
-      showToast('Pago registrado');
+      toast.success('Pago registrado');
       setModal(null);
       setForm({ amount: '', type: 'PAYMENT', paymentMethod: 'EFECTIVO', description: '' });
       load();
       loadMovements(selectedClient.id);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     } finally { setSaving(false); }
   };
 
@@ -93,13 +92,13 @@ export default function CuentasCorrientesPage() {
         type: adjForm.type,
         description: adjForm.description || undefined,
       });
-      showToast('Ajuste registrado');
+      toast.success('Ajuste registrado');
       setModal(null);
       setAdjForm({ amount: '', type: 'POSITIVE', description: '' });
       load();
       loadMovements(selectedClient.id);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     } finally { setSaving(false); }
   };
 
@@ -113,10 +112,6 @@ export default function CuentasCorrientesPage() {
 
   return (
     <AppLayout title="Cuentas Corrientes" subtitle="Gestión de crédito y deuda de clientes">
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div className="grid-responsive cta-cte-layout" style={{ ['--gtc' as any]: '280px 1fr', gap: 16 }}>
         {/* Clients list */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
@@ -342,7 +337,7 @@ export default function CuentasCorrientesPage() {
           }
           setClientSearch('');
           setNewClientQuery(null);
-          showToast('Cliente creado');
+          toast.success('Cliente creado');
         }}
       />
     </AppLayout>

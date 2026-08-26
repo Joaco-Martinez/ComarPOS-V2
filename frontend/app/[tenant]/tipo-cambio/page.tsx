@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import { DollarSign, ArrowLeftRight, RefreshCw, Plus, X, Clock, Trash2 } from 'lucide-react';
@@ -29,7 +30,6 @@ export default function TipoCambioPage() {
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
-  const [toast, setToast] = useState('');
 
   // Converter state
   const [convAmount, setConvAmount] = useState('');
@@ -52,28 +52,27 @@ export default function TipoCambioPage() {
 
   useEffect(() => { load(); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const save = async () => {
     if (!form.rate) return;
     setSaving(true);
     try {
       await api.post('/exchange-rates', { currency: form.currency, rate: Number(form.rate), source: form.notes || undefined });
-      showToast('Tipo de cambio registrado');
+      toast.success('Tipo de cambio registrado');
       setModal(false);
       setForm(emptyForm());
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally { setSaving(false); }
   };
 
   const del = async (id: string) => {
     try {
       await api.delete(`/exchange-rates/${id}`);
-      showToast('Eliminado');
+      toast.success('Eliminado');
       load();
-    } catch { showToast('Error al eliminar'); }
+    } catch { toast.error('Error al eliminar'); }
   };
 
   const askDel = (id: string) => setConfirmState({
@@ -89,7 +88,7 @@ export default function TipoCambioPage() {
       const { data } = await api.get('/exchange-rates/convert', { params: { amount: Number(convAmount), from: convFrom, to: convTo } });
       setConvResult(num(data?.result ?? data));
     } catch {
-      showToast('Error al convertir');
+      toast.error('Error al convertir');
     } finally { setConverting(false); }
   };
 
@@ -105,10 +104,6 @@ export default function TipoCambioPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 16, marginBottom: 20 }}>
         {/* Current rate card */}
         <div className="card" style={{ padding: '18px 20px' }}>

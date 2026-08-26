@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { FinanceEntry } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
@@ -38,7 +39,6 @@ export default function FinanzasPage() {
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ type: 'INGRESO' as 'INGRESO' | 'EGRESO', amount: '', category: 'VENTA', description: '', paymentMethod: 'EFECTIVO', date: todayInputAR() });
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -50,28 +50,27 @@ export default function FinanzasPage() {
 
   useEffect(() => { load(); }, [from, to, typeFilter]);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const save = async () => {
     if (!form.amount || !form.category) return;
     setSaving(true);
     try {
       await api.post('/finance', { ...form, amount: Number(form.amount) });
-      showToast(`${form.type === 'INGRESO' ? 'Ingreso' : 'Egreso'} registrado`);
+      toast.success(`${form.type === 'INGRESO' ? 'Ingreso' : 'Egreso'} registrado`);
       setModal(false);
       setForm({ type: 'INGRESO', amount: '', category: 'VENTA', description: '', paymentMethod: 'EFECTIVO', date: todayInputAR() });
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally { setSaving(false); }
   };
 
   const del = async (id: string) => {
     try {
       await api.delete(`/finance/${id}`);
-      showToast('Eliminado');
+      toast.success('Eliminado');
       load();
-    } catch { showToast('Error al eliminar'); }
+    } catch { toast.error('Error al eliminar'); }
   };
 
   const ingresos = entries.filter((e) => e.type === 'INGRESO').reduce((a, e) => a + num(e.amount), 0);
@@ -88,10 +87,6 @@ export default function FinanzasPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: 12, marginBottom: 20 }}>
         {[

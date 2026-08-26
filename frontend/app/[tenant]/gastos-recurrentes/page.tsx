@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import { fmtDate, fmtMoney, normalizeArray } from '@/lib/helpers';
 import { todayInputAR, toDateInputAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -69,7 +70,6 @@ export default function GastosRecurrentesPage() {
   const [saving, setSaving] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [processing, setProcessing] = useState(false);
-  const [toast, setToast] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -81,7 +81,6 @@ export default function GastosRecurrentesPage() {
 
   useEffect(() => { load(); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const openCreate = () => { setEditing(null); setForm(emptyForm()); setModal('create'); };
   const openEdit = (e: RecurringExpense) => {
@@ -103,24 +102,24 @@ export default function GastosRecurrentesPage() {
       };
       if (modal === 'edit' && editing) {
         await api.put(`/recurring-expenses/${editing.id}`, payload);
-        showToast('Gasto actualizado');
+        toast.success('Gasto actualizado');
       } else {
         await api.post('/recurring-expenses', payload);
-        showToast('Gasto creado');
+        toast.success('Gasto creado');
       }
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally { setSaving(false); }
   };
 
   const del = async (id: string) => {
     try {
       await api.delete(`/recurring-expenses/${id}`);
-      showToast('Eliminado');
+      toast.success('Eliminado');
       load();
-    } catch { showToast('Error al eliminar'); }
+    } catch { toast.error('Error al eliminar'); }
   };
 
   const askDel = (id: string) => setConfirmState({
@@ -134,10 +133,10 @@ export default function GastosRecurrentesPage() {
     try {
       const { data } = await api.post('/recurring-expenses/process');
       const count = data?.processed ?? 0;
-      showToast(`${count} gasto(s) procesado(s)`);
+      toast.success(`${count} gasto(s) procesado(s)`);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al procesar');
+      toast.error(err?.response?.data?.message ?? 'Error al procesar');
     } finally { setProcessing(false); }
   };
 
@@ -161,10 +160,6 @@ export default function GastosRecurrentesPage() {
         </div>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div className="card">
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>

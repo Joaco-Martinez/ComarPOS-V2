@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Sale } from '@/types';
 import { clientName, fmtDate, fmtMoney, normalizeArray } from '@/lib/helpers';
 import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
@@ -31,7 +32,6 @@ export default function FacturacionPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [invoicing, setInvoicing] = useState<string | null>(null);
   const [modal, setModal] = useState<{ sale: Sale; dni: string; invoiceType: number } | null>(null);
-  const [toast, setToast] = useState('');
   const [invoiceTypes, setInvoiceTypes] = useState<number[]>([11]);
 
   const load = async () => {
@@ -50,16 +50,14 @@ export default function FacturacionPage() {
 
   useEffect(() => { load(); }, [from, to]);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500); };
-
   const retryInvoice = async (sale: Sale) => {
     setInvoicing(sale.id);
     try {
       await api.post('/afip/facturar', { saleId: sale.id });
-      showToast('Factura emitida correctamente');
+      toast.success('Factura emitida correctamente');
       load();
     } catch (err: any) {
-      showToast(`Error AFIP: ${err?.response?.data?.message ?? 'desconocido'}`);
+      toast.error(`Error AFIP: ${err?.response?.data?.message ?? 'desconocido'}`);
     } finally { setInvoicing(null); }
   };
 
@@ -68,11 +66,11 @@ export default function FacturacionPage() {
     setInvoicing(modal.sale.id);
     try {
       await api.post('/afip/facturar', { saleId: modal.sale.id, tipoComprobante: modal.invoiceType, receiverDoc: modal.dni });
-      showToast('Factura emitida correctamente');
+      toast.success('Factura emitida correctamente');
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(`Error AFIP: ${err?.response?.data?.message ?? 'desconocido'}`);
+      toast.error(`Error AFIP: ${err?.response?.data?.message ?? 'desconocido'}`);
     } finally { setInvoicing(null); }
   };
 
@@ -97,10 +95,6 @@ export default function FacturacionPage() {
         <button onClick={load} className="btn btn-ghost btn-sm"><RefreshCcw size={13} /></button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Con CAE', value: withCae, color: 'var(--success)' },

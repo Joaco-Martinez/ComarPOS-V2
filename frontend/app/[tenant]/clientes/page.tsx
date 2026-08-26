@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Client, ClientCategory, DocumentType } from '@/types';
 import { fmtMoney, normalizeArray, CLIENT_IVA_CONDITIONS } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -34,7 +35,6 @@ export default function ClientesPage() {
   const [selected, setSelected] = useState<Client | null>(null);
   const [form, setForm] = useState<Form>(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -67,7 +67,6 @@ export default function ClientesPage() {
   const f = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const openCreate = () => { setForm(emptyForm); setSelected(null); setModal('create'); };
   const openEdit = (c: Client) => {
@@ -96,15 +95,15 @@ export default function ClientesPage() {
       };
       if (modal === 'create') {
         await api.post('/clients', body);
-        showToast('Cliente creado correctamente');
+        toast.success('Cliente creado correctamente');
       } else if (selected) {
         await api.put(`/clients/${selected.id}`, body);
-        showToast('Cliente actualizado');
+        toast.success('Cliente actualizado');
       }
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -120,12 +119,6 @@ export default function ClientesPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>
-          {toast}
-        </div>
-      )}
-
       {/* Filters */}
       <div style={{ marginBottom: 16 }}>
         <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Nombre, DNI o email...">

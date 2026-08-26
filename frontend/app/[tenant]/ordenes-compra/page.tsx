@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { todayInputAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -35,7 +36,6 @@ export default function OrdenesCompraPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [modal, setModal] = useState<'create' | 'detail' | null>(null);
   const [selected, setSelected] = useState<any | null>(null);
-  const [toast, setToast] = useState('');
 
   // Create form
   const [form, setForm] = useState({ supplierId: '', expectedDate: '', notes: '' });
@@ -46,7 +46,6 @@ export default function OrdenesCompraPage() {
   // Receive form
   const [receiveItems, setReceiveItems] = useState<Record<string, string>>({});
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const load = async () => {
     setLoading(true);
@@ -74,7 +73,7 @@ export default function OrdenesCompraPage() {
       (data.items ?? []).forEach((it: any) => { initial[it.productId] = ''; });
       setReceiveItems(initial);
       setModal('detail');
-    } catch { showToast('Error al cargar detalle'); }
+    } catch { toast.error('Error al cargar detalle'); }
   };
 
   const addItem = () => setItems((p) => [...p, { productId: '', quantityOrdered: '1', unitCost: '' }]);
@@ -96,24 +95,24 @@ export default function OrdenesCompraPage() {
           unitCost: it.unitCost ? Number(it.unitCost) : undefined,
         })),
       });
-      showToast('Orden creada');
+      toast.success('Orden creada');
       setModal(null);
       setForm({ supplierId: '', expectedDate: '', notes: '' });
       setItems([]);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al crear');
+      toast.error(err?.response?.data?.message ?? 'Error al crear');
     } finally { setSaving(false); }
   };
 
   const changeStatus = async (id: string, status: Status) => {
     try {
       await api.patch(`/purchase-orders/${id}/status`, { status });
-      showToast(`Estado actualizado a ${statusLabel[status]}`);
+      toast.success(`Estado actualizado a ${statusLabel[status]}`);
       load();
       if (selected?.id === id) setSelected((s: any) => s ? { ...s, status } : s);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     }
   };
 
@@ -126,20 +125,20 @@ export default function OrdenesCompraPage() {
     setSaving(true);
     try {
       await api.post(`/purchase-orders/${selected.id}/receive`, { items: payload });
-      showToast('Recepción registrada');
+      toast.success('Recepción registrada');
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     } finally { setSaving(false); }
   };
 
   const del = async (id: string) => {
     try {
       await api.delete(`/purchase-orders/${id}`);
-      showToast('Orden eliminada');
+      toast.success('Orden eliminada');
       load();
-    } catch { showToast('Error al eliminar'); }
+    } catch { toast.error('Error al eliminar'); }
   };
 
   const askDel = (id: string) => setConfirmState({
@@ -164,10 +163,6 @@ export default function OrdenesCompraPage() {
         </div>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)' }}>{toast}</div>
-      )}
-
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 13 }}>

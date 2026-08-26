@@ -6,6 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { BusinessLocation } from '@/types';
 import { fmtDate, normalizeArray, num } from '@/lib/helpers';
 import { ClipboardCheck, BarChart2, Play, CheckCircle, XCircle, ArrowLeft, RefreshCcw, ScanBarcode, X } from 'lucide-react';
@@ -31,7 +32,6 @@ export default function ConteoStockPage() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [starting, setStarting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
   const [dirtyItems, setDirtyItems] = useState<Record<string, string>>({});
   const [scannerOpen, setScannerOpen] = useState(false);
   const [locations, setLocations] = useState<BusinessLocation[]>([]);
@@ -40,14 +40,13 @@ export default function ConteoStockPage() {
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const handleScannedSku = (rawSku: string) => {
     const sku = rawSku.trim().toLowerCase();
     const items: any[] = selected?.items ?? [];
     const found = items.find((it) => it.product?.sku && String(it.product.sku).trim().toLowerCase() === sku);
     if (!found) {
-      showToast(`No encontré ningún producto con SKU: ${rawSku}`);
+      toast.error(`No encontré ningún producto con SKU: ${rawSku}`);
       return;
     }
     setScannerOpen(false);
@@ -79,21 +78,21 @@ export default function ConteoStockPage() {
       const { data } = await api.get(`/stock-counts/${count.id}`);
       setSelected(data);
       setDirtyItems({});
-    } catch { showToast('Error al cargar detalle'); }
+    } catch { toast.error('Error al cargar detalle'); }
     finally { setLoadingDetail(false); }
   };
 
   const startCount = async () => {
-    if (!startLocationId) { showToast('Elegí una ubicación para contar'); return; }
+    if (!startLocationId) { toast.error('Elegí una ubicación para contar'); return; }
     setStarting(true);
     try {
       const { data } = await api.post('/stock-counts', { businessLocationId: startLocationId });
-      showToast('Conteo iniciado');
+      toast.success('Conteo iniciado');
       setStartModal(false);
       load();
       openDetail(data);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al iniciar conteo');
+      toast.error(err?.response?.data?.message ?? 'Error al iniciar conteo');
     } finally { setStarting(false); }
   };
 
@@ -102,7 +101,7 @@ export default function ConteoStockPage() {
     setDirtyItems((d) => ({ ...d, [productId]: value }));
     try {
       await api.put(`/stock-counts/${selected.id}/items/${productId}`, { countedStock: Number(value) });
-    } catch { showToast('Error al actualizar ítem'); }
+    } catch { toast.error('Error al actualizar ítem'); }
   };
 
   const complete = async () => {
@@ -110,11 +109,11 @@ export default function ConteoStockPage() {
     setSaving(true);
     try {
       await api.post(`/stock-counts/${selected.id}/complete`);
-      showToast('Conteo completado y ajustes aplicados');
+      toast.success('Conteo completado y ajustes aplicados');
       setSelected(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     } finally { setSaving(false); }
   };
 
@@ -122,11 +121,11 @@ export default function ConteoStockPage() {
     if (!selected) return;
     try {
       await api.post(`/stock-counts/${selected.id}/cancel`);
-      showToast('Conteo cancelado');
+      toast.success('Conteo cancelado');
       setSelected(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     }
   };
 
@@ -155,10 +154,6 @@ export default function ConteoStockPage() {
           </button>
         }
       >
-        {toast && (
-          <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)' }}>{toast}</div>
-        )}
-
         {/* Summary */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
           {[
@@ -280,10 +275,6 @@ export default function ConteoStockPage() {
         </div>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)' }}>{toast}</div>
-      )}
-
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>

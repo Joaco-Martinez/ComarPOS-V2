@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { CashSession } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { Wallet, Plus, X, Eye, Lock, Unlock, ArrowDownCircle, ArrowUpCircle, Banknote } from 'lucide-react';
@@ -25,7 +26,6 @@ export default function CajaPage() {
   const [closeForm, setCloseForm] = useState({ closingAmount: '', notes: '' });
   const [movementForm, setMovementForm] = useState({ type: 'EXPENSE', amount: '', description: '' });
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -37,18 +37,17 @@ export default function CajaPage() {
 
   useEffect(() => { load(); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const openSession = async () => {
     setSaving(true);
     try {
       await api.post('/cash-sessions/open', { openingBalance: Number(openForm.openingAmount), notes: openForm.notes || undefined });
-      showToast('Caja abierta');
+      toast.success('Caja abierta');
       setModal(null);
       setOpenForm({ openingAmount: '', notes: '' });
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al abrir caja');
+      toast.error(err?.response?.data?.message ?? 'Error al abrir caja');
     } finally { setSaving(false); }
   };
 
@@ -57,18 +56,18 @@ export default function CajaPage() {
     setSaving(true);
     try {
       await api.post(`/cash-sessions/${selected.id}/close`, { actualBalance: Number(closeForm.closingAmount), closeNotes: closeForm.notes || undefined });
-      showToast('Caja cerrada');
+      toast.success('Caja cerrada');
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al cerrar caja');
+      toast.error(err?.response?.data?.message ?? 'Error al cerrar caja');
     } finally { setSaving(false); }
   };
 
   const addMovement = async () => {
     if (!openSession_) return;
     const amount = Number(movementForm.amount);
-    if (!amount || amount <= 0) { showToast('Ingresá un monto válido'); return; }
+    if (!amount || amount <= 0) { toast.error('Ingresá un monto válido'); return; }
     setSaving(true);
     try {
       await api.post(`/cash-sessions/${openSession_.id}/movement`, {
@@ -76,12 +75,12 @@ export default function CajaPage() {
         amount,
         description: movementForm.description || undefined,
       });
-      showToast('Movimiento registrado');
+      toast.success('Movimiento registrado');
       setModal(null);
       setMovementForm({ type: 'EXPENSE', amount: '', description: '' });
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al registrar el movimiento');
+      toast.error(err?.response?.data?.message ?? 'Error al registrar el movimiento');
     } finally { setSaving(false); }
   };
 
@@ -118,10 +117,6 @@ export default function CajaPage() {
         )
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       {openSession_ && (
         <div style={{ background: 'rgba(24,193,94,0.08)', border: '1px solid rgba(24,193,94,0.25)', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
           <Wallet size={18} style={{ color: 'var(--success)' }} />

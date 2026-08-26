@@ -6,12 +6,10 @@ import { useAuthStore } from '@/store/auth';
 import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
 import { moduleKeyForPath } from '@/lib/navConfig';
 import Sidebar from './Sidebar';
-import Toasts from './Toasts';
 import WhatsNewModal from './WhatsNewModal';
 import NotificationsBell from './NotificationsBell';
 import BottomNav from './mobile/BottomNav';
 import HelpCenter from './HelpCenter';
-import { useToast } from '@/hooks/useToast';
 import { Sun, Moon, Lock } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { initPushNotifications } from '@/lib/push';
@@ -35,7 +33,6 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(STORAGE_KEY) === 'true';
   });
-  const { toasts } = useToast();
   const { theme, toggle: toggleTheme } = useTheme();
   const headerRef = useRef<HTMLElement>(null);
   const [headerHeight, setHeaderHeight] = useState(56);
@@ -206,7 +203,6 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
       </div>
 
       <BottomNav />
-      <Toasts toasts={toasts} />
       <WhatsNewModal />
     </div>
   );

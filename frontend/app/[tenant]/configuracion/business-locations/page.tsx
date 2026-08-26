@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { BusinessLocation, BusinessLocationType } from '@/types';
 import { normalizeArray } from '@/lib/helpers';
 import { Building2, Plus, X, Edit2, Trash2, MapPin } from 'lucide-react';
@@ -23,7 +24,6 @@ export default function BusinessLocationsPage() {
   const [form, setForm] = useState<typeof empty>(empty);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [toast, setToast] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -35,7 +35,6 @@ export default function BusinessLocationsPage() {
 
   useEffect(() => { load(); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const openCreate = () => { setEditing(null); setForm(empty); setModal(true); };
   const openEdit = (l: BusinessLocation) => {
@@ -67,11 +66,11 @@ export default function BusinessLocationsPage() {
       };
       if (editing) await api.put(`/business-locations/${editing.id}`, payload);
       else await api.post('/business-locations', payload);
-      showToast(editing ? 'Ubicación actualizada' : 'Ubicación creada');
+      toast.success(editing ? 'Ubicación actualizada' : 'Ubicación creada');
       setModal(false);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     } finally { setSaving(false); }
   };
 
@@ -81,10 +80,10 @@ export default function BusinessLocationsPage() {
       const { data } = await api.delete(`/business-locations/${id}`);
       // Si tenía ventas o stock cargado, el backend la desactiva en vez de
       // borrarla en limpio (no puede dejar movimientos/stock huérfanos).
-      showToast(data?.isActive === false ? 'Ubicación desactivada (tenía ventas o stock cargado)' : 'Ubicación eliminada');
+      toast.success(data?.isActive === false ? 'Ubicación desactivada (tenía ventas o stock cargado)' : 'Ubicación eliminada');
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'No se puede eliminar');
+      toast.error(err?.response?.data?.message ?? 'No se puede eliminar');
     } finally { setDeleting(null); }
   };
 
@@ -105,10 +104,6 @@ export default function BusinessLocationsPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300 }}><div className="spinner" /></div>
       ) : locations.length === 0 ? (

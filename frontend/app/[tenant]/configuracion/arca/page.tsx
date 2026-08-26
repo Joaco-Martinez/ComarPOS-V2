@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import { toDateInputAR, formatDateAR, formatDateTimeAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import {
@@ -244,8 +245,6 @@ export default function ArcaPage() {
   const [keyFile, setKeyFile]         = useState<File | null>(null);
   const [certExpiresAt, setCertExpiresAt] = useState('');
 
-  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' | 'info' } | null>(null);
-
   const activeRemitoCai = useMemo(
     () => remitoCais.find(r => r.enabled && new Date(r.expiresAt).getTime() >= NOW_TS),
     [remitoCais]
@@ -260,8 +259,9 @@ export default function ArcaPage() {
   }, [config]);
 
   function showToast(msg: string, type: 'ok' | 'err' | 'info' = 'ok') {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
+    if (type === 'err') toast.error(msg);
+    else if (type === 'info') toast(msg);
+    else toast.success(msg);
   }
 
   function getErr(err: any, fallback: string) {
@@ -578,19 +578,6 @@ export default function ArcaPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{
-          position: 'fixed', right: 20, bottom: 20, zIndex: 200,
-          background: toast.type === 'ok' ? 'rgba(24,193,94,0.15)' : toast.type === 'err' ? 'rgba(239,68,68,0.15)' : 'var(--surface)',
-          border: `1px solid ${toast.type === 'ok' ? 'rgba(24,193,94,0.3)' : toast.type === 'err' ? 'rgba(239,68,68,0.3)' : 'var(--border)'}`,
-          borderRadius: 10, padding: '12px 16px', fontSize: 13, fontWeight: 600,
-          color: toast.type === 'ok' ? 'var(--success)' : toast.type === 'err' ? 'var(--danger)' : 'var(--text)',
-          animation: 'fadeIn 0.2s ease', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-        }}>
-          {toast.msg}
-        </div>
-      )}
-
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, gap: 10, color: 'var(--text3)' }}>
           <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /> Cargando ARCA…

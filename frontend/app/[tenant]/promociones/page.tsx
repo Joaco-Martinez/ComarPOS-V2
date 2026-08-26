@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Product, ProductCategory, Promotion, PromotionType } from '@/types';
 import { fmtMoney, normalizeArray, getPlanLockMessage } from '@/lib/helpers';
 import { todayInputAR } from '@/lib/dateAR';
@@ -34,7 +35,6 @@ export default function PromocionesPage() {
   const [form, setForm] = useState<typeof empty>(empty);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [toast, setToast] = useState('');
   const [lockMessage, setLockMessage] = useState<string | null>(null);
 
   const load = async () => {
@@ -60,7 +60,6 @@ export default function PromocionesPage() {
 
   useEffect(() => { load(); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const openCreate = () => { setEditing(null); setForm(empty); setModal(true); };
   const openEdit = (p: Promotion) => {
@@ -87,11 +86,11 @@ export default function PromocionesPage() {
   const save = async () => {
     if (!form.name || !form.discountValue) return;
     if (form.type === 'PRODUCT_DISCOUNT' && form.productIds.length === 0) {
-      showToast('Elegí al menos un producto');
+      toast.error('Elegí al menos un producto');
       return;
     }
     if (form.type === 'CATEGORY_DISCOUNT' && form.categoryIds.length === 0) {
-      showToast('Elegí al menos una categoría');
+      toast.error('Elegí al menos una categoría');
       return;
     }
     setSaving(true);
@@ -108,23 +107,23 @@ export default function PromocionesPage() {
       };
       if (editing) await api.put(`/promotions/${editing.id}`, payload);
       else await api.post('/promotions', payload);
-      showToast(editing ? 'Promoción actualizada' : 'Promoción creada');
+      toast.success(editing ? 'Promoción actualizada' : 'Promoción creada');
       setModal(false);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     } finally { setSaving(false); }
   };
 
   const toggleActive = async (p: Promotion) => {
     try { await api.put(`/promotions/${p.id}`, { isActive: !p.isActive }); load(); }
-    catch { showToast('Error'); }
+    catch { toast.error('Error'); }
   };
 
   const del = async (id: string) => {
     setDeleting(id);
-    try { await api.delete(`/promotions/${id}`); showToast('Promoción eliminada'); load(); }
-    catch { showToast('Error al eliminar'); } finally { setDeleting(null); }
+    try { await api.delete(`/promotions/${id}`); toast.success('Promoción eliminada'); load(); }
+    catch { toast.error('Error al eliminar'); } finally { setDeleting(null); }
   };
 
   const f = (k: keyof typeof empty, v: any) => setForm((p) => ({ ...p, [k]: v }));
@@ -144,10 +143,6 @@ export default function PromocionesPage() {
         )
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       {lockMessage ? (
         <div className="card" style={{ padding: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 10 }}>
           <Lock size={28} style={{ color: 'var(--text3)' }} />

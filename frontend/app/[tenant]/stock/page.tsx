@@ -6,6 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
 import SearchableSelect from '@/components/SearchableSelect';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { BusinessLocation, Product, ProductCategory, StockMovement } from '@/types';
 import { categoryName, fmtDate, normalizeArray, num, productStock, productMinStock } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -32,7 +33,6 @@ export default function StockPage() {
   const [moveForm, setMoveForm] = useState<MoveForm>({ type: 'TRANSFER', fromLocationId: '', toLocationId: '', quantity: '', reason: '' });
   const [minModal, setMinModal] = useState<MinModal>(null);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [movFrom, setMovFrom] = useState('');
   const [movTo, setMovTo] = useState('');
@@ -82,7 +82,6 @@ export default function StockPage() {
     return p;
   }, [products, catFilter, search]);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const openMoveModal = (p: Product) => {
     setMoveModal(p);
@@ -99,7 +98,7 @@ export default function StockPage() {
     const sku = rawSku.trim().toLowerCase();
     const found = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
     if (!found) {
-      showToast(`No encontré ningún producto con SKU: ${rawSku}`);
+      toast.error(`No encontré ningún producto con SKU: ${rawSku}`);
       return;
     }
     setScannerOpen(false);
@@ -109,7 +108,7 @@ export default function StockPage() {
   const submitMovement = async () => {
     if (!moveModal) return;
     if (moveForm.type === 'TRANSFER' && moveForm.fromLocationId === moveForm.toLocationId) {
-      showToast('El origen y el destino tienen que ser distintos');
+      toast.error('El origen y el destino tienen que ser distintos');
       return;
     }
     setSaving(true);
@@ -133,11 +132,11 @@ export default function StockPage() {
           await api.post('/products/add-stock', { productId: moveModal.id, businessLocationId: moveForm.toLocationId, quantity: Number(moveForm.quantity), reason });
         }
       }
-      showToast('Movimiento registrado');
+      toast.success('Movimiento registrado');
       setMoveModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al registrar movimiento');
+      toast.error(err?.response?.data?.message ?? 'Error al registrar movimiento');
     } finally {
       setSaving(false);
     }
@@ -162,11 +161,11 @@ export default function StockPage() {
         minQuantity: minModal.minQuantity === '' ? null : Number(minModal.minQuantity),
         minQuantityKg: minModal.minQuantityKg === '' ? null : Number(minModal.minQuantityKg),
       });
-      showToast('Mínimo actualizado');
+      toast.success('Mínimo actualizado');
       setMinModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al actualizar el mínimo');
+      toast.error(err?.response?.data?.message ?? 'Error al actualizar el mínimo');
     } finally {
       setSaving(false);
     }
@@ -186,12 +185,6 @@ export default function StockPage() {
         <button onClick={load} className="btn btn-ghost btn-sm"><RefreshCcw size={13} /></button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>
-          {toast}
-        </div>
-      )}
-
       {!loading && locations.length === 0 && (
         <div className="card" style={{ padding: 14, marginBottom: 16, borderColor: 'var(--warn)' }}>
           <div style={{ fontSize: 13, color: 'var(--text)' }}>

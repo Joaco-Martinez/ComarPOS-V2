@@ -5,6 +5,7 @@ import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Tenant, TenantSubscriptionStatus, BillingPlan, PlanFeatureKey } from '@/types';
 import { fmtDate, normalizeArray, daysRemaining } from '@/lib/helpers';
 import { Building2, Plus, X, Search, Eye, CreditCard, Gift, LogIn, ShoppingCart, ToggleLeft, ToggleRight, SlidersHorizontal, DollarSign, Save } from 'lucide-react';
@@ -58,7 +59,6 @@ export default function PlatformAdminTenantsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
 
   const [mpPlans, setMpPlans] = useState<MpPlanRow[]>([]);
   const [syncingMpPlans, setSyncingMpPlans] = useState(false);
@@ -114,15 +114,14 @@ export default function PlatformAdminTenantsPage() {
     try {
       const { data } = await api.post('/platform-admin/mp-plans/sync');
       setMpPlans(normalizeArray<MpPlanRow>(data));
-      showToast('Planes sincronizados con Mercado Pago');
+      toast.success('Planes sincronizados con Mercado Pago');
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? err?.response?.data?.error ?? 'No se pudo sincronizar con Mercado Pago');
+      toast.error(err?.response?.data?.message ?? err?.response?.data?.error ?? 'No se pudo sincronizar con Mercado Pago');
     } finally {
       setSyncingMpPlans(false);
     }
   };
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const f = (k: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -131,10 +130,10 @@ export default function PlatformAdminTenantsPage() {
     const nextStatus = tenant.subscriptionStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
     try {
       await api.patch(`/platform-admin/tenants/${tenant.id}/subscription`, { status: nextStatus });
-      showToast(nextStatus === 'SUSPENDED' ? 'Tenant suspendido' : 'Tenant reactivado');
+      toast.success(nextStatus === 'SUSPENDED' ? 'Tenant suspendido' : 'Tenant reactivado');
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al actualizar estado');
+      toast.error(err?.response?.data?.message ?? 'Error al actualizar estado');
     }
   };
 
@@ -150,7 +149,7 @@ export default function PlatformAdminTenantsPage() {
       if (!user?.tenantSlug) throw new Error('sin tenantSlug');
       window.location.href = `/${user.tenantSlug}/pos`;
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'No se pudo entrar como este tenant');
+      toast.error(err?.response?.data?.message ?? 'No se pudo entrar como este tenant');
       setImpersonating(null);
     }
   };
@@ -169,10 +168,10 @@ export default function PlatformAdminTenantsPage() {
     );
     try {
       await api.patch(`/platform-admin/plan-features/${planId}`, { feature, enabled });
-      showToast(`${FEATURE_LABELS[feature]} ${enabled ? 'activado' : 'desactivado'} para ${planName(planId)}`);
+      toast.success(`${FEATURE_LABELS[feature]} ${enabled ? 'activado' : 'desactivado'} para ${planName(planId)}`);
     } catch (err: any) {
       setBillingPlans(previous);
-      showToast(err?.response?.data?.message ?? 'No se pudo actualizar el módulo');
+      toast.error(err?.response?.data?.message ?? 'No se pudo actualizar el módulo');
     } finally {
       setTogglingFeature(null);
     }
@@ -189,9 +188,9 @@ export default function PlatformAdminTenantsPage() {
       });
       const updated = data.content ?? data;
       setBillingPlans((plans) => plans.map((p) => (p.id === planId ? { ...p, ...updated } : p)));
-      showToast(`Precio de ${planName(planId)} actualizado`);
+      toast.success(`Precio de ${planName(planId)} actualizado`);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'No se pudo actualizar el precio');
+      toast.error(err?.response?.data?.message ?? 'No se pudo actualizar el precio');
     } finally {
       setSavingPrice(null);
     }
@@ -202,12 +201,12 @@ export default function PlatformAdminTenantsPage() {
     setSaving(true);
     try {
       await api.post('/platform-admin/tenants', form);
-      showToast('Tenant creado gratis, sin pasar por Mercado Pago');
+      toast.success('Tenant creado gratis, sin pasar por Mercado Pago');
       setCreateOpen(false);
       setForm((p) => ({ ...emptyForm, planId: p.planId }));
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al crear tenant');
+      toast.error(err?.response?.data?.message ?? 'Error al crear tenant');
     } finally {
       setSaving(false);
     }
@@ -235,10 +234,6 @@ export default function PlatformAdminTenantsPage() {
         </div>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)' }}>{toast}</div>
-      )}
-
       {mpPlans.length > 0 && (
         <div className="card" style={{ padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: 0.5, fontFamily: 'var(--mono)' }}>PLANES EN MERCADO PAGO</span>

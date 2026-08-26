@@ -3,7 +3,7 @@ import { SaleStatus, PaymentMethod, ReturnItemDirection, CategoryFinance, Financ
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { updateStatus } from "./sale/sale.lifecycle";
-import { round2, resolveSaleItems, saleItemToResolved } from "./sale/sale.pricing";
+import { round2, resolveSaleItems, saleItemToResolved, normalizeText } from "./sale/sale.pricing";
 import {
   buildStockLines,
   requireStockLocationId,
@@ -13,7 +13,12 @@ import {
   queueStockAlerts,
 } from "./sale/sale.stock";
 import { accountService } from "./account.service";
+import { DELIVERY_SKU } from "./sale/sale.types";
 import type { ClientMini, ResolvedSaleItem } from "./sale/sale.types";
+
+function isDeliveryLine(saleItem: any) {
+  return normalizeText(saleItem.product?.sku ?? saleItem.productSkuSnapshot) === DELIVERY_SKU;
+}
 
 const RETURN_INCLUDE = {
   items: { include: { product: { select: { name: true, sku: true } } } },
@@ -142,12 +147,15 @@ export const returnService = {
     }
 
     // Devolucion "total": cubre el 100% de lo que queda pendiente de TODA
-    // la venta y no incluye cambio por otro producto -- en ese caso se
-    // mantiene el camino de siempre (cancelar la venta entera), en vez del
-    // camino generico de abajo que deja la venta en COMPLETED.
+    // la venta (sin contar el item de envio, que no tiene sentido "devolver"
+    // y si no se excluye una venta con envio nunca llegaria a este camino)
+    // y no incluye cambio por otro producto -- en ese caso se mantiene el
+    // camino de siempre (cancelar la venta entera), en vez del camino
+    // generico de abajo que deja la venta en COMPLETED.
     const isFullReturn =
       !options.exchangeItems?.length &&
       sale.items.every((saleItem) => {
+        if (isDeliveryLine(saleItem)) return true;
         const already = alreadyReturnedByLine.get(saleItem.id) ?? { quantity: 0, quantityKg: 0 };
         const remainingQty = round2(saleItem.quantity - already.quantity);
         const remainingKg = round2((saleItem.quantityKg ?? 0) - already.quantityKg);

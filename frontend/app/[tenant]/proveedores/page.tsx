@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Supplier } from '@/types';
 import { normalizeArray } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -20,7 +21,6 @@ export default function ProveedoresPage() {
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Supplier | null>(null);
 
   const load = async () => {
@@ -33,7 +33,6 @@ export default function ProveedoresPage() {
 
   useEffect(() => { load(); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const openCreate = () => { setForm(emptyForm); setEditing(null); setModal('create'); };
   const openEdit = (s: Supplier) => {
@@ -52,24 +51,24 @@ export default function ProveedoresPage() {
       const body = Object.fromEntries(Object.entries(form).filter(([, v]) => v !== ''));
       if (modal === 'create') {
         await api.post('/suppliers', body);
-        showToast('Proveedor creado');
+        toast.success('Proveedor creado');
       } else if (editing) {
         await api.put(`/suppliers/${editing.id}`, body);
-        showToast('Proveedor actualizado');
+        toast.success('Proveedor actualizado');
       }
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally { setSaving(false); }
   };
 
   const del = async (s: Supplier) => {
     try {
       await api.delete(`/suppliers/${s.id}`);
-      showToast('Proveedor eliminado');
+      toast.success('Proveedor eliminado');
       load();
-    } catch { showToast('Error al eliminar'); }
+    } catch { toast.error('Error al eliminar'); }
     setConfirmDelete(null);
   };
 
@@ -87,10 +86,6 @@ export default function ProveedoresPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div style={{ marginBottom: 14 }}>
         <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Buscar proveedor..." />
       </div>

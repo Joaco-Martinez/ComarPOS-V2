@@ -7,6 +7,7 @@ import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
 import ImageCropModal, { PRODUCT_IMAGE_SIZE } from '@/components/ImageCropModal';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Product, ProductCategory } from '@/types';
 import { categoryName, fmtMoney, normalizeArray, num, productStock, productMinStock } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -36,7 +37,6 @@ export default function ProductosPage() {
   const [imgFile, setImgFile] = useState<File | null>(null);
   const [imgPreviewUrl, setImgPreviewUrl] = useState<string | null>(null);
   const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
-  const [toast, setToast] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [formScannerOpen, setFormScannerOpen] = useState(false);
@@ -94,13 +94,12 @@ export default function ProductosPage() {
   const f = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((prev) => ({ ...prev, [k]: e.target.value }));
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const handleScannedSku = (rawSku: string) => {
     const sku = rawSku.trim().toLowerCase();
     const found = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
     if (!found) {
-      showToast(`No encontré ningún producto con SKU: ${rawSku}`);
+      toast.error(`No encontré ningún producto con SKU: ${rawSku}`);
       return;
     }
     setScannerOpen(false);
@@ -127,15 +126,15 @@ export default function ProductosPage() {
 
       if (modal === 'create') {
         await api.post('/products', body);
-        showToast('Producto creado correctamente');
+        toast.success('Producto creado correctamente');
       } else if (editing) {
         await api.put(`/products/${editing.id}`, body);
-        showToast('Producto actualizado');
+        toast.success('Producto actualizado');
       }
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -144,10 +143,10 @@ export default function ProductosPage() {
   const deleteProduct = async (p: Product) => {
     try {
       await api.delete(`/products/${p.id}`);
-      showToast('Producto eliminado');
+      toast.success('Producto eliminado');
       load();
     } catch {
-      showToast('Error al eliminar');
+      toast.error('Error al eliminar');
     }
     setConfirmDelete(null);
   };
@@ -157,7 +156,7 @@ export default function ProductosPage() {
       await api.put(`/products/${p.id}`, { isActive: !p.isActive });
       load();
     } catch {
-      showToast('Error al cambiar estado');
+      toast.error('Error al cambiar estado');
     }
   };
 
@@ -173,12 +172,6 @@ export default function ProductosPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
-          {toast}
-        </div>
-      )}
-
       {/* Filters */}
       <div style={{ marginBottom: 16 }}>
         <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Buscar por nombre o SKU...">

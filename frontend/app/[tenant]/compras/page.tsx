@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { BusinessLocation, Product, Purchase, Supplier } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -22,7 +23,6 @@ export default function ComprasPage() {
   const [form, setForm] = useState({ supplierId: '', date: todayInputAR(), notes: '', businessLocationId: '', paymentMethod: 'TRANSFERENCIA' });
   const [items, setItems] = useState<{ productId: string; quantity: string; quantityKg: string; unitCost: string }[]>([]);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
   const [search, setSearch] = useState('');
 
   const load = async () => {
@@ -45,7 +45,6 @@ export default function ComprasPage() {
 
   useEffect(() => { load(); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const addItem = () => setItems((p) => [...p, { productId: '', quantity: '1', quantityKg: '', unitCost: '' }]);
   const removeItem = (i: number) => setItems((p) => p.filter((_, idx) => idx !== i));
@@ -53,7 +52,7 @@ export default function ComprasPage() {
 
   const save = async () => {
     if (!items.length) return;
-    if (!form.businessLocationId) { showToast('Elegí una ubicación de destino'); return; }
+    if (!form.businessLocationId) { toast.error('Elegí una ubicación de destino'); return; }
     setSaving(true);
     try {
       await api.post('/purchases', {
@@ -72,13 +71,13 @@ export default function ComprasPage() {
           };
         }),
       });
-      showToast('Compra registrada');
+      toast.success('Compra registrada');
       setModal(null);
       setItems([]);
       setForm((p) => ({ supplierId: '', date: todayInputAR(), notes: '', businessLocationId: p.businessLocationId, paymentMethod: 'TRANSFERENCIA' }));
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al registrar');
+      toast.error(err?.response?.data?.message ?? 'Error al registrar');
     } finally { setSaving(false); }
   };
 
@@ -103,10 +102,6 @@ export default function ComprasPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: 10, marginBottom: 16 }}>
         <div className="card" style={{ padding: '12px 14px' }}>
           <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Total compras</div>

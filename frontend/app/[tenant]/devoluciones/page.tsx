@@ -5,6 +5,7 @@ import { useMemo, useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import SearchableSelect from '@/components/SearchableSelect';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Return, Sale, Product, PaymentMethod, ReturnSettlementType } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray } from '@/lib/helpers';
 import { toDateInputAR } from '@/lib/dateAR';
@@ -12,6 +13,12 @@ import { RotateCcw, Eye, X, RefreshCcw, Plus, Search, Trash2, ArrowLeftRight } f
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 
 const REFUND_METHODS: PaymentMethod[] = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'QR'];
+// El item de envío no tiene sentido "devolverlo" -- y si se lo deja como
+// checkbox, el backend nunca detecta la devolución como "total" (necesita
+// que TODO lo pendiente este en el pedido, ver return.service.ts#isFullReturn)
+// y la venta queda para siempre en COMPLETED en vez de cancelarse.
+const DELIVERY_SKU = 'ENVIO-FLETE2';
+const isDeliveryItem = (item: Sale['items'][number]) => item.product?.sku === DELIVERY_SKU;
 
 // Tolerancia para tratar una diferencia como "$0" (redondeos de coma flotante).
 const EPS = 0.01;
@@ -46,7 +53,6 @@ export default function DevolucionesPage() {
   const [settlementMethod, setSettlementMethod] = useState<PaymentMethod | ''>('EFECTIVO');
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -58,7 +64,6 @@ export default function DevolucionesPage() {
 
   useEffect(() => { load(); }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const openCreate = async () => {
     setPickedSale(null);
@@ -164,7 +169,7 @@ export default function DevolucionesPage() {
           : { saleItemId, quantity: Number(v.quantity || 0) };
       });
 
-    if (items.length === 0) { showToast('Elegí al menos un ítem para devolver'); return; }
+    if (items.length === 0) { toast.error('Elegí al menos un ítem para devolver'); return; }
 
     const exchangePayload = exchangeItems.map((it) => ({
       productId: it.productId,
@@ -175,7 +180,7 @@ export default function DevolucionesPage() {
 
     let settlement: { type: ReturnSettlementType; method?: PaymentMethod } | undefined;
     if (Math.abs(diff) > EPS) {
-      if (!settlementType) { showToast('Elegí cómo se salda la diferencia'); return; }
+      if (!settlementType) { toast.error('Elegí cómo se salda la diferencia'); return; }
       settlement = {
         type: settlementType,
         method: settlementType === 'REFUND' ? (settlementMethod || undefined) : undefined,
@@ -190,11 +195,11 @@ export default function DevolucionesPage() {
         settlement,
         reason: reason || undefined,
       });
-      showToast('Devolución registrada');
+      toast.success('Devolución registrada');
       setCreateModal(false);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al procesar devolución');
+      toast.error(err?.response?.data?.message ?? 'Error al procesar devolución');
     } finally { setSaving(false); }
   };
 
@@ -223,10 +228,6 @@ export default function DevolucionesPage() {
         </div>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       <div className="card">
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>
@@ -330,7 +331,7 @@ export default function DevolucionesPage() {
                       <table>
                         <thead><tr><th></th><th>Producto</th><th style={{ textAlign: 'right' }}>Vendido</th><th style={{ textAlign: 'right' }}>Devolver</th><th style={{ textAlign: 'right' }}>Subtotal</th></tr></thead>
                         <tbody>
-                          {pickedSale.items.map((item) => {
+                          {pickedSale.items.filter((item) => !isDeliveryItem(item)).map((item) => {
                             const sel = selections[item.id];
                             const isKg = item.quantityKg != null;
                             return (

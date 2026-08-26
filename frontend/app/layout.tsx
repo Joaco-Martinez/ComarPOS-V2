@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
+import { Toaster } from 'react-hot-toast';
 import PwaRegister from '@/components/PwaRegister';
 import KeyboardInsetWatcher from '@/components/KeyboardInsetWatcher';
 import GoogleAnalytics from '@/components/GoogleAnalytics';
@@ -93,6 +94,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <GoogleAnalytics />
         <Analytics />
         <CookieBanner />
+        {/* z-index al maximo entero seguro a proposito: tiene que ganarle
+            siempre a .modal-overlay (hasta 2147483021, ver globals.css y
+            ClientFormModal.tsx) para que un toast disparado con un modal
+            abierto (ej. error de un formulario) se vea. */}
+        <Toaster
+          position="bottom-right"
+          containerStyle={{ zIndex: 2147483647 }}
+          toastOptions={{
+            duration: 3500,
+            style: {
+              background: 'var(--surface2)',
+              color: 'var(--text)',
+              border: '1px solid var(--border2)',
+              borderRadius: 8,
+              padding: '10px 14px',
+              fontSize: 13,
+              fontFamily: 'var(--sans)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+            },
+            success: { iconTheme: { primary: 'var(--success)', secondary: 'var(--surface2)' } },
+            error: { iconTheme: { primary: 'var(--danger)', secondary: 'var(--surface2)' } },
+          }}
+        />
       </body>
     </html>
   );

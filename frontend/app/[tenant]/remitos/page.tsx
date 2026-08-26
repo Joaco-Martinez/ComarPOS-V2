@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import { fmtDate, normalizeArray } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import { FileText, Download, CheckCircle, X, Plus, RefreshCcw, AlertTriangle } from 'lucide-react';
@@ -25,7 +26,6 @@ export default function RemitosPage() {
   const [remitos, setRemitos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
-  const [toast, setToast] = useState('');
   const [modal, setModal] = useState<'create' | 'detail' | null>(null);
   const [selected, setSelected] = useState<any>(null);
   const [saleId, setSaleId] = useState('');
@@ -56,7 +56,6 @@ export default function RemitosPage() {
       .catch(() => setCaiStatus(null));
   }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const downloadPdf = async (id: string, numero: string) => {
     setDownloading(id);
@@ -69,7 +68,7 @@ export default function RemitosPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      showToast('Error al descargar el PDF');
+      toast.error('Error al descargar el PDF');
     } finally {
       setDownloading(null);
     }
@@ -78,29 +77,29 @@ export default function RemitosPage() {
   const regeneratePdf = async (id: string) => {
     try {
       await api.post(`/remitos/${id}/regenerate-pdf`);
-      showToast('PDF regenerado');
+      toast.success('PDF regenerado');
     } catch {
-      showToast('Error al regenerar el PDF');
+      toast.error('Error al regenerar el PDF');
     }
   };
 
   const markDelivered = async (id: string) => {
     try {
       await api.patch(`/remitos/${id}/delivered`);
-      showToast('Marcado como entregado');
+      toast.success('Marcado como entregado');
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     }
   };
 
   const cancel = async (id: string) => {
     try {
       await api.patch(`/remitos/${id}/cancel`);
-      showToast('Remito cancelado');
+      toast.success('Remito cancelado');
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error');
+      toast.error(err?.response?.data?.message ?? 'Error');
     }
   };
 
@@ -109,12 +108,12 @@ export default function RemitosPage() {
     setSaving(true);
     try {
       await api.post(`/remitos/from-sale/${saleId.trim()}`);
-      showToast('Remito creado');
+      toast.success('Remito creado');
       setSaleId('');
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al crear remito');
+      toast.error(err?.response?.data?.message ?? 'Error al crear remito');
     } finally {
       setSaving(false);
     }
@@ -144,12 +143,6 @@ export default function RemitosPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>
-          {toast}
-        </div>
-      )}
-
       {caiStatus?.hasActiveCai === false && (
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'rgba(243,156,18,0.1)', border: '1px solid rgba(243,156,18,0.3)', borderRadius: 8, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: 'var(--warn)' }}>
           <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />

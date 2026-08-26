@@ -7,6 +7,7 @@ import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import SearchableSelect from '@/components/SearchableSelect';
 import ClientFormModal from '@/components/ClientFormModal';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { Client, Product, RepairOrder, RepairOrderStatus, PaymentMethod, ReceiptType } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num, clientName } from '@/lib/helpers';
 import { todayInputAR } from '@/lib/dateAR';
@@ -77,7 +78,6 @@ export default function ServiciosPage() {
 
   const [modal, setModal] = useState<'create' | 'detail' | null>(null);
   const [selected, setSelected] = useState<RepairOrder | null>(null);
-  const [toast, setToast] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
@@ -93,7 +93,6 @@ export default function ServiciosPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutForm, setCheckoutForm] = useState({ paymentMethod: 'EFECTIVO' as PaymentMethod, receiptType: 'TICKET' as ReceiptType, businessLocationId: '' });
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const load = async () => {
     setLoading(true);
@@ -135,11 +134,11 @@ export default function ServiciosPage() {
         clientId: form.clientId || undefined,
         estimatedDeliveryDate: form.estimatedDeliveryDate || undefined,
       });
-      showToast('Reparación recibida');
+      toast.success('Reparación recibida');
       setModal(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al crear la reparación');
+      toast.error(err?.response?.data?.message ?? 'Error al crear la reparación');
     } finally { setSaving(false); }
   };
 
@@ -158,26 +157,26 @@ export default function ServiciosPage() {
       const { data } = await api.get(`/repair-orders/${order.id}`);
       setSelected(data);
       setModal('detail');
-    } catch { showToast('Error al cargar el detalle'); }
+    } catch { toast.error('Error al cargar el detalle'); }
   };
 
   const saveDiagnosis = async (diagnosis: string) => {
     if (!selected) return;
     try {
       await api.patch(`/repair-orders/${selected.id}`, { diagnosis });
-      showToast('Diagnóstico guardado');
+      toast.success('Diagnóstico guardado');
       refreshSelected(selected.id);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     }
   };
 
   const addItem = async () => {
     if (!selected) return;
     const unitPrice = Number(itemForm.unitPrice);
-    if (!Number.isFinite(unitPrice) || unitPrice < 0) return showToast('Precio inválido');
-    if (itemMode === 'product' && !itemForm.productId) return showToast('Elegí un producto');
-    if (itemMode === 'text' && !itemForm.description.trim()) return showToast('Escribí una descripción');
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) return toast.error('Precio inválido');
+    if (itemMode === 'product' && !itemForm.productId) return toast.error('Elegí un producto');
+    if (itemMode === 'text' && !itemForm.description.trim()) return toast.error('Escribí una descripción');
 
     setSaving(true);
     try {
@@ -189,10 +188,10 @@ export default function ServiciosPage() {
         ivaRate: Number(itemForm.ivaRate),
       });
       setItemForm({ productId: '', description: '', quantity: '1', unitPrice: '', ivaRate: '21' });
-      showToast('Ítem agregado');
+      toast.success('Ítem agregado');
       refreshSelected(selected.id);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al agregar el ítem');
+      toast.error(err?.response?.data?.message ?? 'Error al agregar el ítem');
     } finally { setSaving(false); }
   };
 
@@ -202,7 +201,7 @@ export default function ServiciosPage() {
       await api.delete(`/repair-orders/${selected.id}/items/${itemId}`);
       refreshSelected(selected.id);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al quitar el ítem');
+      toast.error(err?.response?.data?.message ?? 'Error al quitar el ítem');
     }
   };
 
@@ -210,11 +209,11 @@ export default function ServiciosPage() {
     if (!selected) return;
     try {
       await api.patch(`/repair-orders/${selected.id}/status`, { status: next });
-      showToast(`Estado actualizado a "${STATUS_LABEL[next]}"`);
+      toast.success(`Estado actualizado a "${STATUS_LABEL[next]}"`);
       refreshSelected(selected.id);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al cambiar el estado');
+      toast.error(err?.response?.data?.message ?? 'Error al cambiar el estado');
     }
   };
 
@@ -235,11 +234,11 @@ export default function ServiciosPage() {
       onConfirm: async () => {
         try {
           await api.delete(`/repair-orders/${selected.id}`);
-          showToast('Reparación eliminada');
+          toast.success('Reparación eliminada');
           setModal(null);
           load();
         } catch (err: any) {
-          showToast(err?.response?.data?.message ?? 'Error al eliminar');
+          toast.error(err?.response?.data?.message ?? 'Error al eliminar');
         }
       },
     });
@@ -252,7 +251,7 @@ export default function ServiciosPage() {
       const url = `${window.location.origin}/presupuesto/${data.token}`;
       setShareLink(url);
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al generar el link');
+      toast.error(err?.response?.data?.message ?? 'Error al generar el link');
     }
   };
 
@@ -267,7 +266,7 @@ export default function ServiciosPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      showToast('No se pudo generar el PDF');
+      toast.error('No se pudo generar el PDF');
     }
   };
 
@@ -276,7 +275,7 @@ export default function ServiciosPage() {
       await navigator.clipboard.writeText(shareLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch { showToast('No se pudo copiar'); }
+    } catch { toast.error('No se pudo copiar'); }
   };
 
   const openCheckout = () => {
@@ -291,7 +290,7 @@ export default function ServiciosPage() {
 
   const submitCheckout = async () => {
     if (!selected) return;
-    if (!checkoutForm.businessLocationId) return showToast('Elegí la sucursal/depósito del cobro');
+    if (!checkoutForm.businessLocationId) return toast.error('Elegí la sucursal/depósito del cobro');
     setSaving(true);
     try {
       await api.post(`/repair-orders/${selected.id}/checkout`, {
@@ -300,12 +299,12 @@ export default function ServiciosPage() {
         businessLocationId: checkoutForm.businessLocationId,
         stockLocationId: checkoutForm.businessLocationId,
       });
-      showToast('Reparación cobrada — ya figura en Ventas');
+      toast.success('Reparación cobrada — ya figura en Ventas');
       setCheckoutOpen(false);
       refreshSelected(selected.id);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al cobrar');
+      toast.error(err?.response?.data?.message ?? 'Error al cobrar');
     } finally { setSaving(false); }
   };
 
@@ -333,10 +332,6 @@ export default function ServiciosPage() {
         </div>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)' }}>{toast}</div>
-      )}
-
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 13 }}>
           <option value="">Todos los estados</option>
@@ -703,7 +698,7 @@ export default function ServiciosPage() {
           setClients((prev) => [client, ...prev]);
           setForm((f) => ({ ...f, clientId: client.id }));
           setNewClientQuery(null);
-          showToast('Cliente creado');
+          toast.success('Cliente creado');
         }}
       />
 

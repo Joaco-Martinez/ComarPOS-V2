@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { PrintboxDevice } from '@/types';
 import { normalizeArray } from '@/lib/helpers';
 import { formatDateTimeAR } from '@/lib/dateAR';
@@ -49,9 +50,7 @@ export default function PrintboxPage() {
   const [revoking, setRevoking] = useState<string | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<PrintboxDevice | null>(null);
   const [regenerating, setRegenerating] = useState<string | null>(null);
-  const [toast, setToast] = useState('');
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -59,7 +58,7 @@ export default function PrintboxPage() {
       const { data } = await api.get('/printbox/devices');
       setDevices(normalizeArray<PrintboxDevice>(data.devices ?? data));
     } catch {
-      if (!silent) showToast('No se pudieron cargar los PrintBox');
+      if (!silent) toast.error('No se pudieron cargar los PrintBox');
     } finally {
       if (!silent) setLoading(false);
     }
@@ -96,10 +95,10 @@ export default function PrintboxPage() {
     try {
       await api.post('/printbox/devices', { name: newName.trim(), kind: newKind });
       setCreateModal(false);
-      showToast('Creado — copiá el código antes de que expire');
+      toast.success('Creado — copiá el código antes de que expire');
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al crear el PrintBox');
+      toast.error(err?.response?.data?.message ?? 'Error al crear el PrintBox');
     } finally {
       setCreating(false);
     }
@@ -125,11 +124,11 @@ export default function PrintboxPage() {
         name: editName.trim(),
         printerIp: editPrinterIp.trim() || null,
       });
-      showToast('PrintBox actualizado');
+      toast.success('PrintBox actualizado');
       setEditing(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al guardar');
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -139,10 +138,10 @@ export default function PrintboxPage() {
     setRegenerating(d.id);
     try {
       await api.post(`/printbox/devices/${d.id}/regenerate-code`);
-      showToast('Código nuevo generado');
+      toast.success('Código nuevo generado');
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al regenerar el código');
+      toast.error(err?.response?.data?.message ?? 'Error al regenerar el código');
     } finally {
       setRegenerating(null);
     }
@@ -153,11 +152,11 @@ export default function PrintboxPage() {
     setRevoking(confirmRevoke.id);
     try {
       await api.delete(`/printbox/devices/${confirmRevoke.id}`);
-      showToast('PrintBox revocado');
+      toast.success('PrintBox revocado');
       setConfirmRevoke(null);
       load();
     } catch (err: any) {
-      showToast(err?.response?.data?.message ?? 'Error al revocar');
+      toast.error(err?.response?.data?.message ?? 'Error al revocar');
     } finally {
       setRevoking(null);
     }
@@ -173,10 +172,6 @@ export default function PrintboxPage() {
         </button>
       }
     >
-      {toast && (
-        <div style={{ position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', right: 20, zIndex: 200, background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)', animation: 'fadeIn 0.2s ease' }}>{toast}</div>
-      )}
-
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300 }}><div className="spinner" /></div>
       ) : devices.length === 0 ? (
