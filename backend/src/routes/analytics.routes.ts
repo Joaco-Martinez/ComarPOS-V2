@@ -34,6 +34,7 @@ router.get("/profitability/by-category", ac.getProfitabilityByCategory);
 router.get("/profitability/trend", ac.getProfitabilityTrend);
 router.get("/profitability/expenses-breakdown", ac.getExpensesBreakdown);
 router.get("/profitability/low-margin-products", ac.getLowMarginProducts);
+router.get("/profit-and-loss", ac.getProfitAndLoss);
 
 // Clients
 router.get("/clients/top", ac.getTopClients);

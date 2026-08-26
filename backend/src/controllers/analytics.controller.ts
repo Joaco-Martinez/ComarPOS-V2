@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { analyticsService } from "../services/analytics.service";
+import { profitAndLossService } from "../services/reports/profitAndLoss.service";
 import { rangeAR, optionalRangeAR } from "../utils/dateAR";
 
 function parseRange(req: Request) {
@@ -113,6 +114,15 @@ export const analyticsController = {
   getLowMarginProducts: wrap(async (req) => {
     const threshold = Number(req.query.threshold) || 20;
     return analyticsService.getLowMarginProducts(threshold);
+  }),
+
+  getProfitAndLoss: wrap(async (req) => {
+    const year = Number(req.query.year);
+    const month = Number(req.query.month);
+    if (!Number.isInteger(year) || !Number.isInteger(month)) {
+      throw new Error("Indicá year y month (ej. ?year=2026&month=8)");
+    }
+    return profitAndLossService.getMonthly(year, month);
   }),
 
   // ── Clients ────────────────────────────────────────────────────────────────

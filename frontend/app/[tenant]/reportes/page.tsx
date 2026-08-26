@@ -16,14 +16,35 @@ import { Download, AlertTriangle, Lightbulb } from 'lucide-react';
 const COLORS = ['#0D59E7', '#00B4DB', '#18C15E', '#F39C12', '#6474BB', '#EF4444', '#2ECC71', '#9B59B6'];
 
 const TABS = [
-  { key: 'ventas',        label: 'Ventas' },
-  { key: 'rentabilidad',  label: 'Rentabilidad' },
-  { key: 'clientes',      label: 'Clientes' },
-  { key: 'inventario',    label: 'Inventario' },
-  { key: 'compras',       label: 'Compras' },
-  { key: 'cashflow',      label: 'Cashflow' },
-  { key: 'insights',      label: 'Insights' },
+  { key: 'ventas',              label: 'Ventas' },
+  { key: 'rentabilidad',        label: 'Rentabilidad' },
+  { key: 'estado-resultados',   label: 'Estado de Resultados' },
+  { key: 'clientes',            label: 'Clientes' },
+  { key: 'inventario',          label: 'Inventario' },
+  { key: 'compras',             label: 'Compras' },
+  { key: 'cashflow',            label: 'Cashflow' },
+  { key: 'insights',            label: 'Insights' },
 ];
+
+// Categorías de Finance (CategoryFinance del schema) -> etiqueta en español,
+// mismo criterio que frontend/app/[tenant]/finanzas/page.tsx.
+const CATEGORY_LABEL: Record<string, string> = {
+  VENTA: 'Venta',
+  COBRANZA: 'Cobranza',
+  CompraMercaderia: 'Compra mercadería',
+  AlquilerL1: 'Alquiler local 1',
+  AlquilerF1: 'Alquiler frío 1',
+  Alarma: 'Alarma',
+  Sueldos: 'Sueldos',
+  MateriaPrima: 'Materia prima',
+  Impuestos: 'Impuestos',
+  VEP: 'VEP',
+  Contadora: 'Contadora',
+  Arca: 'ARCA',
+  Eenvios: 'E-envíos',
+  Publicidad: 'Publicidad',
+  Otro: 'Otro',
+};
 
 const tooltipStyle = { background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 12 };
 const axisStyle = { fontSize: 10, fill: 'var(--text3)', fontFamily: 'JetBrains Mono' };
@@ -80,6 +101,11 @@ export default function ReportesPage() {
   // Per-tab data
   const [ventas, setVentas] = useState<any>(null);
   const [rentabilidad, setRentabilidad] = useState<any>(null);
+  const [pyl, setPyl] = useState<any>(null);
+  const [pylPeriod, setPylPeriod] = useState(() => {
+    const d = new Date();
+    return { year: String(d.getFullYear()), month: String(d.getMonth() + 1) };
+  });
   const [clientes, setClientes] = useState<any>(null);
   const [inventario, setInventario] = useState<any>(null);
   const [compras, setCompras] = useState<any>(null);
@@ -143,6 +169,16 @@ export default function ReportesPage() {
         })),
       });
     } finally { setLoad('rentabilidad', false); }
+  };
+
+  const loadPyl = async () => {
+    setLoad('estado-resultados', true);
+    try {
+      const { data } = await api.get('/analytics/profit-and-loss', { params: pylPeriod });
+      setPyl(data);
+    } catch {
+      setPyl(null);
+    } finally { setLoad('estado-resultados', false); }
   };
 
   const loadClientes = async () => {
@@ -247,6 +283,7 @@ export default function ReportesPage() {
   const loaders: Record<string, () => void> = {
     ventas: loadVentas,
     rentabilidad: loadRentabilidad,
+    'estado-resultados': loadPyl,
     clientes: loadClientes,
     inventario: loadInventario,
     compras: loadCompras,
@@ -265,6 +302,12 @@ export default function ReportesPage() {
   useEffect(() => {
     DATE_SENSITIVE.filter((t) => loaded.current.has(t)).forEach((t) => loaders[t]?.());
   }, [from, to]);
+
+  // El Estado de Resultados usa su propio selector de año/mes (no el from/to
+  // compartido de arriba), así que recarga por separado cuando cambia.
+  useEffect(() => {
+    if (loaded.current.has('estado-resultados')) loadPyl();
+  }, [pylPeriod.year, pylPeriod.month]);
 
   const downloadExcel = async () => {
     try {
@@ -438,6 +481,106 @@ export default function ReportesPage() {
                   rows={rentabilidad.lowMargin}
                 />
               </div>
+            </div>
+          )}
+
+          {/* ── ESTADO DE RESULTADOS ── */}
+          {tab === 'estado-resultados' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div className="card" style={{ padding: 16 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Año</label>
+                    <input
+                      type="number"
+                      value={pylPeriod.year}
+                      onChange={(e) => setPylPeriod((p) => ({ ...p, year: e.target.value }))}
+                      style={{ width: 100 }}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Mes</label>
+                    <select
+                      value={pylPeriod.month}
+                      onChange={(e) => setPylPeriod((p) => ({ ...p, month: e.target.value }))}
+                      style={{ width: 150 }}
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                        <option key={m} value={m}>
+                          {new Date(2000, m - 1, 1).toLocaleDateString('es-AR', { month: 'long' })}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {pyl ? (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: 12 }}>
+                    <StatCard label="Ingresos" value={fmtMoney(num(pyl.revenue))} />
+                    <StatCard label="Costo mercadería vendida" value={fmtMoney(num(pyl.cogs))} color="var(--accent3)" />
+                    <StatCard label="Utilidad bruta" value={fmtMoney(num(pyl.grossProfit))} color="var(--success)" />
+                    <StatCard label="Margen bruto" value={`${num(pyl.grossMarginPercent).toFixed(1)}%`} color="var(--accent2)" />
+                    <StatCard label="Otros ingresos" value={fmtMoney(num(pyl.otherIncome))} color="var(--success)" />
+                    <StatCard label="Gastos operativos" value={fmtMoney(num(pyl.operatingExpenses))} color="var(--accent3)" />
+                    <StatCard
+                      label="Resultado neto"
+                      value={fmtMoney(num(pyl.netProfit))}
+                      color={num(pyl.netProfit) >= 0 ? 'var(--success)' : '#EF4444'}
+                    />
+                    <StatCard label="Margen neto" value={`${num(pyl.netMarginPercent).toFixed(1)}%`} />
+                  </div>
+
+                  <div className="grid-responsive" style={{ gap: 16 }}>
+                    <div className="card" style={{ overflow: 'hidden' }}>
+                      <div style={{ padding: '14px 16px 10px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--border)' }}>
+                        Gastos operativos por categoría
+                      </div>
+                      <SimpleTable
+                        cols={[
+                          { key: 'category', label: 'Categoría' },
+                          { key: 'amount', label: 'Monto', money: true },
+                          { key: 'percentOfRevenue', label: '% de ingresos', mono: true },
+                        ]}
+                        rows={normalizeArray<any>(pyl.expensesByCategory).map((e: any) => ({
+                          category: CATEGORY_LABEL[e.category] ?? e.category,
+                          amount: e.amount,
+                          percentOfRevenue: `${num(e.percentOfRevenue).toFixed(1)}%`,
+                        }))}
+                      />
+                    </div>
+                    <div className="card" style={{ overflow: 'hidden' }}>
+                      <div style={{ padding: '14px 16px 10px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--border)' }}>
+                        Otros ingresos por categoría
+                      </div>
+                      <SimpleTable
+                        cols={[
+                          { key: 'category', label: 'Categoría' },
+                          { key: 'amount', label: 'Monto', money: true },
+                          { key: 'percentOfRevenue', label: '% de ingresos', mono: true },
+                        ]}
+                        rows={normalizeArray<any>(pyl.otherIncomeByCategory).map((e: any) => ({
+                          category: CATEGORY_LABEL[e.category] ?? e.category,
+                          amount: e.amount,
+                          percentOfRevenue: `${num(e.percentOfRevenue).toFixed(1)}%`,
+                        }))}
+                      />
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: 11.5, color: 'var(--text3)', margin: 0, lineHeight: 1.6, maxWidth: 760 }}>
+                    Ingresos = total facturado de ventas completadas del mes. Costo de mercadería vendida = costo de
+                    compra de cada producto al momento de venderse. Otros ingresos = movimientos de caja tipo Ingreso
+                    que no son Venta/Cobranza (para no duplicar contra Ingresos). Resultado neto = Utilidad bruta +
+                    Otros ingresos − Gastos operativos.
+                  </p>
+                </>
+              ) : (
+                <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>
+                  Sin datos para el período seleccionado
+                </div>
+              )}
             </div>
           )}
 
