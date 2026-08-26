@@ -75,15 +75,15 @@ function printHtml(html, printerName, paperWidthMm = 80) {
             // Este callback dispara cuando Windows ACEPTA el trabajo para
             // imprimir, no necesariamente cuando la impresora fisica
             // termina de imprimirlo -- son cosas asincronicas separadas.
-            // Se espera un poco antes de borrar el HTML temporal para
-            // darle tiempo al driver/spooler a terminar de leerlo del
-            // todo (a pedido del usuario: el ticket se estaba cortando
-            // antes de terminar).
+            // Se espera antes de borrar el HTML temporal para darle
+            // tiempo al driver/spooler a terminar de leerlo del todo (a
+            // pedido del usuario: el ticket se seguia cortando antes de
+            // terminar incluso con 3s, asi que se subio a 8s).
             setTimeout(() => {
               cleanup();
               if (success) resolve();
               else reject(new Error(errorType || 'Error al imprimir'));
-            }, 3000);
+            }, 8000);
           }
         );
       })
