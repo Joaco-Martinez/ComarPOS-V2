@@ -133,8 +133,13 @@ export const billingService = {
   },
 
   /**
-   * Baja self-service ("botón de arrepentimiento" en /suscripcion): cancela
-   * el auto-cobro en Mercado Pago de verdad, pero el tenant sigue teniendo
+   * Baja self-service ("botón de arrepentimiento" en /suscripcion). Dos
+   * caminos segun si el tenant tiene o no una suscripción real de Mercado
+   * Pago (mpPreapprovalId) -- un tenant con un plan asignado a mano desde
+   * platform-admin (gratis o cualquier otro, ver platformTenant.service.ts)
+   * nunca tuvo una preapproval, pero igual tiene que poder darse de baja.
+   *
+   * Con MP: cancela el auto-cobro de verdad, pero el tenant sigue teniendo
    * acceso hasta paidUntil (el período que ya pagó) -- no lo suspende al
    * toque. El corte real despues del vencimiento lo hace
    * isSubscriptionExpired() en middleware/tenant.ts en el proximo request,
@@ -142,6 +147,12 @@ export const billingService = {
    * cancelarla en MP) es lo que hace que el webhook tardío de esa
    * cancelación no dispare handlePreapprovalStatus (guard: preapprovalId ya
    * no coincide con ninguna del tenant).
+   *
+   * Sin MP (plan manual): no hay auto-cobro que cancelar. Si tiene
+   * paidUntil, el acceso ya corta solo ahi -- se deja constancia nomas. Si
+   * NO tiene paidUntil (plan gratis indefinido, sin fecha de vencimiento),
+   * no hay corte natural -- la baja corta el acceso ahora mismo
+   * (paidUntil = ahora).
    *
    * Devuelve tambien un "numero de constancia" (derivado del id del
    * TenantPaymentLog que queda como registro permanente) -- la Resolucion
@@ -152,32 +163,56 @@ export const billingService = {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new Error("Tenant no encontrado");
 
-    if (!tenant.mpPreapprovalId) {
-      throw new Error("No tenés una suscripción de Mercado Pago activa para dar de baja");
+    if (tenant.mpPreapprovalId) {
+      try {
+        await mercadoPagoClient.cancelPreapproval(tenant.mpPreapprovalId);
+      } catch (err) {
+        console.warn(`⚠️ No se pudo cancelar la preapproval ${tenant.mpPreapprovalId} en Mercado Pago:`, err);
+      }
+
+      const [, log] = await prisma.$transaction([
+        prisma.tenant.update({
+          where: { id: tenantId },
+          data: { mpPreapprovalId: null },
+        }),
+        prisma.tenantPaymentLog.create({
+          data: {
+            tenantId,
+            previousStatus: tenant.subscriptionStatus,
+            newStatus: tenant.subscriptionStatus,
+            note: tenant.paidUntil
+              ? `Baja solicitada por el propio tenant desde Suscripción (botón de arrepentimiento). Mantiene acceso hasta el ${tenant.paidUntil.toLocaleDateString("es-AR")} (período ya pagado); no se renueva automáticamente.`
+              : "Baja solicitada por el propio tenant desde Suscripción (botón de arrepentimiento).",
+          },
+        }),
+      ]);
+
+      const claimCode = `ARR-${log.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+      const status = await this.getStatus(tenantId);
+      return { ...status, claimCode };
     }
 
-    try {
-      await mercadoPagoClient.cancelPreapproval(tenant.mpPreapprovalId);
-    } catch (err) {
-      console.warn(`⚠️ No se pudo cancelar la preapproval ${tenant.mpPreapprovalId} en Mercado Pago:`, err);
-    }
+    const now = new Date();
+    const endsNow = !tenant.paidUntil;
 
     const [, log] = await prisma.$transaction([
       prisma.tenant.update({
         where: { id: tenantId },
-        data: { mpPreapprovalId: null },
+        data: { paidUntil: endsNow ? now : tenant.paidUntil },
       }),
       prisma.tenantPaymentLog.create({
         data: {
           tenantId,
           previousStatus: tenant.subscriptionStatus,
           newStatus: tenant.subscriptionStatus,
-          note: tenant.paidUntil
-            ? `Baja solicitada por el propio tenant desde Suscripción (botón de arrepentimiento). Mantiene acceso hasta el ${tenant.paidUntil.toLocaleDateString("es-AR")} (período ya pagado); no se renueva automáticamente.`
-            : "Baja solicitada por el propio tenant desde Suscripción (botón de arrepentimiento).",
+          note: endsNow
+            ? "Baja solicitada por el propio tenant desde Suscripción (botón de arrepentimiento). Plan asignado manualmente, sin fecha de vencimiento -- el acceso se corta ahora."
+            : `Baja solicitada por el propio tenant desde Suscripción (botón de arrepentimiento). Plan asignado manualmente. Mantiene acceso hasta el ${tenant.paidUntil!.toLocaleDateString("es-AR")}; no se renueva.`,
         },
       }),
     ]);
+
+    if (endsNow) invalidateTenantCache(tenant.slug, tenant.id);
 
     const claimCode = `ARR-${log.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
     const status = await this.getStatus(tenantId);

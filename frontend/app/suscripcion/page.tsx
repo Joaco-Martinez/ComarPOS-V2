@@ -279,7 +279,7 @@ export default function SuscripcionPage() {
                   <RefreshCcw size={14} /> Actualizar estado
                 </button>
 
-                {status?.subscriptionStatus === 'ACTIVE' && status.mpPreapprovalId && !cancelMessage && (
+                {status?.subscriptionStatus === 'ACTIVE' && !cancelMessage && (
                   <button
                     onClick={cancelSubscription}
                     disabled={cancelling}
