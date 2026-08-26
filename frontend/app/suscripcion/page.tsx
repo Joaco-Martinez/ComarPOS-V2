@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { fmtDate } from '@/lib/helpers';
 import type { BillingPlan } from '@/types';
-import { CheckCircle2, CreditCard, LogOut, MessageCircle, RefreshCcw, Repeat, Ban } from 'lucide-react';
+import { CheckCircle2, CreditCard, LogOut, MessageCircle, PartyPopper, RefreshCcw, Repeat, Ban } from 'lucide-react';
 import { waLink } from '@/components/landing/siteConfig';
 
 type BillingStatus = {
@@ -21,7 +22,7 @@ type BillingStatus = {
 };
 
 export default function SuscripcionPage() {
-  const { logout } = useAuthStore();
+  const { logout, user } = useAuthStore();
   // No usamos useSearchParams (requeriria envolver la pagina en <Suspense>
   // solo por esto) - alcanza con leer el query string una vez al montar.
   const [isReturningFromMp, setIsReturningFromMp] = useState(false);
@@ -36,8 +37,8 @@ export default function SuscripcionPage() {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelMessage, setCancelMessage] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [statusRes, plansRes] = await Promise.all([
         api.get('/billing/status'),
@@ -49,9 +50,9 @@ export default function SuscripcionPage() {
       const plansContent = plansRes.data.content ?? plansRes.data;
       setPlans(plansContent?.plans ?? []);
     } catch {
-      setError('No pudimos cargar el estado de tu suscripción.');
+      if (!silent) setError('No pudimos cargar el estado de tu suscripción.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -61,6 +62,26 @@ export default function SuscripcionPage() {
     }
     load();
   }, [load]);
+
+  // Volviendo de pagar en Mercado Pago: el webhook que confirma el pago
+  // puede tardar unos segundos en llegar, asi que en vez de pedirle al
+  // usuario que actualice la pagina a mano, reconsultamos solos cada 3s
+  // hasta que quede ACTIVE (o hasta 40s, para no reintentar para siempre
+  // si el webhook se demora de verdad -- ahi se cae al mensaje normal de
+  // "puede tardar", que ya explica que no hace falta hacer nada mas).
+  useEffect(() => {
+    if (!isReturningFromMp || status?.subscriptionStatus === 'ACTIVE') return;
+    let attempts = 0;
+    const id = setInterval(() => {
+      attempts += 1;
+      if (attempts > 13) {
+        clearInterval(id);
+        return;
+      }
+      load(true);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [isReturningFromMp, status?.subscriptionStatus, load]);
 
   const isChangingPlan = !!status && status.subscriptionStatus === 'ACTIVE' && !!selectedPlanId && selectedPlanId !== status.planId;
 
@@ -151,6 +172,31 @@ export default function SuscripcionPage() {
             <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}>
               <div className="spinner" />
             </div>
+          ) : isReturningFromMp && status?.subscriptionStatus === 'ACTIVE' ? (
+            // Pantalla distinta a proposito para el regreso de Mercado
+            // Pago ya confirmado -- antes esto mostraba la misma tarjeta
+            // de siempre (con el selector de plan y el boton de dar de
+            // baja), lo cual se sentia raro justo despues de pagar. El
+            // poll de arriba (ver useEffect) ya se encargo de esperar a
+            // que status pase a ACTIVE antes de mostrar esto.
+            <div style={{ textAlign: 'center', padding: '6px 0' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--success-dim, rgba(24,193,94,0.12))', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <PartyPopper size={26} style={{ color: 'var(--success)' }} />
+              </div>
+              <h1 style={{ fontSize: 19, fontWeight: 800, marginBottom: 6 }}>¡Gracias por suscribirte!</h1>
+              <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 22, lineHeight: 1.5 }}>
+                Tu plan <strong>{status.plan.name}</strong> ya está activo{status.paidUntil ? `, al día hasta el ${fmtDate(status.paidUntil)}` : ''}. Ya podés arrancar a usar ComarPOS.
+              </p>
+              {user?.tenantSlug ? (
+                <Link href={`/${user.tenantSlug}/pos`} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', gap: 8 }}>
+                  Ir al sistema
+                </Link>
+              ) : (
+                <button onClick={() => setIsReturningFromMp(false)} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', gap: 8 }}>
+                  Ver mi suscripción
+                </button>
+              )}
+            </div>
           ) : (
             <>
               <h1 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
@@ -158,7 +204,7 @@ export default function SuscripcionPage() {
               </h1>
               <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.5 }}>
                 {isReturningFromMp
-                  ? 'Mercado Pago nos avisa apenas se acredite, puede tardar un par de minutos. Actualizá esta página en un rato.'
+                  ? 'Mercado Pago nos avisa apenas se acredite, puede tardar unos segundos. Estamos revisando solos, no hace falta que actualices la página.'
                   : isExpiredActive
                   ? `Diste de baja tu suscripción y el período que tenías pago venció el ${fmtDate(status!.paidUntil!)}. Reactivá para seguir usando ComarPOS.`
                   : status?.subscriptionStatus === 'ACTIVE'
@@ -275,11 +321,16 @@ export default function SuscripcionPage() {
                   </button>
                 )}
 
-                <button onClick={load} className="btn btn-secondary" style={{ width: '100%', gap: 8 }}>
+                <button onClick={() => load()} className="btn btn-secondary" style={{ width: '100%', gap: 8 }}>
                   <RefreshCcw size={14} /> Actualizar estado
                 </button>
 
-                {status?.subscriptionStatus === 'ACTIVE' && !cancelMessage && (
+                {/* mpPreapprovalId cubre PAST_DUE/SUSPENDED con una
+                    suscripción de MP todavía activa (un pago que falló es
+                    justo cuando mas se necesita poder cancelar, no menos);
+                    subscriptionStatus ACTIVE cubre el plan manual sin MP
+                    (ver cancelSubscription en billing.service.ts). */}
+                {(status?.mpPreapprovalId || status?.subscriptionStatus === 'ACTIVE') && !cancelMessage && (
                   <button
                     onClick={cancelSubscription}
                     disabled={cancelling}
