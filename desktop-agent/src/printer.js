@@ -62,11 +62,14 @@ function printHtml(html, printerName, paperWidthMm = 80) {
             // (58mm de rollo, ~48mm imprimibles) y rechaza en silencio
             // (job "completa" sin error pero no sale nada) cualquier
             // pageSize por encima de ese maximo -- mandar los 58mm enteros
-            // del rollo (58000) ya superaba ese limite. El alto queda
-            // generoso (200mm) -- una termica de rollo continuo corta al
-            // terminar el contenido real, no imprime hasta el final de la
-            // pagina.
-            pageSize: { width: contentWidthMm(paperWidthMm) * 1000, height: 200000 },
+            // del rollo (58000) ya superaba ese limite. El alto (297mm) es
+            // uno de los presets que el driver declara el mismo en su
+            // PrintCapabilitiesXML ("Option2: 58(48) x 297mm") -- se subio
+            // de 200mm a este valor porque el ticket con logo se estaba
+            // cortando antes de terminar (reportado por el usuario); un
+            // preset declarado por el propio driver tiene mas chance de
+            // respetarse bien que un alto custom arbitrario.
+            pageSize: { width: contentWidthMm(paperWidthMm) * 1000, height: 297042 },
           },
           (success, errorType) => {
             cleanup();
