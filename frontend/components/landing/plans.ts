@@ -33,15 +33,24 @@ export const PLANS: LandingPlan[] = [
     priceArs: 24000,
     regularPriceArs: 32000,
     tagline: 'Para arrancar con lo justo y necesario.',
-    // Mismos limites y features que backend/src/config/billing.ts#PLANS
-    // (id "esencial"): sin cuentasCorrientes/promociones/fidelidad -- por
-    // eso esos 3 no aparecen listados aca (a diferencia de los otros 2
-    // planes, que si los tienen y por eso los destacan como diferencial).
+    // OJO: esto refleja el estado real de "Módulos por plan" en
+    // /platform-admin (PlanFeatureConfig, override sobre el default
+    // hardcodeado de billing.ts#ALL_FEATURES_ON) al 2026-08-26, no el
+    // default del código -- ese panel se edita sin deploy, así que si
+    // vuelve a cambiar qué modulo esta activo/inactivo por plan, hay que
+    // volver a mirar esa pantalla y actualizar estos perks a mano.
+    // Esencial hoy SOLO tiene: POS, Historial de Ventas, Caja, Servicios,
+    // AFIP/Facturas, Devoluciones, Productos, Categorías, Stock, Alertas,
+    // Clientes, Dashboard, Usuarios, Sucursales, ARCA config, Empresa y
+    // PrintBox. Le faltan (respecto a los otros 2 planes): Remitos, Conteo
+    // de Stock, Cuentas Corrientes, Fidelidad, Promociones, Compras,
+    // Órdenes de Compra, Proveedores, Finanzas, Gastos Recurrentes, Tipo
+    // de Cambio, Reportes, Objetivos de Ventas y Auditoría.
     perks: [
       '1 sucursal, hasta 300 productos y 2 usuarios',
-      'POS, facturación AFIP y stock',
-      'Caja, servicios técnicos y remitos',
-      'Reportes y devoluciones',
+      'POS, facturación AFIP, stock y caja',
+      'Servicios técnicos y devoluciones',
+      'Clientes y alertas de stock',
     ],
   },
   {
@@ -51,13 +60,14 @@ export const PLANS: LandingPlan[] = [
     regularPriceArs: 47000,
     tagline: 'El más elegido: para un negocio en crecimiento.',
     highlighted: true,
-    // Mismas features que "esencial" + cuentasCorrientes/promociones/fidelidad
-    // (billing.ts#PLANS, id "profesional" usa ALL_FEATURES_ON completo).
+    // Todos los módulos activos (igual que "multisucursal") -- ver nota en
+    // el plan "esencial" de arriba sobre de dónde sale esta lista.
     perks: [
       'Hasta 3 sucursales, productos y usuarios ilimitados',
-      'Todos los módulos: POS, facturación, stock, caja, servicios, remitos, compras, finanzas y reportes',
-      'Cuenta corriente (venta a fiado)',
-      'Promociones y fidelización por puntos',
+      'Todo lo de Esencial, más remitos y conteo de stock',
+      'Compras, proveedores y finanzas',
+      'Cuenta corriente, promociones y fidelización',
+      'Reportes gerenciales y objetivos de venta',
     ],
   },
   {
@@ -66,6 +76,8 @@ export const PLANS: LandingPlan[] = [
     priceArs: 52000,
     regularPriceArs: 70000,
     tagline: 'Para cadenas y negocios con varias sucursales.',
+    // Mismos módulos activos que "profesional" -- la diferencia real entre
+    // estos dos planes son los límites (sucursales), no las funciones.
     perks: [
       'Sucursales, productos y usuarios ilimitados',
       'Todos los módulos, igual que el plan Profesional',
