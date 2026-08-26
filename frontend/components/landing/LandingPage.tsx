@@ -1,6 +1,12 @@
 import {
-  ArrowRight, Store, ShieldCheck, Zap, Layers, Target, CheckCircle2,
+  ArrowRight, Store, ShieldCheck, Zap, Layers, Target, CheckCircle2, Smartphone,
 } from 'lucide-react';
+import {
+  PosIcon, FacturacionIcon, ProductosIcon, StockIcon, CajaIcon, ClientesIcon,
+  ServiciosIcon, RemitosIcon, DevolucionesIcon, ComprasIcon, ConteoStockIcon,
+  FinanzasIcon, ReportesIcon, PromocionesIcon, UsuariosIcon, PrintboxIcon,
+  type ComarIconProps,
+} from '@/components/icons/ComarIcons';
 import FiscalMoment from './FiscalMoment';
 import ShowcaseTabs from './ShowcaseTabs';
 import TiltCard from './TiltCard';
@@ -19,6 +25,7 @@ const CTA_LABEL = 'Pedir una demo por WhatsApp';
 const NAV_LINKS = [
   { href: '#como-funciona', label: 'Cómo funciona' },
   { href: '#rubros', label: 'Rubros' },
+  { href: '#todo-incluido', label: 'Todo lo que incluye' },
   { href: '#planes', label: 'Planes' },
   { href: '#preguntas', label: 'Preguntas frecuentes' },
 ];
@@ -33,6 +40,31 @@ const DIFFERENTIATORS = [
   { icon: ShieldCheck, title: 'Facturación AFIP real', desc: 'No es un "próximamente": ya emite factura electrónica con CAE y reintenta solo si AFIP está caído.' },
   { icon: Zap, title: 'Se adapta a tu rubro', desc: 'Vendas por unidad, por kilo, en combos o con lista de precios propia por cliente, el sistema se ajusta a como vendés vos.' },
   { icon: Target, title: 'Crece con tu negocio', desc: 'Sumá sucursales, usuarios y stock sin migrar de sistema ni perder el historial.' },
+];
+
+// Un modulo por tarjeta, para mostrar todo lo que incluye el sistema de un
+// vistazo (a pedido explicito: "poné TODO lo que tiene el programa"). Mismo
+// listado de modulos que el Centro de ayuda (frontend/lib/helpContent.ts),
+// resumido a una linea por modulo para uso comercial.
+type LandingFeatureIcon = (props: ComarIconProps) => React.JSX.Element;
+const ALL_FEATURES: { icon: LandingFeatureIcon; title: string; desc: string }[] = [
+  { icon: PosIcon, title: 'POS y Ventas', desc: 'Vendé por nombre o código de barras, por unidad o por kilo, y combiná medios de pago en la misma venta.' },
+  { icon: FacturacionIcon, title: 'Facturación AFIP/ARCA', desc: 'Factura A, B o C con CAE real en el momento; si AFIP se cae, reintenta solo hasta lograrla.' },
+  { icon: ProductosIcon, title: 'Productos y combos', desc: 'Categorías, precios, productos por peso y combos armados con otros productos del catálogo.' },
+  { icon: StockIcon, title: 'Stock multi-sucursal', desc: 'Cada sucursal o depósito lleva su propio stock, con historial de cada movimiento.' },
+  { icon: CajaIcon, title: 'Caja', desc: 'Apertura y cierre con arqueo, y comprobante de cierre imprimible al final del turno.' },
+  { icon: ClientesIcon, title: 'Clientes y cuenta corriente', desc: 'Venta fiada con límite de crédito y listas de precio propias por cliente.' },
+  { icon: ServiciosIcon, title: 'Servicios (reparaciones)', desc: 'Órdenes de servicio con presupuesto que el cliente aprueba online, sin pasar por el local.' },
+  { icon: RemitosIcon, title: 'Remitos', desc: 'Remito digital con su propio CAI de AFIP, para entregar mercadería sin facturar en el momento.' },
+  { icon: DevolucionesIcon, title: 'Devoluciones', desc: 'Reversa stock y deuda automáticamente, y genera la nota de crédito correspondiente.' },
+  { icon: ComprasIcon, title: 'Compras y proveedores', desc: 'Compras que suman stock solas, y órdenes de compra para pedirle a tus proveedores.' },
+  { icon: ConteoStockIcon, title: 'Conteo de stock', desc: 'Inventario físico contra el sistema, con las diferencias resaltadas para ajustarlas.' },
+  { icon: FinanzasIcon, title: 'Finanzas y gastos recurrentes', desc: 'Ingresos y egresos fuera de una venta, y gastos fijos que se repiten todos los meses.' },
+  { icon: ReportesIcon, title: 'Reportes y objetivos de venta', desc: 'Ventas por vendedor, por hora y por sucursal, rentabilidad por producto y metas con seguimiento.' },
+  { icon: PromocionesIcon, title: 'Promociones y fidelidad', desc: 'Descuentos por producto, categoría o carrito, más puntos por compra que tus clientes canjean.' },
+  { icon: UsuariosIcon, title: 'Usuarios y sucursales', desc: 'Roles con permisos distintos, y usuarios y sucursales que sumás sin migrar de sistema.' },
+  { icon: PrintboxIcon, title: 'PrintBox', desc: 'Imprimí tickets en tu impresora térmica sin necesidad de una PC conectada por cable.' },
+  { icon: Smartphone as unknown as LandingFeatureIcon, title: 'App / PWA', desc: 'Se instala en el celular como una app más, sin pasar por Google Play ni App Store.' },
 ];
 
 const FAQS = [
@@ -274,6 +306,33 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
                 <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{title}</h3>
                 <p style={{ fontSize: 13, color: 'var(--text3)', lineHeight: 1.6 }}>{desc}</p>
               </TiltCard>
+            </Reveal>
+          ))}
+        </div>
+      </Section>
+
+      {/* Todo lo que incluye */}
+      <Section id="todo-incluido" style={{ padding: '0 24px 96px' }}>
+        <Eyebrow>TODO LO QUE INCLUYE</Eyebrow>
+        <h2 style={{ fontSize: 28, fontWeight: 800, textAlign: 'center', marginBottom: 12, letterSpacing: '-0.01em' }}>
+          Un sistema completo, no un puñado de módulos sueltos
+        </h2>
+        <p style={{ fontSize: 14.5, color: 'var(--text3)', textAlign: 'center', marginBottom: 40, maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>
+          Todo esto ya viene incluido en tu plan, sin módulos que se pagan aparte.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+          {ALL_FEATURES.map(({ icon: Icon, title, desc }, i) => (
+            <Reveal key={title} delay={(i % 4) * 0.06}>
+              <div className="card" style={{ padding: 18, height: '100%' }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10, background: 'var(--accent-dim)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+                }}>
+                  <Icon size={17} style={{ color: 'var(--accent)' }} />
+                </div>
+                <h3 style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 6 }}>{title}</h3>
+                <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.55 }}>{desc}</p>
+              </div>
             </Reveal>
           ))}
         </div>
