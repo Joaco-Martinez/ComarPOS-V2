@@ -13,7 +13,9 @@
     "appId": "com.comarpos.agent",
     "productName": "ComarPOS Agent",
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "assets/icon.ico"
     },
     "nsis": {
@@ -34,6 +36,7 @@
     }
   },
   "dependencies": {
+    "pdf-to-printer": "^5.8.0",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

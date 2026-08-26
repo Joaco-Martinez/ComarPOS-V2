@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { BrowserWindow } = require('electron');
+const pdfToPrinter = require('pdf-to-printer');
 const { contentWidthMm } = require('./ticketTemplate');
 
 // Imprime via el driver de Windows de la impresora ya instalada (GDI), no
@@ -14,11 +15,12 @@ const { contentWidthMm } = require('./ticketTemplate');
 // de Windows de antemano (USB plug-and-play la mayoria de las termicas
 // modernas ya lo hacen solas).
 
-// Una sola ventana oculta reutilizada para listar impresoras e imprimir, en
-// vez de crear+destruir una por llamada -- crear una ventana justo despues
-// de destruir la anterior probó ser inestable (ERR_FAILED intermitente al
-// cargar el archivo del ticket siguiente, reproducido a mano varias veces),
-// asi que evitamos el churn del todo en vez de perseguir el timing exacto.
+// Una sola ventana oculta reutilizada para listar impresoras y renderizar
+// el HTML del ticket, en vez de crear+destruir una por llamada -- crear
+// una ventana justo despues de destruir la anterior probó ser inestable
+// (ERR_FAILED intermitente al cargar el archivo del ticket siguiente,
+// reproducido a mano varias veces), asi que evitamos el churn del todo en
+// vez de perseguir el timing exacto.
 let sharedWindow = null;
 
 function getSharedWindow() {
@@ -36,62 +38,64 @@ async function listPrinters() {
   return printers.map((p) => ({ name: p.name, displayName: p.displayName || p.name, isDefault: !!p.isDefault }));
 }
 
-function printHtml(html, printerName, paperWidthMm = 80) {
-  return new Promise((resolve, reject) => {
-    const tempFile = path.join(os.tmpdir(), `comarpos-ticket-${crypto.randomUUID()}.html`);
-    fs.writeFileSync(tempFile, html, 'utf8');
-    const cleanup = () => fs.unlink(tempFile, () => {});
+async function printHtml(html, printerName, paperWidthMm = 80) {
+  const htmlTempFile = path.join(os.tmpdir(), `comarpos-ticket-${crypto.randomUUID()}.html`);
+  const pdfTempFile = path.join(os.tmpdir(), `comarpos-ticket-${crypto.randomUUID()}.pdf`);
+  const cleanup = () => {
+    fs.unlink(htmlTempFile, () => {});
+    fs.unlink(pdfTempFile, () => {});
+  };
 
+  try {
+    fs.writeFileSync(htmlTempFile, html, 'utf8');
     const win = getSharedWindow();
 
-    win
-      .loadFile(tempFile)
-      .then(async () => {
-        // Medimos la altura real del contenido ya renderizado (con el logo
-        // e imagenes ya cargadas) en vez de pedir un alto de pagina fijo
-        // grande "por las dudas" -- probado que eso ultimo falla: pedir un
-        // alto muy grande (se probo con 3276mm, el maximo que el driver
-        // declara para su preset de rollo continuo) hizo que el trabajo
-        // real (a diferencia de printToPDF, que si respeta el alto pedido)
-        // se cortara en 2 paginas separadas de todas formas -- el driver
-        // real parece no manejar bien un pageSize custom tan grande y cae
-        // a un preset mas chico, cortando el ticket a mitad del contenido
-        // (reproducido: ticket real fisico salio partido en 2 pedazos).
-        // Pidiendo la altura exacta que el contenido necesita (+ margen)
-        // se evita esa ambiguedad del todo.
-        const contentHeightPx = await win.webContents.executeJavaScript(
-          'document.documentElement.scrollHeight'
-        );
-        const MICRONS_PER_PX = 25400 / 96; // 1px CSS = 1/96 in = 25400/96 micrones
-        const SAFETY_MARGIN_MICRONS = 15000; // ~15mm de margen para el corte
-        const heightMicrons = Math.round(contentHeightPx * MICRONS_PER_PX) + SAFETY_MARGIN_MICRONS;
+    // Etapa 1: renderizar el HTML y convertirlo a PDF de una sola pagina,
+    // con la altura exacta del contenido real ya cargado (logo incluido).
+    // printToPDF SI respeta el pageSize pedido de forma confiable -- a
+    // diferencia de pedirle esto mismo directo al print() real contra el
+    // driver de una impresora fisica (ver mas abajo, etapa 2).
+    await win.loadFile(htmlTempFile);
+    const contentHeightPx = await win.webContents.executeJavaScript('document.documentElement.scrollHeight');
+    const MICRONS_PER_PX = 25400 / 96; // 1px CSS = 1/96 in = 25400/96 micrones
+    const SAFETY_MARGIN_MICRONS = 15000; // ~15mm de margen para el corte
+    const widthMicrons = contentWidthMm(paperWidthMm) * 1000;
+    const heightMicrons = Math.round(contentHeightPx * MICRONS_PER_PX) + SAFETY_MARGIN_MICRONS;
 
-        win.webContents.print(
-          {
-            silent: true,
-            printBackground: true,
-            deviceName: printerName || undefined,
-            margins: { marginType: 'none' },
-            // Ancho en el area IMPRIMIBLE (contentWidthMm), no el ancho
-            // del rollo -- confirmado contra el PrintCapabilitiesXML real
-            // de una POS-58C: el driver declara un maximo de 48047
-            // micrones (58mm de rollo, ~48mm imprimibles) y rechaza en
-            // silencio (job "completa" sin error pero no sale nada)
-            // cualquier pageSize por encima de ese maximo.
-            pageSize: { width: contentWidthMm(paperWidthMm) * 1000, height: heightMicrons },
-          },
-          (success, errorType) => {
-            cleanup();
-            if (success) resolve();
-            else reject(new Error(errorType || 'Error al imprimir'));
-          }
-        );
-      })
-      .catch((err) => {
-        cleanup();
-        reject(err);
-      });
-  });
+    const pdfBuffer = await win.webContents.printToPDF({
+      printBackground: true,
+      pageSize: { width: widthMicrons, height: heightMicrons },
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+    });
+    fs.writeFileSync(pdfTempFile, pdfBuffer);
+
+    // Etapa 2: imprimir ESE PDF ya generado (una sola pagina, paginacion
+    // ya resuelta) con pdf-to-printer (usa SumatraPDF por dentro) en vez
+    // de imprimir el HTML directo con webContents.print(). Dos intentos
+    // anteriores fallaron contra el driver real de una POS-58C:
+    //   1. Pedirle un pageSize custom (primero fijo en 3276mm, despues
+    //      medido segun el contenido real) directo al print() del HTML
+    //      -- el driver real no lo respeta igual que printToPDF, y el
+    //      ticket salia partido en 2 paginas fisicas separadas
+    //      (reproducido con foto: 2 pedazos de papel, con un caracter
+    //      suelto en el borde de cada uno).
+    //   2. Cargar el PDF ya generado con el visor interno de Chromium
+    //      (BrowserWindow con plugins:true + loadURL a un file://.pdf) y
+    //      imprimir eso -- loadURL() se queda colgado indefinidamente sin
+    //      resolver su promise para un PDF local con el visor interno.
+    // pdf-to-printer/SumatraPDF es una herramienta hecha especificamente
+    // para "imprimir este PDF en esta impresora" sin pasar por ninguna de
+    // las dos rutas anteriores. scale:'noscale' para que imprima el PDF
+    // tal cual esta (ya tiene el pageSize correcto), sin que intente
+    // ajustarlo a otro tamaño de papel.
+    await pdfToPrinter.print(pdfTempFile, {
+      printer: printerName || undefined,
+      scale: 'noscale',
+      silent: true,
+    });
+  } finally {
+    cleanup();
+  }
 }
 
 // Crea la ventana compartida de una vez al arrancar la app, antes de que
