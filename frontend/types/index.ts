@@ -21,6 +21,8 @@ export type ClientIvaCondition =
   | 'IVA NO RESPONSABLE';
 export type MovementType = 'TRANSFER' | 'INGRESS' | 'ADJUSTMENT' | 'SALE' | 'SALE_CANCEL';
 export type AccountMovementType = 'DEBT' | 'PAYMENT' | 'ADJUSTMENT_POSITIVE' | 'ADJUSTMENT_NEGATIVE' | 'CREDIT_NOTE';
+
+export type SupplierAccountMovementType = 'COMPRA' | 'PAGO' | 'AJUSTE_POSITIVO' | 'AJUSTE_NEGATIVO';
 export type CashSessionStatus = 'OPEN' | 'CLOSED';
 export type CashMovementType = 'OPENING' | 'SALE_CASH' | 'PAYMENT_RECEIVED' | 'EXPENSE' | 'WITHDRAWAL' | 'DEPOSIT' | 'ADJUSTMENT';
 export type PromotionType = 'PRODUCT_DISCOUNT' | 'CATEGORY_DISCOUNT' | 'CART_DISCOUNT';
@@ -355,8 +357,28 @@ export interface Supplier {
   address?: string | null;
   notes?: string | null;
   isActive: boolean;
+  currentBalance: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SupplierAccountMovement {
+  id: string;
+  supplierId: string;
+  supplier?: Supplier;
+  purchaseId?: string | null;
+  purchase?: Purchase | null;
+  userId?: string | null;
+  user?: User | null;
+  type: SupplierAccountMovementType;
+  amount: number;
+  previousBalance: number;
+  newBalance: number;
+  paymentMethod?: PaymentMethod | null;
+  reference?: string | null;
+  description?: string | null;
+  date: string;
+  createdAt: string;
 }
 
 export interface CashSession {

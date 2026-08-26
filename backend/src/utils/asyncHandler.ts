@@ -42,6 +42,12 @@ export class ClienteNoEncontradoError extends AppError {
   }
 }
 
+export class ProveedorNoEncontradoError extends AppError {
+  constructor(message = "Proveedor no encontrado", details?: unknown) {
+    super("PROVEEDOR_NO_ENCONTRADO", message, 404, details);
+  }
+}
+
 export class AfipRejectedError extends AppError {
   constructor(message: string, details?: unknown) {
     super("AFIP_REJECTED", message, 422, details);
