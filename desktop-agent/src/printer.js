@@ -111,6 +111,17 @@ async function printHtml(html, printerName, paperWidthMm = 80) {
       silent: true,
       sumatraPdfPath: resolveSumatraPdfPath(),
     });
+
+    // SumatraPDF le entrega el trabajo al spooler de Windows y termina su
+    // propio proceso (que es lo que este await espera) ANTES de que el
+    // spooler termine de leer/rasterizar el PDF -- son cosas asincronicas
+    // separadas. Reproducido: borrando el archivo temporal apenas
+    // termina este await, el trabajo llegaba a la impresora truncado a
+    // ~468 bytes en vez de los ~65KB reales (confirmado comparando el
+    // tamaño del job en la cola de Windows con y sin este delay). Sin
+    // esto, el driver "imprime" sin error pero no sale nada -- la
+    // impresora nunca recibio la mayor parte del contenido.
+    await new Promise((r) => setTimeout(r, 4000));
   } finally {
     cleanup();
   }
