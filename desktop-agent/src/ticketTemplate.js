@@ -121,9 +121,24 @@ async function buildTicketHtml(payload, paperWidthMm = 80) {
   .qr { display: flex; justify-content: center; margin: 6px 0; }
   .totals .row { margin-bottom: 2px; }
   .footer { margin-top: 8px; }
+  .logo { display: flex; justify-content: center; margin-bottom: 4px; }
+  .logo img { max-width: 28mm; max-height: 14mm; object-fit: contain; }
 </style>
 </head>
 <body>
+  ${/* logoUrl (imagen normal del tenant), no logoEscposUrl -- ese otro campo
+       es el bitmap ya convertido a comandos ESC/POS que usa el ESP32 (ver
+       printbox/src/main.cpp#ensureTenantLogoCached), inutil como <img> acá.
+       Mismo orden que el firmware: el logo va primero, antes del nombre.
+       max-height mas chico que la primera vez (14mm, antes 20mm) a
+       proposito -- la vez anterior que se agrego el logo, el ticket
+       empezo a cortarse antes de terminar de imprimir; reduce el area
+       rasterizada de la imagen por las dudas sea parte del problema. */
+    business.logoUrl ? `
+    <div class="logo">
+      <img src="${esc(business.logoUrl)}" onerror="this.parentElement.style.display='none'" />
+    </div>
+  ` : ''}
   <div class="center big">${esc(business.name)}</div>
   ${business.cuit ? `<div class="center">CUIT: ${esc(business.cuit)}</div>` : ''}
   ${business.address ? `<div class="center">${esc(business.address)}</div>` : ''}
