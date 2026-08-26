@@ -198,6 +198,11 @@ async function buildTicketHtml(payload, paperWidthMm = 80) {
 
   ${line()}
   <div class="center footer">${esc(p.footer)}</div>
+  <!-- Relleno descartable a proposito: esta impresora corta el trabajo
+       antes de terminar de imprimir la ultima linea real (ver
+       printer.js) -- estos puntos absorben ese corte para que el
+       footer real (arriba) quede completo. -->
+  <div class="center" style="margin-top: 6px;">. .</div>
 </body>
 </html>`;
 }
