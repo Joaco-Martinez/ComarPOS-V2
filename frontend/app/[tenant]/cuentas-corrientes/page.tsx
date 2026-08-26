@@ -6,9 +6,9 @@ import AppLayout from '@/components/AppLayout';
 import ClientFormModal from '@/components/ClientFormModal';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { AccountMovement, Client } from '@/types';
+import type { AccountMovement, Client, Supplier, SupplierAccountMovement } from '@/types';
 import { clientName, fmtDate, fmtMoney, normalizeArray, num, getPlanLockMessage } from '@/lib/helpers';
-import { CreditCard, Search, Plus, X, RefreshCcw, Eye, Lock } from 'lucide-react';
+import { CreditCard, Search, Plus, X, Lock, Truck, Users } from 'lucide-react';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 
 const typeBadge = (t: string) => {
@@ -23,7 +23,24 @@ const typeLabel: Record<string, string> = {
   ADJUSTMENT_NEGATIVE: 'Ajuste −', CREDIT_NOTE: 'Nota crédito',
 };
 
+// Cuenta corriente de PROVEEDORES -- espejo de la de clientes (arriba), ver
+// backend/src/services/supplierAccount.service.ts. positivo = nosotros le
+// debemos plata al proveedor (al reves que en Client, donde positivo = el
+// cliente nos debe a nosotros).
+const supplierTypeBadge = (t: string) => {
+  if (t === 'COMPRA') return 'badge-red';
+  if (t === 'PAGO') return 'badge-green';
+  return 'badge-gray';
+};
+
+const supplierTypeLabel: Record<string, string> = {
+  COMPRA: 'Compra', PAGO: 'Pago', AJUSTE_POSITIVO: 'Ajuste +', AJUSTE_NEGATIVO: 'Ajuste −',
+};
+
 export default function CuentasCorrientesPage() {
+  const [tab, setTab] = useState<'clientes' | 'proveedores'>('clientes');
+
+  // ---- Clientes ----
   const [clients, setClients] = useState<Client[]>([]);
   const [movements, setMovements] = useState<AccountMovement[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -36,6 +53,19 @@ export default function CuentasCorrientesPage() {
   const [saving, setSaving] = useState(false);
   const [lockMessage, setLockMessage] = useState<string | null>(null);
 
+  // ---- Proveedores ----
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierMovements, setSupplierMovements] = useState<SupplierAccountMovement[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [suppliersLoaded, setSuppliersLoaded] = useState(false);
+  const [supplierLoading, setSupplierLoading] = useState(true);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierModal, setSupplierModal] = useState<'payment' | 'adjustment' | null>(null);
+  const [supplierForm, setSupplierForm] = useState({ amount: '', paymentMethod: 'EFECTIVO', description: '' });
+  const [supplierAdjForm, setSupplierAdjForm] = useState({ amount: '', type: 'POSITIVE' as 'POSITIVE' | 'NEGATIVE', description: '' });
+  const [supplierSaving, setSupplierSaving] = useState(false);
+  const [supplierLockMessage, setSupplierLockMessage] = useState<string | null>(null);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -45,6 +75,27 @@ export default function CuentasCorrientesPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Los proveedores recien se cargan al entrar a la pestaña (evita pedir
+  // /suppliers si el usuario nunca la abre, y evita un 403 de plan feature
+  // "de arranque" si el tenant no tiene el modulo de Proveedores).
+  useEffect(() => {
+    if (tab === 'proveedores' && !suppliersLoaded) {
+      loadSuppliers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  const loadSuppliers = async () => {
+    setSupplierLoading(true);
+    try {
+      const { data } = await api.get('/suppliers');
+      setSuppliers(normalizeArray<Supplier>(data));
+    } finally {
+      setSupplierLoading(false);
+      setSuppliersLoaded(true);
+    }
+  };
 
   const loadMovements = async (clientId: string) => {
     setLockMessage(null);
@@ -58,11 +109,31 @@ export default function CuentasCorrientesPage() {
     }
   };
 
+  const loadSupplierMovements = async (supplierId: string) => {
+    setSupplierLockMessage(null);
+    try {
+      const { data } = await api.get(`/accounts/suppliers/${supplierId}`);
+      setSupplierMovements(normalizeArray<SupplierAccountMovement>(data?.movements ?? data));
+      if (data?.supplier) {
+        setSelectedSupplier((prev) => (prev ? { ...prev, currentBalance: data.supplier.currentBalance } : prev));
+        setSuppliers((prev) => prev.map((s) => (s.id === supplierId ? { ...s, currentBalance: data.supplier.currentBalance } : s)));
+      }
+    } catch (err: any) {
+      const lockMsg = getPlanLockMessage(err);
+      if (lockMsg) setSupplierLockMessage(lockMsg);
+      setSupplierMovements([]);
+    }
+  };
+
   const selectClient = (c: Client) => {
     setSelectedClient(c);
     loadMovements(c.id);
   };
 
+  const selectSupplier = (s: Supplier) => {
+    setSelectedSupplier(s);
+    loadSupplierMovements(s.id);
+  };
 
   const savePayment = async () => {
     if (!selectedClient || !form.amount) return;
@@ -102,6 +173,42 @@ export default function CuentasCorrientesPage() {
     } finally { setSaving(false); }
   };
 
+  const saveSupplierPayment = async () => {
+    if (!selectedSupplier || !supplierForm.amount) return;
+    setSupplierSaving(true);
+    try {
+      await api.post(`/accounts/suppliers/${selectedSupplier.id}/payment`, {
+        amount: Number(supplierForm.amount),
+        method: supplierForm.paymentMethod,
+        description: supplierForm.description || undefined,
+      });
+      toast.success('Pago registrado');
+      setSupplierModal(null);
+      setSupplierForm({ amount: '', paymentMethod: 'EFECTIVO', description: '' });
+      loadSupplierMovements(selectedSupplier.id);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error');
+    } finally { setSupplierSaving(false); }
+  };
+
+  const saveSupplierAdjustment = async () => {
+    if (!selectedSupplier || !supplierAdjForm.amount) return;
+    setSupplierSaving(true);
+    try {
+      await api.post(`/accounts/suppliers/${selectedSupplier.id}/adjustment`, {
+        amount: Number(supplierAdjForm.amount),
+        type: supplierAdjForm.type,
+        description: supplierAdjForm.description || undefined,
+      });
+      toast.success('Ajuste registrado');
+      setSupplierModal(null);
+      setSupplierAdjForm({ amount: '', type: 'POSITIVE', description: '' });
+      loadSupplierMovements(selectedSupplier.id);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error');
+    } finally { setSupplierSaving(false); }
+  };
+
   const filteredClients = useMemo(() => {
     const q = clientSearch.toLowerCase();
     if (!q) return clients;
@@ -110,8 +217,34 @@ export default function CuentasCorrientesPage() {
     );
   }, [clients, clientSearch]);
 
+  const filteredSuppliers = useMemo(() => {
+    const q = supplierSearch.toLowerCase();
+    if (!q) return suppliers;
+    return suppliers.filter((s) =>
+      s.name.toLowerCase().includes(q) || s.cuit?.includes(q)
+    );
+  }, [suppliers, supplierSearch]);
+
   return (
-    <AppLayout title="Cuentas Corrientes" subtitle="Gestión de crédito y deuda de clientes">
+    <AppLayout title="Cuentas Corrientes" subtitle="Gestión de crédito y deuda de clientes y proveedores">
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+        <button
+          onClick={() => setTab('clientes')}
+          className={`btn btn-sm ${tab === 'clientes' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ gap: 6 }}
+        >
+          <Users size={13} /> Clientes
+        </button>
+        <button
+          onClick={() => setTab('proveedores')}
+          className={`btn btn-sm ${tab === 'proveedores' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ gap: 6 }}
+        >
+          <Truck size={13} /> Proveedores
+        </button>
+      </div>
+
+      {tab === 'clientes' ? (
       <div className="grid-responsive cta-cte-layout" style={{ ['--gtc' as any]: '280px 1fr', gap: 16 }}>
         {/* Clients list */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
@@ -251,6 +384,134 @@ export default function CuentasCorrientesPage() {
           )}
         </div>
       </div>
+      ) : (
+      <div className="grid-responsive cta-cte-layout" style={{ ['--gtc' as any]: '280px 1fr', gap: 16 }}>
+        {/* Suppliers list */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
+            <input value={supplierSearch} onChange={(e) => setSupplierSearch(e.target.value)} placeholder="Buscar proveedor..." style={{ paddingLeft: 30, fontSize: 13 }} />
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {supplierLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}><div className="spinner" /></div>
+            ) : filteredSuppliers.length === 0 ? (
+              <div className="empty-state" style={{ padding: 32 }}><Truck size={24} /><p>Sin proveedores cargados</p></div>
+            ) : (
+              filteredSuppliers.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => selectSupplier(s)}
+                  style={{
+                    background: selectedSupplier?.id === s.id ? 'rgba(13,89,231,0.12)' : 'var(--surface)',
+                    border: `1px solid ${selectedSupplier?.id === s.id ? 'rgba(13,89,231,0.3)' : 'var(--border)'}`,
+                    borderRadius: 7, padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{s.name}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                    <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{s.cuit ?? (s.isActive ? 'Activo' : 'Inactivo')}</span>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 700, color: s.currentBalance > 0 ? 'var(--warn)' : 'var(--text3)' }}>
+                      {fmtMoney(s.currentBalance)}
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Movements panel */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {!selectedSupplier ? (
+            <div className="card empty-state" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Truck size={36} />
+              <p>Seleccioná un proveedor para ver su cuenta corriente</p>
+            </div>
+          ) : supplierLockMessage ? (
+            <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 10, padding: 28 }}>
+              <Lock size={28} style={{ color: 'var(--text3)' }} />
+              <div style={{ fontWeight: 700, fontSize: 14 }}>No incluido en tu plan</div>
+              <p style={{ fontSize: 13, color: 'var(--text3)', maxWidth: 360 }}>{supplierLockMessage}</p>
+              <a href="/suscripcion" className="btn btn-primary btn-sm" style={{ marginTop: 6 }}>Ver planes</a>
+            </div>
+          ) : (
+            <>
+              <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 15 }}>{selectedSupplier.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                    Deuda con el proveedor: <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: selectedSupplier.currentBalance > 0 ? 'var(--warn)' : 'var(--text3)' }}>
+                      {fmtMoney(selectedSupplier.currentBalance)}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => { setSupplierAdjForm({ amount: '', type: 'POSITIVE', description: '' }); setSupplierModal('adjustment'); }} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+                    <Plus size={13} /> Ajuste
+                  </button>
+                  <button onClick={() => setSupplierModal('payment')} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+                    <Plus size={13} /> Registrar pago
+                  </button>
+                </div>
+              </div>
+
+              <div className="card" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                  <ResponsiveTable
+                    data={supplierMovements}
+                    keyFor={(m) => m.id}
+                    emptyIcon={Truck}
+                    emptyMessage="Sin movimientos"
+                    columns={[
+                      { key: 'fecha', header: 'Fecha', render: (m) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtDate(m.date)}</span> },
+                      { key: 'tipo', header: 'Tipo', render: (m) => <span className={`badge ${supplierTypeBadge(m.type)}`}>{supplierTypeLabel[m.type] ?? m.type}</span> },
+                      { key: 'metodo', header: 'Método', render: (m) => <span style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>{m.paymentMethod ?? '—'}</span> },
+                      { key: 'descripcion', header: 'Descripción', render: (m) => <span style={{ fontSize: 12, color: 'var(--text3)' }}>{m.description ?? (m.purchase ? `Compra #${m.purchaseId?.slice(-6)}` : '—')}</span> },
+                      {
+                        key: 'monto', header: 'Monto', style: { textAlign: 'right' },
+                        render: (m) => (
+                          <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: m.type === 'PAGO' ? 'var(--success)' : 'var(--danger)', fontSize: 13 }}>
+                            {m.type === 'PAGO' ? '+' : '−'}{fmtMoney(Math.abs(num(m.amount)))}
+                          </span>
+                        ),
+                      },
+                      {
+                        key: 'saldo', header: 'Saldo', style: { textAlign: 'right' },
+                        render: (m) => (
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text2)' }}>
+                            {fmtMoney(m.newBalance)}
+                          </span>
+                        ),
+                      },
+                    ] as ResponsiveTableColumn<SupplierAccountMovement>[]}
+                    renderMobileCard={(m) => (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div className="mobile-card-head">
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)' }}>{fmtDate(m.date)}</span>
+                          <span className={`badge ${supplierTypeBadge(m.type)}`}>{supplierTypeLabel[m.type] ?? m.type}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text3)' }}>{m.description ?? (m.purchase ? `Compra #${m.purchaseId?.slice(-6)}` : '—')}</div>
+                        <div className="mobile-card-row">
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{m.paymentMethod ?? '—'}</span>
+                          <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: m.type === 'PAGO' ? 'var(--success)' : 'var(--danger)' }}>
+                            {m.type === 'PAGO' ? '+' : '−'}{fmtMoney(Math.abs(num(m.amount)))}
+                          </span>
+                        </div>
+                        <div className="mobile-card-row">
+                          <span>Saldo</span>
+                          <span style={{ fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{fmtMoney(m.newBalance)}</span>
+                        </div>
+                      </div>
+                    )}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+      )}
 
       {modal === 'adjustment' && selectedClient && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
@@ -319,6 +580,84 @@ export default function CuentasCorrientesPage() {
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
               <button onClick={savePayment} disabled={saving || !form.amount} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Registrar pago'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {supplierModal === 'adjustment' && selectedSupplier && (
+        <div className="modal-overlay" onClick={() => setSupplierModal(null)}>
+          <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800 }}>Ajuste de cuenta</span>
+              <button onClick={() => setSupplierModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+                Proveedor: <strong style={{ color: 'var(--text)' }}>{selectedSupplier.name}</strong>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Tipo de ajuste</label>
+                <select value={supplierAdjForm.type} onChange={(e) => setSupplierAdjForm((p) => ({ ...p, type: e.target.value as any }))}>
+                  <option value="POSITIVE">Positivo (aumenta la deuda con el proveedor)</option>
+                  <option value="NEGATIVE">Negativo (reduce la deuda con el proveedor)</option>
+                </select>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Monto *</label>
+                <input type="number" min="0" step="any" value={supplierAdjForm.amount} onChange={(e) => setSupplierAdjForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0" autoFocus />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Descripción</label>
+                <input value={supplierAdjForm.description} onChange={(e) => setSupplierAdjForm((p) => ({ ...p, description: e.target.value }))} placeholder="Motivo del ajuste" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setSupplierModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={saveSupplierAdjustment} disabled={supplierSaving || !supplierAdjForm.amount} className="btn btn-primary btn-sm">
+                {supplierSaving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Guardar ajuste'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {supplierModal === 'payment' && selectedSupplier && (
+        <div className="modal-overlay" onClick={() => setSupplierModal(null)}>
+          <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800 }}>Registrar pago a proveedor</span>
+              <button onClick={() => setSupplierModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+                Deuda actual: <strong style={{ fontFamily: 'var(--mono)', color: 'var(--text)' }}>{fmtMoney(selectedSupplier.currentBalance)}</strong>
+              </div>
+              {supplierForm.amount && Number(supplierForm.amount) > selectedSupplier.currentBalance && (
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  El monto supera la deuda actual — el saldo va a quedar en $0 (no se generá saldo a favor).
+                </div>
+              )}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Monto a pagar *</label>
+                <input type="number" min="0" step="any" value={supplierForm.amount} onChange={(e) => setSupplierForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0" autoFocus />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Método de pago</label>
+                <select value={supplierForm.paymentMethod} onChange={(e) => setSupplierForm((p) => ({ ...p, paymentMethod: e.target.value }))}>
+                  {['EFECTIVO','TRANSFERENCIA','TARJETA','QR'].map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Descripción</label>
+                <input value={supplierForm.description} onChange={(e) => setSupplierForm((p) => ({ ...p, description: e.target.value }))} placeholder="Opcional" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setSupplierModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={saveSupplierPayment} disabled={supplierSaving || !supplierForm.amount} className="btn btn-primary btn-sm">
+                {supplierSaving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Registrar pago'}
               </button>
             </div>
           </div>

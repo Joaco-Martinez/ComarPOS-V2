@@ -13,6 +13,7 @@ import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { cashSessionService } from "./cashSession.service";
 import { parseDateInputAR } from "../utils/dateAR";
+import { addSupplierDebtTx, reverseSupplierDebtForPurchaseTx } from "./supplierAccount.service";
 
 type PurchaseItemInput = {
   productId: string;
@@ -283,6 +284,24 @@ export const purchaseService = {
 
       const total = roundMoney(totalAmount);
 
+      // Purchase.status siempre nace COMPLETED (no hay un estado PENDING
+      // intermedio, ver enum PurchaseStatus) -- "cuando la compra pasa a
+      // COMPLETED" es aca mismo, al crearla. Si tiene proveedor asociado,
+      // esto le genera deuda en su cuenta corriente por el total (ver
+      // supplierAccount.service.ts). No migra compras historicas: una
+      // Purchase con supplierId creada antes de este feature no tiene, y
+      // no va a tener retroactivamente, un movimiento COMPRA asociado.
+      if (data.supplierId && total > 0) {
+        await addSupplierDebtTx(tx, {
+          supplierId: data.supplierId,
+          amount: total,
+          purchaseId: purchase.id,
+          userId,
+          description: `Compra${data.providerName ? ` - ${data.providerName}` : ""}`,
+          reference: data.invoiceNumber?.trim() || null,
+        });
+      }
+
       const finance = await tx.finance.create({
         data: {
           type: FinanceType.EGRESO,
@@ -412,6 +431,16 @@ export const purchaseService = {
           date: new Date(),
           tenantId: currentTenantId(),
         },
+      });
+
+      // Si esta compra le habia generado deuda a un proveedor, revertirla
+      // (o el remanente, si ya se pago parcialmente -- ver
+      // reverseSupplierDebtForPurchaseTx). No borra pagos ya registrados
+      // contra esa deuda, solo descuenta lo que quedaba pendiente.
+      await reverseSupplierDebtForPurchaseTx(tx, {
+        id: purchase.id,
+        supplierId: purchase.supplierId,
+        totalAmount: purchase.totalAmount,
       });
 
       return tx.purchase.update({

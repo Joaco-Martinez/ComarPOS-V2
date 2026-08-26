@@ -2,18 +2,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { Supplier } from '@/types';
-import { normalizeArray } from '@/lib/helpers';
+import { normalizeArray, fmtMoney } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
-import { Truck, Plus, Edit2, Trash2, X } from 'lucide-react';
+import { Truck, Plus, Edit2, Trash2, X, CreditCard } from 'lucide-react';
 
 const emptyForm = { name: '', cuit: '', contactName: '', phone: '', email: '', address: '', notes: '' };
 
 export default function ProveedoresPage() {
+  const { tenant } = useParams<{ tenant: string }>();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -107,8 +109,17 @@ export default function ProveedoresPage() {
               { key: 'email', header: 'Email', render: (s) => <span style={{ fontSize: 12, color: 'var(--text3)' }}>{s.email ?? '—'}</span> },
               { key: 'estado', header: 'Estado', render: (s) => <span className={`badge ${s.isActive ? 'badge-green' : 'badge-gray'}`}>{s.isActive ? 'Activo' : 'Inactivo'}</span> },
               {
+                key: 'deuda', header: 'Deuda', style: { textAlign: 'right' },
+                render: (s) => (
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 12, color: s.currentBalance > 0 ? 'var(--warn)' : 'var(--text3)' }}>
+                    {fmtMoney(s.currentBalance)}
+                  </span>
+                ),
+              },
+              {
                 key: 'acciones', header: '', render: (s) => (
                   <div style={{ display: 'flex', gap: 4 }}>
+                    <a href={`/${tenant}/cuentas-corrientes`} className="btn btn-ghost btn-xs" title="Cuenta corriente"><CreditCard size={12} /></a>
                     <button onClick={() => openEdit(s)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
                     <button onClick={() => setConfirmDelete(s)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                   </div>
@@ -137,7 +148,14 @@ export default function ProveedoresPage() {
                   <span>Email</span>
                   <span>{s.email ?? '—'}</span>
                 </div>
+                <div className="mobile-card-row">
+                  <span>Deuda</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: s.currentBalance > 0 ? 'var(--warn)' : 'var(--text3)' }}>{fmtMoney(s.currentBalance)}</span>
+                </div>
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <a href={`/${tenant}/cuentas-corrientes`} onClick={(e) => e.stopPropagation()} className="btn btn-ghost btn-xs" style={{ gap: 4 }}>
+                    <CreditCard size={12} /> Cta. cte.
+                  </a>
                   <button onClick={(e) => { e.stopPropagation(); openEdit(s); }} className="btn btn-ghost btn-xs" style={{ gap: 4 }}>
                     <Edit2 size={12} /> Editar
                   </button>

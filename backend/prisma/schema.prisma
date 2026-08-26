@@ -230,6 +230,7 @@ model User {
   returns              Return[]
   pushTokens           PushToken[]
   repairOrders         RepairOrder[]
+  supplierAccountMovements SupplierAccountMovement[]
 
   @@unique([email])
   @@index([role])
@@ -1139,6 +1140,7 @@ model Purchase {
   finance        Finance?        @relation(fields: [financeId], references: [id])
   items          PurchaseItem[]
   stockMovements StockMovement[]
+  supplierAccountMovements SupplierAccountMovement[]
 
   @@index([userId])
   @@index([financeId])
@@ -1198,12 +1200,43 @@ model Supplier {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // Cuenta corriente de proveedor (deuda propia con el proveedor, espejo de
+  // Client.currentBalance) -- positivo = le debemos plata al proveedor. Se
+  // actualiza en supplierAccount.service.ts, nunca a mano. No hay
+  // creditLimit/isAccountEnabled como en Client: no hay concepto de "venta a
+  // fiado" del lado proveedor, la deuda nace directo de Purchase.totalAmount.
+  currentBalance Float @default(0)
 
-  purchases      Purchase[]
-  purchaseOrders PurchaseOrder[]
+  purchases        Purchase[]
+  purchaseOrders   PurchaseOrder[]
+  accountMovements SupplierAccountMovement[]
 
   @@index([tenantId])
   @@index([isActive])
+}
+
+model SupplierAccountMovement {
+  id              String                      @id @default(uuid())
+  supplierId      String
+  purchaseId      String?
+  userId          String?
+  type            SupplierAccountMovementType
+  amount          Float
+  previousBalance Float
+  newBalance      Float
+  paymentMethod   PaymentMethod?
+  reference       String?
+  description     String?
+  date            DateTime                    @default(now())
+  createdAt       DateTime                    @default(now())
+  supplier        Supplier                    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  purchase        Purchase?                   @relation(fields: [purchaseId], references: [id])
+  user            User?                       @relation(fields: [userId], references: [id])
+
+  @@index([supplierId])
+  @@index([purchaseId])
+  @@index([type])
+  @@index([date])
 }
 
 model CashSession {
@@ -1738,6 +1771,18 @@ enum AccountMovementType {
   ADJUSTMENT_POSITIVE
   ADJUSTMENT_NEGATIVE
   CREDIT_NOTE
+}
+
+// Cuenta corriente de proveedores (deuda propia, espejo de AccountMovementType
+// del lado clientes) -- COMPRA aumenta la deuda (se genera sola al completar
+// una Purchase con supplierId), PAGO/AJUSTE_NEGATIVE la reducen, AJUSTE_POSITIVE
+// la aumenta (ej. correccion manual). No hay CREDIT_NOTE: no existe hoy un
+// flujo de devolucion de mercaderia al proveedor que la necesite.
+enum SupplierAccountMovementType {
+  COMPRA
+  PAGO
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
 }
 
 enum CategoryFinance {

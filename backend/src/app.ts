@@ -25,6 +25,7 @@ import authRoutes from "./routes/auth.routes";
 import productRoutes from "./routes/product.routes";
 import remitoRoutes from "./routes/remito.routes";
 import accountRoutes from "./routes/account.routes";
+import supplierAccountRoutes from "./routes/supplierAccount.routes";
 import businessLocationRoutes from "./routes/businessLocation.routes";
 import saleRoutes from "./routes/sale.routes";
 import categoryRoutes from "./routes/category.routes";
@@ -169,6 +170,10 @@ app.use("/catalog", catalogRoutes);
 app.use("/users", authMiddleware, requireRole("ADMIN"), requirePlanFeature("usuarios"), userRoutes);
 app.use("/sales", saleRoutes);
 app.use("/accounts", accountRoutes);
+// Cuenta corriente de proveedores -- ver routes/supplierAccount.routes.ts.
+// Mismo prefijo /accounts que los clientes (/accounts/clients/:clientId),
+// para que ambas cuentas corrientes vivan bajo el mismo namespace de API.
+app.use("/accounts/suppliers", supplierAccountRoutes);
 app.use("/categories", categoryRoutes);
 app.use("/purchases", purchaseRoutes);
 app.use("/libro-iva-digital", libroIvaDigitalRoutes);
