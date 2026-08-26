@@ -25,8 +25,8 @@ const CTA_LABEL = 'Pedir una demo por WhatsApp';
 const NAV_LINKS = [
   { href: '#como-funciona', label: 'Cómo funciona' },
   { href: '#rubros', label: 'Rubros' },
-  { href: '#todo-incluido', label: 'Todo lo que incluye' },
   { href: '#planes', label: 'Planes' },
+  { href: '#todo-incluido', label: 'Todo lo que incluye' },
   { href: '#preguntas', label: 'Preguntas frecuentes' },
 ];
 
@@ -311,33 +311,6 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
         </div>
       </Section>
 
-      {/* Todo lo que incluye */}
-      <Section id="todo-incluido" style={{ padding: '0 24px 96px' }}>
-        <Eyebrow>TODO LO QUE INCLUYE</Eyebrow>
-        <h2 style={{ fontSize: 28, fontWeight: 800, textAlign: 'center', marginBottom: 12, letterSpacing: '-0.01em' }}>
-          Un sistema completo, no un puñado de módulos sueltos
-        </h2>
-        <p style={{ fontSize: 14.5, color: 'var(--text3)', textAlign: 'center', marginBottom: 40, maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>
-          Todo esto ya viene incluido en tu plan, sin módulos que se pagan aparte.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-          {ALL_FEATURES.map(({ icon: Icon, title, desc }, i) => (
-            <Reveal key={title} delay={(i % 4) * 0.06}>
-              <div className="card" style={{ padding: 18, height: '100%' }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 10, background: 'var(--accent-dim)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-                }}>
-                  <Icon size={17} style={{ color: 'var(--accent)' }} />
-                </div>
-                <h3 style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 6 }}>{title}</h3>
-                <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.55 }}>{desc}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </Section>
-
       {/* Planes */}
       <Section id="planes" style={{ padding: '0 24px 96px' }}>
         <Eyebrow>PLANES</Eyebrow>
@@ -419,6 +392,33 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
                   </a>
                 </div>
               </TiltCard>
+            </Reveal>
+          ))}
+        </div>
+      </Section>
+
+      {/* Todo lo que incluye */}
+      <Section id="todo-incluido" style={{ padding: '0 24px 96px' }}>
+        <Eyebrow>TODO LO QUE INCLUYE</Eyebrow>
+        <h2 style={{ fontSize: 28, fontWeight: 800, textAlign: 'center', marginBottom: 12, letterSpacing: '-0.01em' }}>
+          Un sistema completo, no un puñado de módulos sueltos
+        </h2>
+        <p style={{ fontSize: 14.5, color: 'var(--text3)', textAlign: 'center', marginBottom: 40, maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>
+          Todo esto ya viene incluido en tu plan, sin módulos que se pagan aparte.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+          {ALL_FEATURES.map(({ icon: Icon, title, desc }, i) => (
+            <Reveal key={title} delay={(i % 4) * 0.06}>
+              <div className="card" style={{ padding: 18, height: '100%' }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10, background: 'var(--accent-dim)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+                }}>
+                  <Icon size={17} style={{ color: 'var(--accent)' }} />
+                </div>
+                <h3 style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 6 }}>{title}</h3>
+                <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.55 }}>{desc}</p>
+              </div>
             </Reveal>
           ))}
         </div>

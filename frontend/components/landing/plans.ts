@@ -33,7 +33,16 @@ export const PLANS: LandingPlan[] = [
     priceArs: 24000,
     regularPriceArs: 32000,
     tagline: 'Para arrancar con lo justo y necesario.',
-    perks: ['1 sucursal', 'Hasta 300 productos', 'Hasta 2 usuarios', 'Facturación AFIP incluida'],
+    // Mismos limites y features que backend/src/config/billing.ts#PLANS
+    // (id "esencial"): sin cuentasCorrientes/promociones/fidelidad -- por
+    // eso esos 3 no aparecen listados aca (a diferencia de los otros 2
+    // planes, que si los tienen y por eso los destacan como diferencial).
+    perks: [
+      '1 sucursal, hasta 300 productos y 2 usuarios',
+      'POS, facturación AFIP y stock',
+      'Caja, servicios técnicos y remitos',
+      'Reportes y devoluciones',
+    ],
   },
   {
     id: 'profesional',
@@ -42,7 +51,14 @@ export const PLANS: LandingPlan[] = [
     regularPriceArs: 47000,
     tagline: 'El más elegido: para un negocio en crecimiento.',
     highlighted: true,
-    perks: ['Hasta 3 sucursales', 'Productos ilimitados', 'Usuarios ilimitados', 'Facturación AFIP incluida'],
+    // Mismas features que "esencial" + cuentasCorrientes/promociones/fidelidad
+    // (billing.ts#PLANS, id "profesional" usa ALL_FEATURES_ON completo).
+    perks: [
+      'Hasta 3 sucursales, productos y usuarios ilimitados',
+      'Todos los módulos: POS, facturación, stock, caja, servicios, remitos, compras, finanzas y reportes',
+      'Cuenta corriente (venta a fiado)',
+      'Promociones y fidelización por puntos',
+    ],
   },
   {
     id: 'multisucursal',
@@ -50,6 +66,11 @@ export const PLANS: LandingPlan[] = [
     priceArs: 52000,
     regularPriceArs: 70000,
     tagline: 'Para cadenas y negocios con varias sucursales.',
-    perks: ['Sucursales ilimitadas', 'Productos ilimitados', 'Usuarios ilimitados', 'Soporte prioritario'],
+    perks: [
+      'Sucursales, productos y usuarios ilimitados',
+      'Todos los módulos, igual que el plan Profesional',
+      'Pensado para cadenas con varios locales',
+      'Soporte prioritario',
+    ],
   },
 ];
