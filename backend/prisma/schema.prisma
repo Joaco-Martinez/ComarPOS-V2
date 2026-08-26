@@ -113,6 +113,7 @@ model Tenant {
   arcaAuditLogs     ArcaAuditLog[]
   productCategories ProductCategory[]
   cbteCounters      CbteCounter[]
+  vatSettlements    VatSettlement[]
   // new modules
   suppliers         Supplier[]
   cashSessions      CashSession[]
@@ -230,6 +231,7 @@ model User {
   returns              Return[]
   pushTokens           PushToken[]
   repairOrders         RepairOrder[]
+  vatSettlementsClosed VatSettlement[]
 
   @@unique([email])
   @@index([role])
@@ -696,6 +698,50 @@ model InvoiceAfip {
   @@unique([puntoVenta, tipoComprobante, numero])
   @@index([cuit, puntoVenta, tipoComprobante])
   @@index([tenantId])
+}
+
+// Liquidacion de IVA mensual (paso siguiente al Libro IVA Digital, RG 4597):
+// debito fiscal (IVA de Ventas) menos credito fiscal (IVA liquidado +
+// percepciones de IVA sufridas en Compras) mas el arrastre de saldo a favor
+// del periodo anterior = saldo tecnico del periodo. Ver
+// services/libroIvaDigital/liquidacion.service.ts. Un registro por
+// tenant+year+month; se recalcula libremente mientras status=BORRADOR (no
+// se persiste hasta el primer calculo o cierre) y queda congelado al
+// cerrarlo (status=CERRADO) para no correr el piso si despues se cargan/
+// editan ventas o compras de ese mes con fecha retroactiva. Reabrirlo
+// (volver a BORRADOR) es una accion explicita aparte, no implicita al
+// recalcular.
+model VatSettlement {
+  id                   String                @id @default(uuid())
+  tenantId             String?
+  tenant               Tenant?               @relation(fields: [tenantId], references: [id])
+  year                 Int
+  month                Int
+  // Suma de importeIva de las facturas de Ventas del periodo.
+  debitoFiscal         Float                 @default(0)
+  // Suma de importeIvaLiquidado + percepcionIva (IVA sufrido) de las
+  // compras del periodo -- ver liquidacion.service.ts para el detalle de
+  // por que no se suman las otras percepciones (IIBB, municipales, etc: no
+  // son IVA, no restan credito fiscal de IVA).
+  creditoFiscal        Float                 @default(0)
+  // Saldo a favor arrastrado del periodo anterior (CERRADO), 0 si el
+  // anterior dio a pagar o no hay periodo anterior.
+  saldoTecnicoAnterior Float                 @default(0)
+  // debitoFiscal - creditoFiscal - saldoTecnicoAnterior. Positivo = a
+  // pagar; negativo (o cero) = a favor, magnitud = lo que se arrastra al
+  // periodo siguiente.
+  saldoTecnico         Float                 @default(0)
+  resultado            VatSettlementResult
+  status               VatSettlementStatus   @default(BORRADOR)
+  closedAt             DateTime?
+  closedByUserId       String?
+  closedByUser         User?                 @relation(fields: [closedByUserId], references: [id])
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@unique([tenantId, year, month])
+  @@index([tenantId])
+  @@index([status])
 }
 
 model Sale {
@@ -1730,6 +1776,16 @@ enum SaleStatus {
 enum PurchaseStatus {
   COMPLETED
   CANCELLED
+}
+
+enum VatSettlementStatus {
+  BORRADOR
+  CERRADO
+}
+
+enum VatSettlementResult {
+  A_PAGAR
+  A_FAVOR
 }
 
 enum AccountMovementType {
