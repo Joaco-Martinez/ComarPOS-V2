@@ -12,6 +12,7 @@ import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { invalidateTenantCache } from "../middleware/tenant";
 import { PLANS, DEFAULT_PLAN_ID } from "../config/billing";
+import { LEGACY_CATEGORY_ACCOUNTS } from "../utils/legacyFinanceCategories";
 
 export const TRIAL_DAYS = 7;
 
@@ -106,6 +107,18 @@ export const trialSignupService = {
           isActive: true,
           tenantId: tenant.id,
         },
+      });
+
+      // Plan de cuentas default (isSystem=true), igual que en
+      // scripts/createTenant.ts -- ver utils/legacyFinanceCategories.ts.
+      await tx.financeAccount.createMany({
+        data: LEGACY_CATEGORY_ACCOUNTS.map((c) => ({
+          tenantId: tenant.id,
+          name: c.label,
+          type: c.type,
+          isSystem: true,
+          isActive: true,
+        })),
       });
 
       return { tenant, admin, location };

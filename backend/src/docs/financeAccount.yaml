@@ -1,0 +1,155 @@
+tags:
+  - name: FinanceAccount
+    description: >
+      Plan de cuentas configurable por tenant para ingresos/egresos (aditivo
+      a CategoryFinance, ver Finance). Todas las rutas requieren rol ADMIN.
+
+paths:
+  /finance-accounts:
+    get:
+      summary: "Listar cuentas del plan de cuentas del tenant actual"
+      tags: [FinanceAccount]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: includeInactive
+          schema:
+            type: boolean
+          description: "Si es true, incluye también las cuentas desactivadas"
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [INGRESO, EGRESO]
+      responses:
+        200:
+          description: "Lista de cuentas"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FinanceAccount"
+
+    post:
+      summary: "Crear una cuenta nueva del plan de cuentas"
+      tags: [FinanceAccount]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinanceAccountInput"
+      responses:
+        201:
+          description: "Cuenta creada"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinanceAccount"
+
+  /finance-accounts/{id}:
+    put:
+      summary: "Renombrar / cambiar tipo / activar-desactivar una cuenta"
+      tags: [FinanceAccount]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinanceAccountUpdateInput"
+      responses:
+        200:
+          description: "Cuenta actualizada"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinanceAccount"
+
+    delete:
+      summary: >
+        Eliminar una cuenta. Si tiene movimientos (Finance) asociados, en vez
+        de borrarla la desactiva (isActive=false) para no perder trazabilidad.
+      tags: [FinanceAccount]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: "Cuenta eliminada o desactivada"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  account:
+                    $ref: "#/components/schemas/FinanceAccount"
+
+components:
+  schemas:
+    FinanceAccountInput:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+          example: "Comisiones Mercado Pago"
+        type:
+          type: string
+          enum: [INGRESO, EGRESO]
+          example: EGRESO
+
+    FinanceAccountUpdateInput:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [INGRESO, EGRESO]
+        isActive:
+          type: boolean
+
+    FinanceAccount:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          nullable: true
+        name:
+          type: string
+        type:
+          type: string
+          enum: [INGRESO, EGRESO]
+        isSystem:
+          type: boolean
+          description: "true si fue sembrada automáticamente a partir del enum legacy CategoryFinance"
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

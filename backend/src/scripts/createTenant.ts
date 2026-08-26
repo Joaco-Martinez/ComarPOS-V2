@@ -18,6 +18,7 @@
  */
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { LEGACY_CATEGORY_ACCOUNTS } from "../utils/legacyFinanceCategories";
 
 const prisma = new PrismaClient();
 
@@ -98,6 +99,19 @@ async function createTenant() {
         isActive: true,
         tenantId: tenant.id,
       },
+    });
+
+    // Plan de cuentas default (isSystem=true), mismo set que se sembro para
+    // los tenants preexistentes en la migracion 20260826200000_add_finance_account
+    // -- asi un tenant nuevo no arranca con el selector de cuentas vacio.
+    await tx.financeAccount.createMany({
+      data: LEGACY_CATEGORY_ACCOUNTS.map((c) => ({
+        tenantId: tenant.id,
+        name: c.label,
+        type: c.type,
+        isSystem: true,
+        isActive: true,
+      })),
     });
 
     return { tenant, admin, location };

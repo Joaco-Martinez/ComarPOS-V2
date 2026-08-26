@@ -47,15 +47,29 @@ export const financeService = {
     type: FinanceType;
     amount: number;
     category: CategoryFinance;
+    // Opcional: FK al plan de cuentas configurable por tenant
+    // (FinanceAccount). Si no se manda, el movimiento sigue creandose solo
+    // con `category` como hasta ahora (backward compat, ver
+    // financeAccount.service.ts).
+    financeAccountId?: string | null;
     description?: string;
     date?: Date;
     paymentMethod?: string;
   }, userId?: string) {
+    if (data.financeAccountId) {
+      const account = await prisma.financeAccount.findFirst({
+        where: { id: data.financeAccountId, ...tenantScope() },
+        select: { id: true },
+      });
+      if (!account) throw new Error("Cuenta del plan de cuentas no encontrada");
+    }
+
     const finance = await prisma.finance.create({
       data: {
         type: data.type,
         amount: data.amount,
         category: data.category,
+        financeAccountId: data.financeAccountId || undefined,
         description: data.description,
         date: data.date ?? new Date(),
         paymentMethod: data.paymentMethod as any,
@@ -416,6 +430,7 @@ async registerCreditNote(amount: number, description: string, userId: string) {
       type: FinanceType;
       amount: number;
       category: CategoryFinance;
+      financeAccountId: string | null;
       description?: string;
       date?: Date;
       paymentMethod?: string;
@@ -426,9 +441,18 @@ async registerCreditNote(amount: number, description: string, userId: string) {
     if (data.type !== undefined) cleanData.type = data.type;
     if (data.amount !== undefined) cleanData.amount = data.amount;
     if (data.category !== undefined) cleanData.category = data.category;
+    if (data.financeAccountId !== undefined) cleanData.financeAccountId = data.financeAccountId;
     if (data.description !== undefined) cleanData.description = data.description;
     if (data.date !== undefined) cleanData.date = data.date;
     if (data.paymentMethod !== undefined) cleanData.paymentMethod = data.paymentMethod;
+
+    if (data.financeAccountId) {
+      const account = await prisma.financeAccount.findFirst({
+        where: { id: data.financeAccountId, ...tenantScope() },
+        select: { id: true },
+      });
+      if (!account) throw new Error("Cuenta del plan de cuentas no encontrada");
+    }
 
     const existing = await prisma.finance.findFirst({
       where: { id, ...tenantScope() },

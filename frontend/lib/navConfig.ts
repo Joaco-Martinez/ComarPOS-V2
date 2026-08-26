@@ -39,6 +39,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/proveedores',                      icon: ProveedoresIcon,        label: 'Proveedores',         color: '#00B4DB', moduleKey: 'proveedores' },
   { href: '/conteo-stock',                     icon: ConteoStockIcon,        label: 'Conteo de Stock',     color: '#6474BB', moduleKey: 'conteoStock' },
   { href: '/finanzas',                         icon: FinanzasIcon,           label: 'Finanzas',            color: '#18C15E', moduleKey: 'finanzas' },
+  { href: '/configuracion/plan-de-cuentas',    icon: FinanzasIcon,           label: 'Plan de Cuentas',      color: '#6474BB', moduleKey: 'finanzas' },
   { href: '/gastos-recurrentes',               icon: GastosRecurrentesIcon,  label: 'Gastos Recurrentes',  color: '#F39C12', moduleKey: 'gastosRecurrentes' },
   { href: '/tipo-cambio',                      icon: TipoCambioIcon,         label: 'Tipo de Cambio',      color: '#18C15E', moduleKey: 'tipoCambio' },
   { href: '/cuentas-corrientes',               icon: CuentasCorrientesIcon,  label: 'Cuentas Corrientes',  color: '#F39C12', moduleKey: 'cuentasCorrientes' },
