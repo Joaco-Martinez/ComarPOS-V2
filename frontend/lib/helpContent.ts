@@ -5,6 +5,7 @@ import type { ComarIconProps } from '@/components/icons/ComarIcons';
 import {
   PosIcon, FacturacionIcon, ProductosIcon, CajaIcon, ClientesIcon, RemitosIcon,
   DevolucionesIcon, ComprasIcon, FinanzasIcon, PromocionesIcon, UsuariosIcon, PrintboxIcon,
+  ServiciosIcon,
 } from '@/components/icons/ComarIcons';
 import { Rocket, CreditCard, Smartphone } from 'lucide-react';
 
@@ -160,6 +161,37 @@ export const HELP_CATEGORIES: HelpCategory[] = [
       {
         q: '¿Puedo tener listas de precio distintas por cliente?',
         a: 'Sí, un cliente puede tener asignada una lista de precios propia, para negocios que venden distinto (por ejemplo mayorista vs. minorista) según a quién le venden.',
+      },
+    ],
+  },
+  {
+    id: 'servicios',
+    label: 'Servicios (reparaciones)',
+    icon: ServiciosIcon,
+    entries: [
+      {
+        q: '¿Para qué sirve la sección Servicios?',
+        a: 'Es para llevar el seguimiento de reparaciones o servicios técnicos: cada equipo que recibís (con su cliente, tipo, marca, modelo y falla reportada) queda como una orden de servicio, con su propio estado, presupuesto e historial hasta que se entrega.',
+      },
+      {
+        q: '¿Cómo cargo una orden de servicio nueva?',
+        a: 'Desde Servicios → Nueva orden: elegís el cliente (o lo creás en el momento si no está cargado) y cargás los datos del equipo (tipo, marca, modelo, número de serie, accesorios que dejó) y la falla reportada.',
+      },
+      {
+        q: '¿Qué estados puede tener una orden?',
+        a: 'Recibido → Presupuestado → Aprobado o Rechazado → En reparación → Listo para retirar → Entregado (o Cancelado en cualquier momento). El sistema solo permite pasar de un estado a los siguientes lógicos, no cualquier salto.',
+      },
+      {
+        q: '¿Cómo presupuesto una reparación?',
+        a: 'Dentro de la orden se cargan los ítems del presupuesto (productos del catálogo o ítems de texto libre, con cantidad, precio e IVA), y el total se calcula solo. Ahí la orden pasa a estado "Presupuestado".',
+      },
+      {
+        q: '¿El cliente puede ver y aprobar el presupuesto sin venir al local?',
+        a: 'Sí. Con "Compartir presupuesto" se genera un link único (también se puede mandar por WhatsApp) donde el cliente ve el detalle y lo aprueba o rechaza desde su celular, sin necesidad de cuenta ni de pasar por el local.',
+      },
+      {
+        q: '¿Cómo se cobra y entrega una reparación terminada?',
+        a: 'Cuando el equipo está "Listo para retirar", desde la orden se hace el cobro (eligiendo medio de pago y si corresponde ticket o factura) y al confirmarlo la orden pasa a "Entregado", igual que cerrar una venta desde el POS.',
       },
     ],
   },
