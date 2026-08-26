@@ -142,7 +142,17 @@ async function getMonthly(year: number, month: number) {
       },
     }),
     prisma.finance.findMany({
-      where: { type: "EGRESO", date: { gte: start, lte: end }, ...scope },
+      // CompraMercaderia se excluye por el mismo motivo que VENTA/COBRANZA se
+      // excluyen del lado de ingresos: purchase.service.ts ya genera un
+      // Finance EGRESO de esa categoría por cada compra, y el costo de esa
+      // mercadería ya está contado en COGS vía SaleItem.purchasePriceSnapshot
+      // -- sumarlo también acá lo restaría dos veces del resultado.
+      where: {
+        type: "EGRESO",
+        date: { gte: start, lte: end },
+        category: { not: CategoryFinance.CompraMercaderia },
+        ...scope,
+      },
       select: { amount: true, category: true },
     }),
     prisma.finance.findMany({
