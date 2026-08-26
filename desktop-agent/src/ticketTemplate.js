@@ -75,12 +75,24 @@ async function renderInvoice(invoice) {
   `;
 }
 
-async function buildTicketHtml(payload) {
+// 58mm de rollo -> ~48mm de area imprimible real (el resto son margenes
+// mecanicos del cabezal); 80mm de rollo -> ~72mm. Son los dos anchos
+// estandar de impresora termica de ticket -- si se manda contenido mas
+// ancho que el rollo fisico, el driver de Windows puede rechazar el
+// trabajo entero en vez de recortarlo (reproducido: PrintboxDevice
+// configurado con una POS-58C -- 58mm -- mientras el HTML pedia 76mm,
+// el trabajo se enviaba pero nunca imprimia nada).
+function contentWidthMm(paperWidthMm) {
+  return paperWidthMm === 58 ? 48 : 72;
+}
+
+async function buildTicketHtml(payload, paperWidthMm = 80) {
   const p = payload || {};
   const business = p.business || {};
   const client = p.client || {};
   const ivaBreakdown = p.ivaBreakdown || [];
   const payments = p.payments || [];
+  const width = contentWidthMm(paperWidthMm);
 
   return `<!doctype html>
 <html>
@@ -90,7 +102,7 @@ async function buildTicketHtml(payload) {
   @page { margin: 0; }
   * { box-sizing: border-box; }
   body {
-    width: 76mm;
+    width: ${width}mm;
     margin: 0 auto;
     padding: 4mm 2mm;
     font-family: 'Consolas', 'Courier New', monospace;
@@ -157,4 +169,4 @@ async function buildTicketHtml(payload) {
 </html>`;
 }
 
-module.exports = { buildTicketHtml };
+module.exports = { buildTicketHtml, contentWidthMm };

@@ -35,7 +35,7 @@ async function listPrinters() {
   return printers.map((p) => ({ name: p.name, displayName: p.displayName || p.name, isDefault: !!p.isDefault }));
 }
 
-function printHtml(html, printerName) {
+function printHtml(html, printerName, paperWidthMm = 80) {
   return new Promise((resolve, reject) => {
     const tempFile = path.join(os.tmpdir(), `comarpos-ticket-${crypto.randomUUID()}.html`);
     fs.writeFileSync(tempFile, html, 'utf8');
@@ -52,6 +52,16 @@ function printHtml(html, printerName) {
             printBackground: true,
             deviceName: printerName || undefined,
             margins: { marginType: 'none' },
+            // Pagina explicita en micrones, del ancho del rollo fisico --
+            // sin esto Electron usa el tamaño de pagina por defecto del
+            // driver (tipicamente A4/Letter), mas ancho que el rollo. El
+            // driver de una termica puede rechazar en silencio un trabajo
+            // mas ancho que el papel que tiene cargado (reproducido: nada
+            // llegaba a imprimir con una POS-58C de 58mm recibiendo
+            // contenido pensado para 80mm). El alto queda generoso (200mm)
+            // -- una termica de rollo continuo corta al terminar el
+            // contenido real, no imprime hasta el final de la pagina.
+            pageSize: { width: paperWidthMm * 1000, height: 200000 },
           },
           (success, errorType) => {
             cleanup();

@@ -8,6 +8,7 @@
   const statusDot = document.getElementById('status-dot');
   const statusText = document.getElementById('status-text');
   const printerSelect = document.getElementById('printer-select');
+  const paperWidthSelect = document.getElementById('paper-width-select');
   const btnTestPrint = document.getElementById('btn-test-print');
   const printLog = document.getElementById('print-log');
   const btnUnpair = document.getElementById('btn-unpair');
@@ -43,12 +44,18 @@
     const def = printers.find((p) => p.isDefault) || printers[0];
     if (def) {
       printerSelect.value = def.name;
-      window.agent.setPrinter(def.name);
+      const { paperWidthMm } = await window.agent.setPrinter(def.name);
+      paperWidthSelect.value = String(paperWidthMm);
     }
   }
 
-  printerSelect.addEventListener('change', () => {
-    window.agent.setPrinter(printerSelect.value);
+  printerSelect.addEventListener('change', async () => {
+    const { paperWidthMm } = await window.agent.setPrinter(printerSelect.value);
+    paperWidthSelect.value = String(paperWidthMm);
+  });
+
+  paperWidthSelect.addEventListener('change', () => {
+    window.agent.setPaperWidth(paperWidthSelect.value);
   });
 
   btnPair.addEventListener('click', async () => {
@@ -110,8 +117,9 @@
   });
 
   const state = await window.agent.getState();
-  if (state.deviceId && state.token) {
+  if (state.deviceId) {
     showPaired(state);
+    paperWidthSelect.value = String(state.paperWidthMm || 80);
     await loadPrinters(state.printerName);
   } else {
     showPairForm();

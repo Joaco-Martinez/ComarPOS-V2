@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('agent', {
   unpair: () => ipcRenderer.invoke('agent:unpair'),
   listPrinters: () => ipcRenderer.invoke('agent:list-printers'),
   setPrinter: (name) => ipcRenderer.invoke('agent:set-printer', name),
+  setPaperWidth: (mm) => ipcRenderer.invoke('agent:set-paper-width', mm),
   testPrint: () => ipcRenderer.invoke('agent:test-print'),
   onStatus: (cb) => {
     const listener = (_event, status) => cb(status);

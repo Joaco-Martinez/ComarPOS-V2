@@ -23,7 +23,7 @@ function setStatusListener(fn) {
 }
 
 async function processJob(cfg, job) {
-  const { deviceId, token, apiUrl, printerName } = cfg;
+  const { deviceId, token, apiUrl, printerName, paperWidthMm } = cfg;
   let payload;
 
   try {
@@ -38,8 +38,8 @@ async function processJob(cfg, job) {
   }
 
   try {
-    const html = await buildTicketHtml(payload);
-    await printHtml(html, printerName);
+    const html = await buildTicketHtml(payload, paperWidthMm);
+    await printHtml(html, printerName, paperWidthMm);
     await api.ackJob(apiUrl, deviceId, token, job.jobId, true);
     statusListener({ type: 'printed', saleId: payload.saleId, at: Date.now() });
   } catch (err) {
@@ -79,6 +79,7 @@ async function start() {
         deviceId: cfg.deviceId,
         token: cfg.token,
         printerName: cfg.printerName,
+        paperWidthMm: cfg.paperWidthMm || 80,
       });
       statusListener({ type: 'connected' });
     } catch (err) {

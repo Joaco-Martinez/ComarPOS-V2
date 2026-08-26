@@ -135,8 +135,23 @@ function sampleTicketPayload() {
 
 function registerIpc() {
   ipcMain.handle('agent:get-state', () => {
-    const cfg = config.getConfig();
-    return { deviceId: cfg.deviceId || null, deviceName: cfg.deviceName || null, printerName: cfg.printerName || null };
+    let cfg = config.getConfig();
+
+    // Backfill para configs guardadas antes de que existiera paperWidthMm
+    // (ver ticketTemplate.js) -- sin esto, una impresora de 58mm elegida
+    // antes de este cambio quedaría imprimiendo con el default de 80mm,
+    // que es exactamente el bug que causaba que no imprimiera nada.
+    if (cfg.printerName && !cfg.paperWidthMm) {
+      const guessed = /58/.test(cfg.printerName) ? 58 : 80;
+      cfg = config.setConfig({ paperWidthMm: guessed });
+    }
+
+    return {
+      deviceId: cfg.deviceId || null,
+      deviceName: cfg.deviceName || null,
+      printerName: cfg.printerName || null,
+      paperWidthMm: cfg.paperWidthMm || 80,
+    };
   });
 
   ipcMain.handle('agent:pair', async (_event, code) => {
@@ -161,14 +176,25 @@ function registerIpc() {
   ipcMain.handle('agent:list-printers', () => printer.listPrinters());
 
   ipcMain.handle('agent:set-printer', (_event, name) => {
-    config.setConfig({ printerName: name });
+    // Al elegir impresora, sugerimos el ancho de papel segun el nombre
+    // (la mayoria de los drivers termicos incluyen "58"/"80" en el
+    // nombre, ej. "POS-58C") -- el usuario lo puede cambiar a mano si no
+    // adivina bien.
+    const guessedWidth = /58/.test(name) ? 58 : /80/.test(name) ? 80 : undefined;
+    config.setConfig({ printerName: name, ...(guessedWidth ? { paperWidthMm: guessedWidth } : {}) });
+    return { paperWidthMm: config.getConfig().paperWidthMm || 80 };
+  });
+
+  ipcMain.handle('agent:set-paper-width', (_event, mm) => {
+    config.setConfig({ paperWidthMm: Number(mm) === 58 ? 58 : 80 });
     return true;
   });
 
   ipcMain.handle('agent:test-print', async () => {
     const cfg = config.getConfig();
-    const html = await buildTicketHtml(sampleTicketPayload());
-    await printer.printHtml(html, cfg.printerName);
+    const paperWidthMm = cfg.paperWidthMm || 80;
+    const html = await buildTicketHtml(sampleTicketPayload(), paperWidthMm);
+    await printer.printHtml(html, cfg.printerName, paperWidthMm);
     return true;
   });
 }
