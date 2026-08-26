@@ -413,11 +413,15 @@ export interface PurchaseOrderItem {
   unitCost?: number | null;
 }
 
+export type ReturnItemDirection = 'RETURNED' | 'EXCHANGE_OUT';
+
 export interface ReturnItem {
   id: string;
   returnId: string;
   productId: string;
   product?: { name: string; sku?: string | null } | null;
+  saleItemId?: string | null;
+  direction: ReturnItemDirection;
   quantity: number;
   quantityKg?: number | null;
   unitPrice: number;
@@ -432,12 +436,19 @@ export interface Return {
   client?: { nombre: string; apellido: string } | null;
   userId?: string | null;
   user?: { name: string } | null;
+  /** Valor de lo devuelto (suma de items direction RETURNED). */
   total: number;
   reason?: string | null;
   refundMethod?: PaymentMethod | null;
+  refundAmount?: number | null;
+  creditAmount?: number | null;
+  chargeAmount?: number | null;
+  chargeMethod?: PaymentMethod | null;
   items?: ReturnItem[];
   createdAt: string;
 }
+
+export type ReturnSettlementType = 'REFUND' | 'CREDIT' | 'DEBT';
 
 export type RepairOrderStatus =
   | 'RECEIVED' | 'BUDGETED' | 'APPROVED' | 'REJECTED' | 'IN_PROGRESS' | 'READY' | 'DELIVERED' | 'CANCELLED';

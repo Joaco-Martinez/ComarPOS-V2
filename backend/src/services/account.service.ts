@@ -235,6 +235,86 @@ export const accountService = {
     });
   },
 
+  /**
+   * Acredita plata a favor del cliente en su cuenta corriente (ej. vuelto
+   * de una devolucion/cambio que no se le dio en efectivo). A diferencia
+   * de registerPayment/createAdjustment(NEGATIVE), esta NO clampea el
+   * saldo a 0 -- puede quedar negativo, y negativo pasa a significar "a
+   * favor" (ver frontend clientes/cuentas-corrientes, que interpretan el
+   * signo). No toca Sale.accountDebtAmount: esto no es una reversion de
+   * deuda de una venta puntual (ver reverseAccountDebtFromSale en
+   * sale.payment.ts para eso), es saldo nuevo a favor.
+   */
+  async creditAccount(data: {
+    clientId: string;
+    amount: number;
+    saleId?: string | null;
+    userId?: string | null;
+    reference?: string | null;
+    description?: string | null;
+  }) {
+    const amount = assertPositiveAmount(data.amount);
+
+    return prisma.$transaction(async (tx) => {
+      const client = await tx.client.findFirst({
+        where: {
+          id: data.clientId,
+          ...tenantScope(),
+        },
+        select: {
+          id: true,
+          currentBalance: true,
+          isAccountEnabled: true,
+        },
+      });
+
+      if (!client) {
+        throw new Error("Cliente no encontrado");
+      }
+
+      if (!client.isAccountEnabled) {
+        throw new Error("La cuenta corriente de este cliente está deshabilitada");
+      }
+
+      const previousBalance = round2(client.currentBalance);
+      const newBalance = round2(previousBalance - amount);
+
+      await tx.client.update({
+        where: {
+          id: data.clientId,
+        },
+        data: {
+          currentBalance: newBalance,
+        },
+      });
+
+      return tx.accountMovement.create({
+        data: {
+          clientId: data.clientId,
+          saleId: data.saleId ?? null,
+          userId: data.userId ?? null,
+          type: AccountMovementType.CREDIT_NOTE,
+          amount,
+          previousBalance,
+          newBalance,
+          paymentMethod: null,
+          reference: data.reference ?? null,
+          description: data.description ?? "Saldo a favor por devolución/cambio",
+        },
+        include: {
+          client: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+    });
+  },
+
   async registerPayment(data: {
     clientId: string;
     amount: number;

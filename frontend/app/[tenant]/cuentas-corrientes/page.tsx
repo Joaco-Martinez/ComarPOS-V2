@@ -143,7 +143,7 @@ export default function CuentasCorrientesPage() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{c.nombre} {c.apellido}</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                     <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{c.category}</span>
-                    <span style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 700, color: c.currentBalance < 0 ? 'var(--danger)' : c.currentBalance > 0 ? 'var(--warn)' : 'var(--text3)' }}>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 700, color: c.currentBalance > 0 ? 'var(--warn)' : c.currentBalance < 0 ? 'var(--success)' : 'var(--text3)' }}>
                       {fmtMoney(c.currentBalance)}
                     </span>
                   </div>
@@ -183,7 +183,7 @@ export default function CuentasCorrientesPage() {
                 <div>
                   <div style={{ fontWeight: 800, fontSize: 15 }}>{clientName(selectedClient)}</div>
                   <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-                    Saldo: <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: selectedClient.currentBalance < 0 ? 'var(--danger)' : selectedClient.currentBalance > 0 ? 'var(--warn)' : 'var(--success)' }}>
+                    Saldo: <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: selectedClient.currentBalance > 0 ? 'var(--warn)' : selectedClient.currentBalance < 0 ? 'var(--success)' : 'var(--text3)' }}>
                       {fmtMoney(selectedClient.currentBalance)}
                     </span>
                     {selectedClient.creditLimit && (
@@ -303,7 +303,7 @@ export default function CuentasCorrientesPage() {
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ fontSize: 13, color: 'var(--text2)' }}>
-                Saldo actual: <strong style={{ fontFamily: 'var(--mono)', color: selectedClient.currentBalance < 0 ? 'var(--danger)' : 'var(--text)' }}>{fmtMoney(selectedClient.currentBalance)}</strong>
+                Saldo actual: <strong style={{ fontFamily: 'var(--mono)', color: selectedClient.currentBalance < 0 ? 'var(--success)' : 'var(--text)' }}>{fmtMoney(selectedClient.currentBalance)}</strong>
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Monto a pagar *</label>

@@ -11,10 +11,15 @@ export const returnController = {
   processReturn: wrap(async (req, res) => {
     const saleId = req.params.saleId as string;
     const userId = (req as any).user?.id as string;
-    const { refundMethod, notes } = req.body;
+    const { items, exchangeItems, settlement, reason } = req.body;
 
-    const result = await returnService.processReturn(saleId, userId, { refundMethod, notes });
-    logAudit(req, "RETURN", "Sale", saleId, { refundMethod });
+    const result = await returnService.processReturn(saleId, userId, {
+      items,
+      exchangeItems,
+      settlement,
+      reason,
+    });
+    logAudit(req, "RETURN", "Sale", saleId, { settlement });
     res.json({ ok: true, return: result });
   }),
 

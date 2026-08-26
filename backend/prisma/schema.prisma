@@ -795,6 +795,15 @@ model Return {
   userId       String?
   user         User?          @relation(fields: [userId], references: [id])
   total        Float
+  // Desglose de como se salda la diferencia entre lo devuelto y lo
+  // entregado a cambio (ver return.service.ts#processReturn). "total"
+  // sigue siendo el valor de lo devuelto (ReturnItem direction RETURNED),
+  // sin tocar por estos campos -- se agregan aparte para no romper el uso
+  // existente de "total" en reportes/UI de devoluciones.
+  refundAmount Float?
+  creditAmount Float?
+  chargeAmount Float?
+  chargeMethod PaymentMethod?
   reason       String?
   refundMethod PaymentMethod?
   createdAt    DateTime       @default(now())
@@ -807,20 +816,34 @@ model Return {
   @@index([createdAt])
 }
 
+enum ReturnItemDirection {
+  RETURNED
+  EXCHANGE_OUT
+}
+
 model ReturnItem {
-  id         String   @id @default(uuid())
+  id         String              @id @default(uuid())
   returnId   String
-  return     Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  return     Return              @relation(fields: [returnId], references: [id], onDelete: Cascade)
   productId  String
-  product    Product  @relation(fields: [productId], references: [id])
+  product    Product             @relation(fields: [productId], references: [id])
+  // Solo se completa para direction RETURNED -- de que linea de la venta
+  // original vino, para poder sumar cuanto se devolvio ya de esa linea en
+  // devoluciones parciales futuras (ver return.service.ts). Null para
+  // EXCHANGE_OUT (producto nuevo, no viene de ningun SaleItem) y para las
+  // filas viejas de antes de esta migracion.
+  saleItemId String?
+  saleItem   SaleItem?           @relation(fields: [saleItemId], references: [id])
+  direction  ReturnItemDirection @default(RETURNED)
   quantity   Int
   quantityKg Float?
   unitPrice  Float
   subtotal   Float
-  createdAt  DateTime @default(now())
+  createdAt  DateTime            @default(now())
 
   @@index([returnId])
   @@index([productId])
+  @@index([saleItemId])
 }
 
 // === PrintBox (impresion de tickets via ESP32, HTTP directo) ===
@@ -928,6 +951,7 @@ model SaleItem {
   boxContents           BoxContent[]
   product               Product           @relation(fields: [productId], references: [id])
   sale                  Sale              @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  returnItems           ReturnItem[]
 
   @@index([saleId])
   @@index([productId])

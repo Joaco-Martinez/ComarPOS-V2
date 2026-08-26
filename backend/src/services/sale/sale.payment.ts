@@ -162,15 +162,24 @@ async function reverseAccountDebtFromSale(tx: any, sale: any) {
 
   if (!sale.clientId || debtAmount <= 0) return null;
 
-  const existingReverse = await tx.accountMovement.findFirst({
+  // Suma en vez de "existe alguno" -- una devolucion parcial previa
+  // (return.service.ts) ya pudo haber creado uno o mas CREDIT_NOTE
+  // parciales para esta venta antes de que se termine cancelando entera
+  // aca. Sumar y reversar solo el remanente hace que ambos flujos
+  // compongan bien sin duplicar ni perder reversion de deuda.
+  const previousReverses = await tx.accountMovement.findMany({
     where: {
       saleId: sale.id,
       type: AccountMovementType.CREDIT_NOTE,
     },
-    select: { id: true },
+    select: { amount: true },
   });
+  const alreadyReversed = round2(
+    previousReverses.reduce((sum: number, m: { amount: number }) => sum + m.amount, 0)
+  );
+  const remainingDebt = round2(Math.max(debtAmount - alreadyReversed, 0));
 
-  if (existingReverse) return null;
+  if (remainingDebt <= 0) return null;
 
   const client = await tx.client.findFirst({
     where: { id: sale.clientId, ...tenantScope() },
@@ -180,7 +189,7 @@ async function reverseAccountDebtFromSale(tx: any, sale: any) {
   if (!client) throw new Error("Cliente no encontrado");
 
   const previousBalance = round2(client.currentBalance);
-  const newBalance = round2(Math.max(previousBalance - debtAmount, 0));
+  const newBalance = round2(Math.max(previousBalance - remainingDebt, 0));
 
   await tx.client.update({
     where: { id: sale.clientId },
@@ -201,7 +210,7 @@ async function reverseAccountDebtFromSale(tx: any, sale: any) {
       saleId: sale.id,
       userId: sale.userId ?? null,
       type: AccountMovementType.CREDIT_NOTE,
-      amount: debtAmount,
+      amount: remainingDebt,
       previousBalance,
       newBalance,
       paymentMethod: null,

@@ -170,7 +170,7 @@ export default function ClientesPage() {
               { key: 'categoria', header: 'Categoría', render: (c) => <span className={`badge ${catBadge(c.category)}`}>{c.category}</span> },
               {
                 key: 'saldo', header: 'Saldo Cta. Cte.', render: (c) => (
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: c.currentBalance < 0 ? 'var(--danger)' : c.currentBalance > 0 ? 'var(--warn)' : 'var(--text3)' }}>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: c.currentBalance > 0 ? 'var(--warn)' : c.currentBalance < 0 ? 'var(--success)' : 'var(--text3)' }}>
                     {fmtMoney(c.currentBalance)}
                   </span>
                 ),
@@ -201,7 +201,7 @@ export default function ClientesPage() {
                 )}
                 <div className="mobile-card-row">
                   <span>Saldo Cta. Cte.</span>
-                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: c.currentBalance < 0 ? 'var(--danger)' : c.currentBalance > 0 ? 'var(--warn)' : 'var(--text2)' }}>
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: c.currentBalance > 0 ? 'var(--warn)' : c.currentBalance < 0 ? 'var(--success)' : 'var(--text2)' }}>
                     {fmtMoney(c.currentBalance)}
                   </span>
                 </div>
@@ -344,7 +344,7 @@ export default function ClientesPage() {
                 ].map(([k, v]) => (
                   <div key={k}>
                     <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>{k}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: k === 'Saldo Cta. Cte.' && selected.currentBalance < 0 ? 'var(--danger)' : 'var(--text)' }}>{v}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: k === 'Saldo Cta. Cte.' ? (selected.currentBalance > 0 ? 'var(--warn)' : selected.currentBalance < 0 ? 'var(--success)' : 'var(--text)') : 'var(--text)' }}>{v}</div>
                   </div>
                 ))}
               </div>
