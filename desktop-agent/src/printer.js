@@ -46,36 +46,39 @@ function printHtml(html, printerName, paperWidthMm = 80) {
 
     win
       .loadFile(tempFile)
-      .then(() => {
+      .then(async () => {
+        // Medimos la altura real del contenido ya renderizado (con el logo
+        // e imagenes ya cargadas) en vez de pedir un alto de pagina fijo
+        // grande "por las dudas" -- probado que eso ultimo falla: pedir un
+        // alto muy grande (se probo con 3276mm, el maximo que el driver
+        // declara para su preset de rollo continuo) hizo que el trabajo
+        // real (a diferencia de printToPDF, que si respeta el alto pedido)
+        // se cortara en 2 paginas separadas de todas formas -- el driver
+        // real parece no manejar bien un pageSize custom tan grande y cae
+        // a un preset mas chico, cortando el ticket a mitad del contenido
+        // (reproducido: ticket real fisico salio partido en 2 pedazos).
+        // Pidiendo la altura exacta que el contenido necesita (+ margen)
+        // se evita esa ambiguedad del todo.
+        const contentHeightPx = await win.webContents.executeJavaScript(
+          'document.documentElement.scrollHeight'
+        );
+        const MICRONS_PER_PX = 25400 / 96; // 1px CSS = 1/96 in = 25400/96 micrones
+        const SAFETY_MARGIN_MICRONS = 15000; // ~15mm de margen para el corte
+        const heightMicrons = Math.round(contentHeightPx * MICRONS_PER_PX) + SAFETY_MARGIN_MICRONS;
+
         win.webContents.print(
           {
             silent: true,
             printBackground: true,
             deviceName: printerName || undefined,
             margins: { marginType: 'none' },
-            // Pagina explicita en micrones -- sin esto Electron usa el
-            // tamaño de pagina por defecto del driver (tipicamente
-            // A4/Letter), mas ancho que el rollo. IMPORTANTE: el ancho va
-            // en el area IMPRIMIBLE (contentWidthMm), no el ancho del
-            // rollo -- confirmado contra el PrintCapabilitiesXML real de
-            // una POS-58C: el driver declara un maximo de 48047 micrones
-            // (58mm de rollo, ~48mm imprimibles) y rechaza en silencio
-            // (job "completa" sin error pero no sale nada) cualquier
-            // pageSize por encima de ese maximo -- mandar los 58mm enteros
-            // del rollo (58000) ya superaba ese limite.
-            //
-            // El alto (3276mm) es exactamente el valor que ese mismo
-            // driver declara como su preset de "rollo continuo" (ver
-            // PrintCapabilitiesXML, Option3: 58(48) x 3276mm). Con 200mm
-            // (valor anterior) alcanzaba justo para un ticket corto, pero
-            // al sumar el logo el contenido paso esa altura -- Chromium
-            // partio el ticket en 2 "paginas": la primera se corta a mitad
-            // del footer, y la segunda arranca con el resto suelto (un
-            // caracter de "FACTURA B" quedando solo arriba a la izquierda,
-            // reportado por el usuario). Con la altura al maximo declarado
-            // por el driver, todo el ticket entra en una sola pagina sin
-            // importar cuanto contenido tenga.
-            pageSize: { width: contentWidthMm(paperWidthMm) * 1000, height: 3275974 },
+            // Ancho en el area IMPRIMIBLE (contentWidthMm), no el ancho
+            // del rollo -- confirmado contra el PrintCapabilitiesXML real
+            // de una POS-58C: el driver declara un maximo de 48047
+            // micrones (58mm de rollo, ~48mm imprimibles) y rechaza en
+            // silencio (job "completa" sin error pero no sale nada)
+            // cualquier pageSize por encima de ese maximo.
+            pageSize: { width: contentWidthMm(paperWidthMm) * 1000, height: heightMicrons },
           },
           (success, errorType) => {
             cleanup();
