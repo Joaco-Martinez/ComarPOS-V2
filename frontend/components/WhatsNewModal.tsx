@@ -9,7 +9,7 @@ import { X, Sparkles } from 'lucide-react';
 // navegador. No usa el store de notificaciones (Notification model) a
 // proposito: esto es un anuncio de producto para TODOS los usuarios, no un
 // evento de negocio individual.
-const LATEST_ID = 'servicios-iva-clientes-2026-08-25';
+const LATEST_ID = 'devoluciones-cambio-favor-2026-08-26';
 const STORAGE_KEY = 'comarpos-whatsnew-seen';
 
 export default function WhatsNewModal() {
@@ -38,17 +38,17 @@ export default function WhatsNewModal() {
             </div>
             <div>
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Novedades</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Mejoras en Servicios, Clientes y ARCA</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Devoluciones con cambio y saldo a favor</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-xs" onClick={dismiss}><X size={14} /></button>
         </div>
 
         <ul style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.9, margin: '0 0 18px', paddingLeft: 18 }}>
-          <li><strong>Alta rápida de clientes</strong>: en POS, Servicios y Cuentas Corrientes, si buscás un cliente y no aparece, ahora podés cargarlo al toque desde ahí mismo — solo pedimos el nombre, el resto es opcional.</li>
-          <li><strong>Servicios</strong>: el presupuesto de reparación ahora discrimina IVA por ítem y se puede descargar en PDF (también desde el link público que ve el cliente).</li>
-          <li><strong>Empresa / ARCA</strong>: separamos Razón Social de Nombre de Fantasía, sumamos un botón para autocompletar ARCA con los datos de Empresa, y al configurar ARCA por primera vez creamos la primera sucursal sola.</li>
-          <li><strong>Remitos</strong>: si todavía no tenés un CAI activo, te avisamos antes de intentar crear uno, con el link directo a ARCA.</li>
+          <li><strong>Devolver solo algunos productos</strong>: si la venta tiene varios ítems, ahora elegís cuáles (y cuánta cantidad de cada uno) se devuelven, en vez de tener que devolver la venta entera.</li>
+          <li><strong>Cambio por otro producto</strong>: en la misma devolución podés cargar qué se lleva el cliente a cambio, y el sistema calcula solo la diferencia.</li>
+          <li><strong>Saldo a favor</strong>: si esa diferencia queda a favor del cliente, se le puede devolver en plata o dejarla acreditada en su cuenta corriente para su próxima compra.</li>
+          <li><strong>Clientes</strong>: ahora se carga tipo de documento (DNI o CUIT) y condición frente al IVA (Responsable Inscripto, Monotributo, Consumidor Final, etc.).</li>
         </ul>
 
         <button className="btn btn-primary btn-sm" onClick={dismiss} style={{ width: '100%' }}>Entendido</button>
