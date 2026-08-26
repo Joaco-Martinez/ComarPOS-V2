@@ -18,6 +18,20 @@ Todos los pines salen de las `#define` reales en `src/main.cpp` — si el día
 de mañana se cambia un pin en el firmware, hay que actualizar este archivo
 también (no se generan solos).
 
+## Diagramas de conexión
+
+**ESP32-S3-DevKitC-1:**
+
+![Diagrama de conexión ESP32-S3-DevKitC-1](docs/wiring-esp32-s3.svg)
+
+**ESP32 clásico (DevKitV1 / NodeMCU-32S):**
+
+![Diagrama de conexión ESP32 clásico](docs/wiring-esp32-classic.svg)
+
+Son diagramas funcionales (qué pin va a qué componente), no el footprint
+físico real de cada placa — para eso, las tablas de cada sección de abajo
+siguen siendo la referencia exacta.
+
 **Regla de oro: todos los GND van juntos.** El GND del ESP32, del W5500, del
 OLED, de cada LED, del botón, del switch y del ventilador (si lo controlás
 por MOSFET) tienen que compartir la misma referencia — si a alguno le falta

@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1150 830" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="1150" height="830" fill="#ffffff"/>
+
+  <text x="575" y="34" text-anchor="middle" font-size="22" font-weight="700" fill="#111827">PrintBox — Conexiones ESP32-S3-DevKitC-1</text>
+  <text x="575" y="56" text-anchor="middle" font-size="12" fill="#6b7280">Diagrama funcional de cableado (no es el footprint físico de la placa) — ver WIRING.md para el detalle</text>
+
+  <!-- ================= LEYENDA ================= -->
+  <g font-size="11" fill="#374151">
+    <circle cx="30" cy="85" r="5" fill="#10b981"/><text x="42" y="89">I2C (OLED)</text>
+    <circle cx="140" cy="85" r="5" fill="#3b82f6"/><text x="152" y="89">SPI (W5500)</text>
+    <circle cx="260" cy="85" r="5" fill="#f59e0b"/><text x="272" y="89">LEDs de estado</text>
+    <circle cx="400" cy="85" r="5" fill="#8b5cf6"/><text x="412" y="89">Botón</text>
+    <circle cx="480" cy="85" r="5" fill="#ef4444"/><text x="492" y="89">Alimentación (5V/3.3V)</text>
+    <circle cx="660" cy="85" r="5" fill="#374151"/><text x="672" y="89">GND</text>
+  </g>
+
+  <!-- ================= PLACA ================= -->
+  <rect x="90" y="150" width="200" height="520" rx="10" fill="#0f172a"/>
+  <text x="190" y="180" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">ESP32-S3</text>
+  <text x="190" y="198" text-anchor="middle" font-size="11" fill="#94a3b8">DevKitC-1</text>
+
+  <!-- Pines (tick + label flotante arriba de la linea + linea larga al modulo) -->
+  <!-- fila: y, color, pin, destino, box target y -->
+  <g font-size="12">
+    <!-- GPIO8 - OLED SDA -->
+    <line x1="290" y1="230" x2="850" y2="230" stroke="#10b981" stroke-width="2"/>
+    <rect x="296" y="212" width="120" height="16" rx="3" fill="#ecfdf5"/>
+    <text x="300" y="224" fill="#065f46" font-weight="700">GPIO8 · OLED SDA</text>
+
+    <!-- GPIO9 - OLED SCL -->
+    <line x1="290" y1="275" x2="850" y2="275" stroke="#10b981" stroke-width="2"/>
+    <rect x="296" y="257" width="120" height="16" rx="3" fill="#ecfdf5"/>
+    <text x="300" y="269" fill="#065f46" font-weight="700">GPIO9 · OLED SCL</text>
+
+    <!-- GPIO10 - W5500 CS -->
+    <line x1="290" y1="320" x2="850" y2="320" stroke="#3b82f6" stroke-width="2"/>
+    <rect x="296" y="302" width="130" height="16" rx="3" fill="#eff6ff"/>
+    <text x="300" y="314" fill="#1e40af" font-weight="700">GPIO10 · W5500 CS</text>
+
+    <!-- GPIO11 - W5500 MOSI -->
+    <line x1="290" y1="365" x2="850" y2="365" stroke="#3b82f6" stroke-width="2"/>
+    <rect x="296" y="347" width="140" height="16" rx="3" fill="#eff6ff"/>
+    <text x="300" y="359" fill="#1e40af" font-weight="700">GPIO11 · W5500 MOSI</text>
+
+    <!-- GPIO12 - W5500 SCK -->
+    <line x1="290" y1="410" x2="850" y2="410" stroke="#3b82f6" stroke-width="2"/>
+    <rect x="296" y="392" width="138" height="16" rx="3" fill="#eff6ff"/>
+    <text x="300" y="404" fill="#1e40af" font-weight="700">GPIO12 · W5500 SCK</text>
+
+    <!-- GPIO13 - W5500 MISO -->
+    <line x1="290" y1="455" x2="850" y2="455" stroke="#3b82f6" stroke-width="2"/>
+    <rect x="296" y="437" width="140" height="16" rx="3" fill="#eff6ff"/>
+    <text x="300" y="449" fill="#1e40af" font-weight="700">GPIO13 · W5500 MISO</text>
+
+    <!-- GPIO4 - Boton -->
+    <line x1="290" y1="500" x2="850" y2="500" stroke="#8b5cf6" stroke-width="2"/>
+    <rect x="296" y="482" width="150" height="16" rx="3" fill="#f5f3ff"/>
+    <text x="300" y="494" fill="#5b21b6" font-weight="700">GPIO4 · Botón reset</text>
+
+    <!-- GPIO15 - LED rojo -->
+    <line x1="290" y1="545" x2="850" y2="545" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="296" y="527" width="140" height="16" rx="3" fill="#fffbeb"/>
+    <text x="300" y="539" fill="#92400e" font-weight="700">GPIO15 · LED rojo</text>
+
+    <!-- GPIO16 - LED azul -->
+    <line x1="290" y1="590" x2="850" y2="590" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="296" y="572" width="140" height="16" rx="3" fill="#fffbeb"/>
+    <text x="300" y="584" fill="#92400e" font-weight="700">GPIO16 · LED azul</text>
+
+    <!-- GPIO17 - LED verde -->
+    <line x1="290" y1="635" x2="850" y2="635" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="296" y="617" width="145" height="16" rx="3" fill="#fffbeb"/>
+    <text x="300" y="629" fill="#92400e" font-weight="700">GPIO17 · LED verde</text>
+  </g>
+
+  <!-- ================= MODULOS ================= -->
+  <!-- OLED (cubre lineas y=230,275) -->
+  <rect x="850" y="205" width="230" height="95" rx="8" fill="#f0fdf4" stroke="#10b981" stroke-width="1.5"/>
+  <text x="965" y="228" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">OLED 128x64 I2C</text>
+  <text x="965" y="246" text-anchor="middle" font-size="11" fill="#065f46">driver SH1106 — dirección 0x3C</text>
+  <text x="965" y="270" text-anchor="middle" font-size="11" fill="#374151">VCC → 3.3V</text>
+  <text x="965" y="288" text-anchor="middle" font-size="11" fill="#374151">GND → GND común</text>
+
+  <!-- W5500 (cubre lineas y=320,365,410,455) -->
+  <rect x="850" y="310" width="230" height="160" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="965" y="335" text-anchor="middle" font-size="13" font-weight="700" fill="#1e40af">W5500 (Ethernet)</text>
+  <text x="965" y="353" text-anchor="middle" font-size="11" fill="#1e40af">link punto a punto → impresora</text>
+  <text x="965" y="445" text-anchor="middle" font-size="11" fill="#374151">VCC → 3.3V ⚠️ (no 5V)</text>
+  <text x="965" y="463" text-anchor="middle" font-size="11" fill="#374151">GND → GND común · RST/INT: sin usar</text>
+
+  <!-- Boton (cubre linea y=500) -->
+  <rect x="850" y="478" width="230" height="44" rx="8" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="965" y="498" text-anchor="middle" font-size="13" font-weight="700" fill="#5b21b6">Botón factory reset</text>
+  <text x="965" y="515" text-anchor="middle" font-size="11" fill="#374151">normal-abierto, directo a GND (pull-up interno)</text>
+
+  <!-- LEDs (cubre lineas y=545,590,635) -->
+  <rect x="850" y="530" width="230" height="120" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="965" y="552" text-anchor="middle" font-size="13" font-weight="700" fill="#92400e">3 LEDs de estado</text>
+  <text x="965" y="570" text-anchor="middle" font-size="11" fill="#374151">c/u con resistencia 220-330Ω en serie</text>
+  <text x="965" y="588" text-anchor="middle" font-size="11" fill="#374151">GPIOxx → resistencia → ánodo LED</text>
+  <text x="965" y="606" text-anchor="middle" font-size="11" fill="#374151">cátodo LED → GND común</text>
+  <text x="965" y="630" text-anchor="middle" font-size="10" fill="#6b7280">Rojo=boot/pairing · Verde=ready · parpadeo=imprimiendo</text>
+
+  <!-- ================= ALIMENTACION ================= -->
+  <rect x="90" y="700" width="990" height="110" rx="8" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="585" y="725" text-anchor="middle" font-size="13" font-weight="700" fill="#991b1b">Alimentación (regla de oro: todos los GND van juntos)</text>
+
+  <g font-size="12" fill="#374151">
+    <rect x="115" y="745" width="150" height="40" rx="6" fill="#ffffff" stroke="#ef4444"/>
+    <text x="190" y="770" text-anchor="middle" font-weight="700">Fuente 5V</text>
+
+    <line x1="265" y1="765" x2="335" y2="765" stroke="#ef4444" stroke-width="2"/>
+    <polygon points="335,765 325,760 325,770" fill="#ef4444"/>
+
+    <rect x="340" y="745" width="130" height="40" rx="6" fill="#ffffff" stroke="#ef4444"/>
+    <text x="405" y="770" text-anchor="middle" font-weight="700">Switch ON/OFF</text>
+
+    <line x1="470" y1="765" x2="540" y2="765" stroke="#ef4444" stroke-width="2"/>
+    <polygon points="540,765 530,760 530,770" fill="#ef4444"/>
+
+    <rect x="545" y="745" width="140" height="40" rx="6" fill="#ffffff" stroke="#ef4444"/>
+    <text x="615" y="770" text-anchor="middle" font-weight="700">5V placa + W5500*</text>
+
+    <line x1="685" y1="765" x2="755" y2="765" stroke="#374151" stroke-width="2" stroke-dasharray="4 3"/>
+    <rect x="760" y="745" width="130" height="40" rx="6" fill="#ffffff" stroke="#f59e0b"/>
+    <text x="825" y="770" text-anchor="middle" font-weight="700" fill="#92400e">Fan 5V (opcional)</text>
+
+    <rect x="900" y="745" width="150" height="40" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="975" y="770" text-anchor="middle" font-weight="700">GND común a todo</text>
+
+    <text x="190" y="800" text-anchor="middle" font-size="10" fill="#991b1b">*W5500 a 3.3V si el módulo no tiene regulador propio — ver nota de la caja arriba</text>
+  </g>
+</svg>
