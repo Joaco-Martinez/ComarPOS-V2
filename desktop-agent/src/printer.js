@@ -62,11 +62,20 @@ function printHtml(html, printerName, paperWidthMm = 80) {
             // (58mm de rollo, ~48mm imprimibles) y rechaza en silencio
             // (job "completa" sin error pero no sale nada) cualquier
             // pageSize por encima de ese maximo -- mandar los 58mm enteros
-            // del rollo (58000) ya superaba ese limite. El alto queda
-            // generoso (200mm) -- una termica de rollo continuo corta al
-            // terminar el contenido real, no imprime hasta el final de la
-            // pagina.
-            pageSize: { width: contentWidthMm(paperWidthMm) * 1000, height: 200000 },
+            // del rollo (58000) ya superaba ese limite.
+            //
+            // El alto (3276mm) es exactamente el valor que ese mismo
+            // driver declara como su preset de "rollo continuo" (ver
+            // PrintCapabilitiesXML, Option3: 58(48) x 3276mm). Con 200mm
+            // (valor anterior) alcanzaba justo para un ticket corto, pero
+            // al sumar el logo el contenido paso esa altura -- Chromium
+            // partio el ticket en 2 "paginas": la primera se corta a mitad
+            // del footer, y la segunda arranca con el resto suelto (un
+            // caracter de "FACTURA B" quedando solo arriba a la izquierda,
+            // reportado por el usuario). Con la altura al maximo declarado
+            // por el driver, todo el ticket entra en una sola pagina sin
+            // importar cuanto contenido tenga.
+            pageSize: { width: contentWidthMm(paperWidthMm) * 1000, height: 3275974 },
           },
           (success, errorType) => {
             cleanup();
