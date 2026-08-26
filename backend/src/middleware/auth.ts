@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import prisma from "../prisma";
 import { runWithTenant } from "../context/tenantContext";
 import { resolveTenantById, isSuspensionExempt, getTenantBlock } from "./tenant";
 
@@ -50,6 +51,25 @@ async function runWithAuthenticatedTenant(
   return runWithTenant(decoded.tenantId, next);
 }
 
+// "Ultimo acceso" (lastLoginAt) antes solo se tocaba en el login (POST
+// /auth/login) -- con el JWT vigente 24hs sin refresh, un usuario que
+// sigue usando el sistema activamente mostraba en el panel de
+// platform-admin la fecha del login de ayer, no la de "ahora mismo". Se
+// actualiza tambien en cada request autenticado, pero throttleado en
+// memoria (una escritura a DB cada LAST_SEEN_THROTTLE_MS por usuario) para
+// no pegarle a la DB en cada request.
+const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
+const lastSeenTouch = new Map<string, number>();
+
+function touchLastSeen(userId: string) {
+  const now = Date.now();
+  const last = lastSeenTouch.get(userId) ?? 0;
+  if (now - last < LAST_SEEN_THROTTLE_MS) return;
+
+  lastSeenTouch.set(userId, now);
+  prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } }).catch(() => {});
+}
+
 function readToken(req: Request) {
   const cookieToken = req.cookies?.token;
   const authorization = req.headers.authorization;
@@ -74,6 +94,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     const decoded = jwt.verify(token, JWT_SECRET as string) as unknown as JwtPayload;
 
     (req as any).user = { id: decoded.userId, role: decoded.role, tenantId: decoded.tenantId };
+    touchLastSeen(decoded.userId);
     runWithAuthenticatedTenant(req, res, next, decoded).catch(next);
   } catch (_err) {
     return res.status(401).json({ message: "Token inválido" });
@@ -91,6 +112,7 @@ export function optionalAuthMiddleware(req: Request, res: Response, next: NextFu
     const decoded = jwt.verify(token, JWT_SECRET as string) as unknown as JwtPayload;
 
     (req as any).user = { id: decoded.userId, role: decoded.role, tenantId: decoded.tenantId };
+    touchLastSeen(decoded.userId);
     runWithAuthenticatedTenant(req, res, next, decoded).catch(next);
   } catch (_err) {
     // En rutas públicas no bloqueamos por token vencido/incorrecto.
