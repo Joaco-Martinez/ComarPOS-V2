@@ -10,6 +10,11 @@ import {
   ventasCbteToCsv,
   ventasAlicuotasToCsv,
 } from "../services/libroIvaDigital/ventas.service";
+import {
+  getLiquidacion,
+  cerrarLiquidacion,
+  reabrirLiquidacion,
+} from "../services/libroIvaDigital/liquidacion.service";
 
 function parsePeriod(req: Request) {
   const year = Number(req.query.year);
@@ -18,6 +23,15 @@ function parsePeriod(req: Request) {
     throw new Error("Indicá year y month (ej. ?year=2026&month=8)");
   }
   return monthRangeAR(year, month);
+}
+
+function parsePeriodBody(req: Request) {
+  const year = Number(req.body?.year);
+  const month = Number(req.body?.month);
+  if (!Number.isInteger(year) || !Number.isInteger(month)) {
+    throw new Error("Indicá year y month (ej. { year: 2026, month: 8 })");
+  }
+  return { year, month };
 }
 
 function sendCsv(res: Response, filename: string, csv: string) {
@@ -86,6 +100,38 @@ export const libroIvaDigitalController = {
       const { start, end } = parsePeriod(req);
       const { alicuotas } = await getVentasLibroIvaDigital({ from: start, to: end });
       sendCsv(res, `libro_iva_ventas_alicuotas_${req.query.year}_${req.query.month}.csv`, ventasAlicuotasToCsv(alicuotas));
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getLiquidacion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const year = Number(req.query.year);
+      const month = Number(req.query.month);
+      const liquidacion = await getLiquidacion(year, month);
+      res.json(liquidacion);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async cerrarLiquidacion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { year, month } = parsePeriodBody(req);
+      const userId = (req as any).user?.id ?? null;
+      const liquidacion = await cerrarLiquidacion({ year, month, userId });
+      res.json(liquidacion);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async reabrirLiquidacion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { year, month } = parsePeriodBody(req);
+      const liquidacion = await reabrirLiquidacion({ year, month });
+      res.json(liquidacion);
     } catch (err) {
       next(err);
     }

@@ -14,4 +14,8 @@ router.get("/compras-alicuotas.csv", libroIvaDigitalController.downloadComprasAl
 router.get("/ventas-cbte.csv", libroIvaDigitalController.downloadVentasCbte);
 router.get("/ventas-alicuotas.csv", libroIvaDigitalController.downloadVentasAlicuotas);
 
+router.get("/liquidacion", libroIvaDigitalController.getLiquidacion);
+router.post("/liquidacion/cerrar", libroIvaDigitalController.cerrarLiquidacion);
+router.post("/liquidacion/reabrir", libroIvaDigitalController.reabrirLiquidacion);
+
 export default router;
