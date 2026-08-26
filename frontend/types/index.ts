@@ -12,6 +12,13 @@ export type PaymentMethod =
 export type SaleStatus = 'COMPLETED' | 'PENDING' | 'CANCELLED';
 export type DiscountType = 'PERCENTAGE' | 'FIXED';
 export type ClientCategory = 'Price' | 'Cliente' | 'Mayorista';
+export type DocumentType = 'DNI' | 'CUIT';
+export type ClientIvaCondition =
+  | 'IVA RESPONSABLE INSCRIPTO'
+  | 'RESPONSABLE MONOTRIBUTO'
+  | 'CONSUMIDOR FINAL'
+  | 'IVA SUJETO EXENTO'
+  | 'IVA NO RESPONSABLE';
 export type MovementType = 'TRANSFER' | 'INGRESS' | 'ADJUSTMENT' | 'SALE' | 'SALE_CANCEL';
 export type AccountMovementType = 'DEBT' | 'PAYMENT' | 'ADJUSTMENT_POSITIVE' | 'ADJUSTMENT_NEGATIVE' | 'CREDIT_NOTE';
 export type CashSessionStatus = 'OPEN' | 'CLOSED';
@@ -133,6 +140,8 @@ export interface Client {
   nombre: string;
   apellido?: string | null;
   dni?: string | null;
+  documentType?: DocumentType;
+  ivaCondition?: ClientIvaCondition | string | null;
   telefono?: string | null;
   gmail?: string | null;
   addressStreet?: string | null;

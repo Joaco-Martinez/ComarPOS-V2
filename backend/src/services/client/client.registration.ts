@@ -10,6 +10,8 @@ import { tenantScope } from "../../utils/tenantScope";
 import {
   DEFAULT_CLIENT_PASSWORD,
   normalizeCategory,
+  normalizeDocumentType,
+  normalizeIvaCondition,
   cleanEmail,
   cleanString,
   buildAddressData,
@@ -22,6 +24,8 @@ export async function createClient(data: {
   nombre: string;
   apellido?: string | null;
   dni?: string | null;
+  documentType?: string | null;
+  ivaCondition?: string | null;
   category?: ClientCategory;
   telefono?: string | null;
   gmail?: string | null;
@@ -31,6 +35,8 @@ export async function createClient(data: {
   const nombre = String(data.nombre || "").trim();
   const apellido = cleanString(data.apellido);
   const dni = cleanString(data.dni);
+  const documentType = normalizeDocumentType(data.documentType);
+  const ivaCondition = normalizeIvaCondition(data.ivaCondition);
   const gmail = cleanEmail(data.gmail);
 
   if (!nombre) throw new Error("El nombre es obligatorio");
@@ -97,6 +103,8 @@ export async function createClient(data: {
         nombre,
         apellido,
         dni,
+        documentType,
+        ivaCondition,
         category,
         telefono: data.telefono ?? null,
         gmail,

@@ -1,6 +1,17 @@
 import type { Client, Product, ProductCategory } from '@/types';
 import { formatDateTimeAR } from '@/lib/dateAR';
 
+// Mismos 5 valores que usa Configuración > ARCA para la condición IVA del
+// negocio (ver app/[tenant]/configuracion/arca/page.tsx e ivaCondition.ts
+// en el backend) -- acá es la condición IVA del cliente, no del tenant.
+export const CLIENT_IVA_CONDITIONS = [
+  { label: 'IVA Responsable Inscripto', value: 'IVA RESPONSABLE INSCRIPTO' },
+  { label: 'Responsable Monotributo',   value: 'RESPONSABLE MONOTRIBUTO' },
+  { label: 'Consumidor Final',          value: 'CONSUMIDOR FINAL' },
+  { label: 'IVA Sujeto Exento',         value: 'IVA SUJETO EXENTO' },
+  { label: 'IVA No Responsable',        value: 'IVA NO RESPONSABLE' },
+] as const;
+
 export const fmtMoney = (n: number | unknown) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
     .format(Number.isFinite(Number(n)) ? Number(n) : 0);

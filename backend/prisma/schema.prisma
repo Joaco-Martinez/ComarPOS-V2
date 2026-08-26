@@ -249,6 +249,15 @@ model Client {
   // sin frenar la operacion pidiendo datos que todavia no se tienen.
   apellido          String?
   dni               String?
+  // Que tipo de documento es el numero de arriba (dni) -- lo elige el
+  // usuario en el form en vez de inferirlo de la cantidad de digitos, para
+  // no depender de heuristicas al facturar (ver backend/src/afip/utils/afipMappers.ts,
+  // que si infiere DNI/CUIT/CUIL por longitud en el flujo de facturacion manual).
+  documentType      DocumentType      @default(DNI)
+  // Condicion frente al IVA del cliente (AFIP/ARCA) -- mismos 5 valores que
+  // ArcaConfig.ivaCondition (ver backend/src/afip/ivaCondition.ts), pero aca
+  // referida al cliente, no al tenant. Determina si se le puede facturar A.
+  ivaCondition      String?
   telefono          String?
   gmail             String?
   category          CategoryClient    @default(Price)
@@ -1600,6 +1609,11 @@ enum ArcaConfigStatus {
 enum CategoryClient {
   Price
   Mayorista
+}
+
+enum DocumentType {
+  DNI
+  CUIT
 }
 
 enum ProductType {

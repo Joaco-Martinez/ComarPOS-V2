@@ -2,9 +2,28 @@
  * Tipos y helpers compartidos del servicio de clientes.
  * Extraidos de client.service.ts (doc seccion 4 - modularizacion).
  */
-import { CategoryClient } from "@prisma/client";
+import { CategoryClient, DocumentType } from "@prisma/client";
 
 export type ClientCategory = "Price" | "Cliente" | "Mayorista";
+
+// Mismos 5 valores que ArcaConfig.ivaCondition (ver frontend
+// configuracion/arca/page.tsx y backend/src/afip/ivaCondition.ts).
+const IVA_CONDITIONS = [
+  "IVA RESPONSABLE INSCRIPTO",
+  "RESPONSABLE MONOTRIBUTO",
+  "CONSUMIDOR FINAL",
+  "IVA SUJETO EXENTO",
+  "IVA NO RESPONSABLE",
+];
+
+export function normalizeDocumentType(value?: string | null): DocumentType {
+  return value === "CUIT" ? DocumentType.CUIT : DocumentType.DNI;
+}
+
+export function normalizeIvaCondition(value?: string | null) {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  return IVA_CONDITIONS.includes(normalized) ? normalized : null;
+}
 
 export const DEFAULT_CLIENT_PASSWORD =
   process.env.CLIENT_DEFAULT_PASSWORD || "GrupoVJ123";

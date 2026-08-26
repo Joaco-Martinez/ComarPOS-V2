@@ -4,8 +4,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
-import type { Client, ClientCategory } from '@/types';
-import { fmtMoney, normalizeArray } from '@/lib/helpers';
+import type { Client, ClientCategory, DocumentType } from '@/types';
+import { fmtMoney, normalizeArray, CLIENT_IVA_CONDITIONS } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
 import { Users, Plus, Edit2, X, RefreshCcw, Eye, Phone, Mail } from 'lucide-react';
@@ -16,7 +16,8 @@ const catBadge = (c: ClientCategory) =>
   c === 'Mayorista' ? 'badge-green' : c === 'Price' ? 'badge-blue' : 'badge-gray';
 
 const emptyForm = {
-  nombre: '', apellido: '', dni: '', telefono: '', gmail: '',
+  nombre: '', apellido: '', dni: '', documentType: 'DNI' as DocumentType, ivaCondition: '',
+  telefono: '', gmail: '',
   category: 'Cliente' as ClientCategory,
   addressStreet: '', addressNumber: '', addressCity: '', addressProvince: '',
   creditLimit: '', isAccountEnabled: 'false',
@@ -73,6 +74,7 @@ export default function ClientesPage() {
     setSelected(c);
     setForm({
       nombre: c.nombre, apellido: c.apellido ?? '', dni: c.dni ?? '',
+      documentType: c.documentType ?? 'DNI', ivaCondition: c.ivaCondition ?? '',
       telefono: c.telefono ?? '', gmail: c.gmail ?? '',
       category: c.category,
       addressStreet: c.addressStreet ?? '', addressNumber: c.addressNumber ?? '',
@@ -156,7 +158,7 @@ export default function ClientesPage() {
                   </>
                 ),
               },
-              { key: 'dni', header: 'DNI', render: (c) => <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{c.dni || '—'}</span> },
+              { key: 'dni', header: 'Documento', render: (c) => <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{c.dni ? `${c.documentType ?? 'DNI'} ${c.dni}` : '—'}</span> },
               {
                 key: 'contacto', header: 'Contacto', render: (c) => (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -187,7 +189,7 @@ export default function ClientesPage() {
                 <div className="mobile-card-head">
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{c.nombre} {c.apellido}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>DNI {c.dni || '—'}{c.addressCity ? ` · ${c.addressCity}` : ''}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{c.dni ? `${c.documentType ?? 'DNI'} ${c.dni}` : 'Sin documento'}{c.addressCity ? ` · ${c.addressCity}` : ''}</div>
                   </div>
                   <span className={`badge ${catBadge(c.category)}`}>{c.category}</span>
                 </div>
@@ -234,8 +236,24 @@ export default function ClientesPage() {
               </div>
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">DNI</label>
-                  <input value={form.dni} onChange={f('dni')} placeholder="DNI" />
+                  <label className="form-label">Tipo de documento</label>
+                  <select value={form.documentType} onChange={f('documentType')}>
+                    <option value="DNI">DNI</option>
+                    <option value="CUIT">CUIT</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">{form.documentType === 'CUIT' ? 'CUIT' : 'DNI'}</label>
+                  <input value={form.dni} onChange={f('dni')} placeholder={form.documentType === 'CUIT' ? 'CUIT' : 'DNI'} />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Condición frente al IVA</label>
+                  <select value={form.ivaCondition} onChange={f('ivaCondition')}>
+                    <option value="">Sin especificar</option>
+                    {CLIENT_IVA_CONDITIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Categoría</label>
@@ -307,7 +325,7 @@ export default function ClientesPage() {
             <div className="modal-header">
               <div>
                 <div style={{ fontWeight: 800, fontSize: 15 }}>{selected.nombre} {selected.apellido}</div>
-                <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', marginTop: 2 }}>DNI: {selected.dni || '—'}</div>
+                <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', marginTop: 2 }}>{selected.documentType ?? 'DNI'}: {selected.dni || '—'}</div>
               </div>
               <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
@@ -315,6 +333,7 @@ export default function ClientesPage() {
               <div className="grid-responsive" style={{ gap: 10 }}>
                 {[
                   ['Categoría', selected.category],
+                  ['Condición frente al IVA', CLIENT_IVA_CONDITIONS.find((o) => o.value === selected.ivaCondition)?.label ?? 'Sin especificar'],
                   ['Teléfono', selected.telefono ?? '—'],
                   ['Email', selected.gmail ?? '—'],
                   ['Ciudad', selected.addressCity ?? '—'],

@@ -10,6 +10,8 @@ import { currentTenantId } from "../../context/tenantContext";
 import {
   DEFAULT_CLIENT_PASSWORD,
   normalizeCategory,
+  normalizeDocumentType,
+  normalizeIvaCondition,
   cleanEmail,
   cleanString,
   buildAddressData,
@@ -78,6 +80,8 @@ export async function updateClient(
       nombre: string;
       apellido: string | null;
       dni: string | null;
+      documentType: string | null;
+      ivaCondition: string | null;
       telefono: string | null;
       gmail: string | null;
       category: ClientCategory;
@@ -102,6 +106,8 @@ export async function updateClient(
   if (data.nombre !== undefined) cleanData.nombre = String(data.nombre).trim();
   if (data.apellido !== undefined) cleanData.apellido = cleanString(data.apellido);
   if (data.dni !== undefined) cleanData.dni = cleanString(data.dni);
+  if (data.documentType !== undefined) cleanData.documentType = normalizeDocumentType(data.documentType);
+  if (data.ivaCondition !== undefined) cleanData.ivaCondition = normalizeIvaCondition(data.ivaCondition);
   if (data.telefono !== undefined) cleanData.telefono = cleanString(data.telefono);
   if (data.gmail !== undefined) cleanData.gmail = cleanEmail(data.gmail);
   if (data.category !== undefined) cleanData.category = normalizeCategory(data.category);

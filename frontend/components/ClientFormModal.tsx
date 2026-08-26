@@ -3,13 +3,15 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import type { Client, ClientCategory } from '@/types';
+import type { Client, ClientCategory, DocumentType } from '@/types';
+import { CLIENT_IVA_CONDITIONS } from '@/lib/helpers';
 import { X } from 'lucide-react';
 
 const CATEGORIES: ClientCategory[] = ['Cliente', 'Mayorista', 'Price'];
 
 const emptyForm = {
-  nombre: '', apellido: '', dni: '', telefono: '', gmail: '',
+  nombre: '', apellido: '', dni: '', documentType: 'DNI' as DocumentType, ivaCondition: '',
+  telefono: '', gmail: '',
   category: 'Cliente' as ClientCategory,
   addressStreet: '', addressNumber: '', addressCity: '', addressProvince: '',
   creditLimit: '', isAccountEnabled: 'false',
@@ -79,7 +81,7 @@ export default function ClientFormModal({ open, onClose, onCreated, initialQuery
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 300 }}>
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 2147483021 }}>
       <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <span style={{ fontWeight: 800, fontSize: 15 }}>Nuevo cliente</span>
@@ -103,8 +105,24 @@ export default function ClientFormModal({ open, onClose, onCreated, initialQuery
           </div>
           <div className="form-row">
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">DNI</label>
-              <input value={form.dni} onChange={f('dni')} placeholder="DNI" />
+              <label className="form-label">Tipo de documento</label>
+              <select value={form.documentType} onChange={f('documentType')}>
+                <option value="DNI">DNI</option>
+                <option value="CUIT">CUIT</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">{form.documentType === 'CUIT' ? 'CUIT' : 'DNI'}</label>
+              <input value={form.dni} onChange={f('dni')} placeholder={form.documentType === 'CUIT' ? 'CUIT' : 'DNI'} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Condición frente al IVA</label>
+              <select value={form.ivaCondition} onChange={f('ivaCondition')}>
+                <option value="">Sin especificar</option>
+                {CLIENT_IVA_CONDITIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">Categoría</label>
