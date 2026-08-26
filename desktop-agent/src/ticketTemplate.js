@@ -23,6 +23,24 @@ function line() {
   return '<div class="dashed"></div>';
 }
 
+// El logo del tenant se sube a resolucion completa (tipico ~2000x2000px,
+// varias decenas de KB, ver tenantLogo.service.ts#uploadLogo) -- aunque se
+// muestre chico via CSS, el navegador igual baja/procesa el archivo
+// entero, y eso es la parte mas pesada del contenido del ticket. Sospecha
+// (reportado por el usuario: el ticket se corta siempre en el mismo punto,
+// cerca del final, sin importar el alto de pagina pedido ni cuanto se
+// espere antes de borrar el temporal): esta impresora termica generica
+// tiene un buffer chico y descarta lo que sobra cuando el trabajo pesa
+// demasiado. Cloudinary permite pedir una version ya redimensionada
+// insertando parametros en la URL -- se lo pedimos directo en el origen en
+// vez de confiar en que el CSS alcance para reducir los datos reales.
+function shrinkLogoUrl(url) {
+  if (!url) return url;
+  const match = url.match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(.*)$/);
+  if (!match) return url; // no es Cloudinary (o formato inesperado) -- se usa tal cual
+  return `${match[1]}w_200,h_200,c_limit,q_auto,f_auto/${match[2]}`;
+}
+
 function renderItems(items) {
   return (items || [])
     .map((it) => {
@@ -136,7 +154,7 @@ async function buildTicketHtml(payload, paperWidthMm = 80) {
        rasterizada de la imagen por las dudas sea parte del problema. */
     business.logoUrl ? `
     <div class="logo">
-      <img src="${esc(business.logoUrl)}" onerror="this.parentElement.style.display='none'" />
+      <img src="${esc(shrinkLogoUrl(business.logoUrl))}" onerror="this.parentElement.style.display='none'" />
     </div>
   ` : ''}
   <div class="center big">${esc(business.name)}</div>
