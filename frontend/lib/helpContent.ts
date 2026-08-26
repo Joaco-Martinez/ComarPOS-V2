@@ -96,6 +96,33 @@ export const HELP_CATEGORIES: HelpCategory[] = [
     ],
   },
   {
+    id: 'libro-iva-digital',
+    label: 'Libro IVA Digital',
+    icon: FacturacionIcon,
+    entries: [
+      {
+        q: '¿Qué es el Libro IVA Digital?',
+        a: 'Es el régimen de AFIP/ARCA (RG 4597) que reemplazó al viejo CITI (RG 3685, ya derogado): todo Responsable Inscripto tiene que registrar mensualmente sus comprobantes de Ventas y Compras en el Portal IVA, antes de presentar la DDJJ de IVA. Desde Libro IVA Digital, en el menú, tenés las dos mitades listas para descargar.',
+      },
+      {
+        q: '¿Tengo que subir el archivo de Ventas?',
+        a: 'No hace falta. Como tus facturas ya se emiten con CAE real de AFIP, el organismo ya las tiene y las pre-carga solo en el Portal IVA. El export de Ventas que tenés acá es solo para tener todo junto, o para pasárselo a tu contador.',
+      },
+      {
+        q: '¿Y el de Compras?',
+        a: 'Ese sí hay que armarlo con lo que vos cargaste: para eso, cada compra necesita sus datos fiscales (CUIT del proveedor, tipo y número de comprobante, IVA por producto), que se completan al registrar la compra en Compras.',
+      },
+      {
+        q: 'Me dice que hay compras con datos faltantes, ¿qué hago?',
+        a: 'Ese aviso te lleva directo a Compras: entrá a esa compra y completá el tipo de comprobante, el punto de venta/número y el CUIT del proveedor que falten. Sin esos datos, esa compra no se puede reportar correctamente.',
+      },
+      {
+        q: '¿El archivo que descargo lo puedo subir directo a AFIP?',
+        a: 'Lo que se descarga es un CSV con los mismos datos y el mismo orden que exige AFIP para ese archivo, pensado para revisarlo o pasárselo a tu contador (o cargarlo en su software). El Portal IVA de AFIP pide un formato de texto de ancho fijo específico para la carga directa; por eso conviene confirmar con tu contador antes de la primera presentación.',
+      },
+    ],
+  },
+  {
     id: 'stock',
     label: 'Productos y Stock',
     icon: ProductosIcon,
