@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { BrowserWindow } = require('electron');
+const { contentWidthMm } = require('./ticketTemplate');
 
 // Imprime via el driver de Windows de la impresora ya instalada (GDI), no
 // ESC/POS crudo -- a diferencia del ESP32 (que le habla directo al puerto
@@ -52,16 +53,20 @@ function printHtml(html, printerName, paperWidthMm = 80) {
             printBackground: true,
             deviceName: printerName || undefined,
             margins: { marginType: 'none' },
-            // Pagina explicita en micrones, del ancho del rollo fisico --
-            // sin esto Electron usa el tamaño de pagina por defecto del
-            // driver (tipicamente A4/Letter), mas ancho que el rollo. El
-            // driver de una termica puede rechazar en silencio un trabajo
-            // mas ancho que el papel que tiene cargado (reproducido: nada
-            // llegaba a imprimir con una POS-58C de 58mm recibiendo
-            // contenido pensado para 80mm). El alto queda generoso (200mm)
-            // -- una termica de rollo continuo corta al terminar el
-            // contenido real, no imprime hasta el final de la pagina.
-            pageSize: { width: paperWidthMm * 1000, height: 200000 },
+            // Pagina explicita en micrones -- sin esto Electron usa el
+            // tamaño de pagina por defecto del driver (tipicamente
+            // A4/Letter), mas ancho que el rollo. IMPORTANTE: el ancho va
+            // en el area IMPRIMIBLE (contentWidthMm), no el ancho del
+            // rollo -- confirmado contra el PrintCapabilitiesXML real de
+            // una POS-58C: el driver declara un maximo de 48047 micrones
+            // (58mm de rollo, ~48mm imprimibles) y rechaza en silencio
+            // (job "completa" sin error pero no sale nada) cualquier
+            // pageSize por encima de ese maximo -- mandar los 58mm enteros
+            // del rollo (58000) ya superaba ese limite. El alto queda
+            // generoso (200mm) -- una termica de rollo continuo corta al
+            // terminar el contenido real, no imprime hasta el final de la
+            // pagina.
+            pageSize: { width: contentWidthMm(paperWidthMm) * 1000, height: 200000 },
           },
           (success, errorType) => {
             cleanup();
