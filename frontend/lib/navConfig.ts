@@ -50,6 +50,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/auditoria',                        icon: AuditoriaIcon,          label: 'Auditoría',           color: '#EF4444', moduleKey: 'auditoria' },
   { href: '/configuracion/business-locations', icon: SucursalesIcon,         label: 'Sucursales',          color: '#00B4DB', moduleKey: 'sucursales' },
   { href: '/configuracion/arca',               icon: ArcaIcon,               label: 'ARCA / AFIP',         color: '#18C15E', moduleKey: 'arca' },
+  { href: '/libro-iva-digital',                icon: FacturacionIcon,        label: 'Libro IVA Digital',   color: '#00B4DB', moduleKey: 'facturacion' },
   { href: '/configuracion/empresa',            icon: EmpresaIcon,            label: 'Empresa',             color: '#F39C12', moduleKey: 'empresa' },
   { href: '/configuracion/printbox',           icon: PrintboxIcon,           label: 'PrintBox',            color: '#6474BB', moduleKey: 'printbox' },
 ];

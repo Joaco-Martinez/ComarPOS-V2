@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -9,10 +10,10 @@ import type { BusinessLocation, Product, Purchase, Supplier } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
-import { ShoppingBag, Plus, X, Eye, RefreshCcw, Trash2, FileDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { ShoppingBag, Plus, X, Eye, RefreshCcw, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { todayInputAR } from '@/lib/dateAR';
 
-// Mismo subconjunto curado que backend/src/services/libroIvaDigital/purchaseInvoiceTypes.ts
+// Mismo subconjunto curado que backend/src/services/libroIvaDigital/invoiceTypes.ts
 // -- los tipos de comprobante de compra que un comercio chico/mediano recibe en la práctica.
 const PURCHASE_INVOICE_TYPES = [
   { code: 1, label: 'Factura A' },
@@ -38,6 +39,7 @@ const emptyFiscalForm = {
 };
 
 export default function ComprasPage() {
+  const { tenant } = useParams<{ tenant: string }>();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -49,8 +51,6 @@ export default function ComprasPage() {
   const [items, setItems] = useState<{ productId: string; quantity: string; quantityKg: string; unitCost: string; ivaRate: string }[]>([]);
   const [fiscalForm, setFiscalForm] = useState(emptyFiscalForm);
   const [showFiscalExtra, setShowFiscalExtra] = useState(false);
-  const [libroIvaOpen, setLibroIvaOpen] = useState(false);
-  const [libroIvaPeriod, setLibroIvaPeriod] = useState(() => { const d = new Date(); return { year: String(d.getFullYear()), month: String(d.getMonth() + 1) }; });
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -130,24 +130,6 @@ export default function ComprasPage() {
     } finally { setSaving(false); }
   };
 
-  const downloadLibroIva = async (kind: 'cbte' | 'alicuotas') => {
-    try {
-      const { year, month } = libroIvaPeriod;
-      const res = await api.get(`/purchases/libro-iva-digital/compras-${kind}.csv`, {
-        params: { year, month },
-        responseType: 'blob',
-      });
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `compras_${kind}_${year}_${month.padStart(2, '0')}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Error al generar el archivo');
-    }
-  };
-
   const filtered = useMemo(() => {
     if (!search.trim()) return purchases;
     const q = search.toLowerCase();
@@ -163,15 +145,10 @@ export default function ComprasPage() {
       title="Compras"
       subtitle={`${purchases.length} registros`}
       actions={
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setLibroIvaOpen((v) => !v)} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
-            <FileDown size={13} /> Libro IVA (Compras)
-          </button>
-          <button onClick={() => { setForm((p) => ({ supplierId: '', date: todayInputAR(), notes: '', invoiceNumber: '', businessLocationId: p.businessLocationId, paymentMethod: 'TRANSFERENCIA' })); setItems([{ productId: '', quantity: '1', quantityKg: '', unitCost: '', ivaRate: '21' }]); setFiscalForm(emptyFiscalForm); setShowFiscalExtra(false); setModal('create'); }}
-            className="btn btn-primary btn-sm" style={{ gap: 6 }}>
-            <Plus size={13} /> Registrar compra
-          </button>
-        </div>
+        <button onClick={() => { setForm((p) => ({ supplierId: '', date: todayInputAR(), notes: '', invoiceNumber: '', businessLocationId: p.businessLocationId, paymentMethod: 'TRANSFERENCIA' })); setItems([{ productId: '', quantity: '1', quantityKg: '', unitCost: '', ivaRate: '21' }]); setFiscalForm(emptyFiscalForm); setShowFiscalExtra(false); setModal('create'); }}
+          className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+          <Plus size={13} /> Registrar compra
+        </button>
       }
     >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: 10, marginBottom: 16 }}>
@@ -185,39 +162,11 @@ export default function ComprasPage() {
         </div>
       </div>
 
-      {libroIvaOpen && (
-        <div className="card" style={{ padding: 16, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Libro IVA Digital — Compras</div>
-            <p style={{ fontSize: 12, color: 'var(--text3)', margin: '4px 0 0', maxWidth: 620 }}>
-              Exporta las compras del período en CSV, con los mismos datos que pide AFIP para el archivo de Compras del Libro IVA Digital (RG 4597). El lado de Ventas no hace falta exportarlo: AFIP ya lo pre-carga solo, a partir de tus facturas con CAE. Antes de subir el archivo a Portal IVA (o pasárselo a tu contador), revisá que no falten datos fiscales en las compras marcadas.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Año</label>
-              <input type="number" value={libroIvaPeriod.year} onChange={(e) => setLibroIvaPeriod((p) => ({ ...p, year: e.target.value }))} style={{ width: 100 }} />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Mes</label>
-              <select value={libroIvaPeriod.month} onChange={(e) => setLibroIvaPeriod((p) => ({ ...p, month: e.target.value }))} style={{ width: 140 }}>
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                  <option key={m} value={m}>{new Date(2000, m - 1, 1).toLocaleDateString('es-AR', { month: 'long' })}</option>
-                ))}
-              </select>
-            </div>
-            <button onClick={() => downloadLibroIva('cbte')} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
-              <FileDown size={13} /> Comprobantes (CSV)
-            </button>
-            <button onClick={() => downloadLibroIva('alicuotas')} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
-              <FileDown size={13} /> Alícuotas de IVA (CSV)
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Buscar proveedor..." />
+        <a href={`/${tenant}/libro-iva-digital`} style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          Ver Libro IVA Digital →
+        </a>
       </div>
 
       <div className="card">

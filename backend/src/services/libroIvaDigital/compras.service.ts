@@ -23,7 +23,7 @@
 import prisma from "../../prisma";
 import { PurchaseStatus } from "@prisma/client";
 import { tenantScope } from "../../utils/tenantScope";
-import { purchaseInvoiceTypeLabel } from "./purchaseInvoiceTypes";
+import { invoiceTypeLabel } from "./invoiceTypes";
 
 function round2(n: number) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -114,7 +114,7 @@ export async function getComprasLibroIvaDigital(params: { from: Date; to: Date }
       purchaseId: p.id,
       fecha: p.date,
       tipoComprobante: p.invoiceType,
-      tipoComprobanteLabel: purchaseInvoiceTypeLabel(p.invoiceType),
+      tipoComprobanteLabel: invoiceTypeLabel(p.invoiceType),
       puntoVenta: p.invoicePointOfSale,
       numeroComprobante: p.invoiceNumber,
       cuitVendedor: p.providerCuit ?? p.supplier?.cuit ?? null,
