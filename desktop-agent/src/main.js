@@ -190,13 +190,15 @@ function registerIpc() {
     return true;
   });
 
-  ipcMain.handle('agent:test-print', async () => {
-    const cfg = config.getConfig();
-    const paperWidthMm = cfg.paperWidthMm || 80;
-    const html = await buildTicketHtml(sampleTicketPayload(), paperWidthMm);
-    await printer.printHtml(html, cfg.printerName, paperWidthMm);
-    return true;
-  });
+  ipcMain.handle('agent:test-print', () => runTestPrint());
+}
+
+async function runTestPrint() {
+  const cfg = config.getConfig();
+  const paperWidthMm = cfg.paperWidthMm || 80;
+  const html = await buildTicketHtml(sampleTicketPayload(), paperWidthMm);
+  await printer.printHtml(html, cfg.printerName, paperWidthMm);
+  return true;
 }
 
 app.on('second-instance', () => {
@@ -211,24 +213,45 @@ app.on('before-quit', () => {
   isQuitting = true;
 });
 
-app.whenReady().then(() => {
-  registerIpc();
-  createTray();
-  printer.warmup();
-  worker.setStatusListener(broadcastStatus);
-  worker.start();
+// Ruta de diagnostico: `ComarPOS Agent.exe --debug-test-print` corre un
+// test print real (misma config/impresora guardada) contra el codigo
+// EMPAQUETADO real y muestra el resultado por consola, sin abrir tray ni
+// arrancar el worker -- pensado para soporte/depuracion sin tener que
+// clickear la UI. Existe porque un bug real (SumatraPDF, ver
+// resolveSumatraPdfPath en printer.js) andaba perfecto en modo dev pero
+// no en la app empaquetada -- probar solo en dev escondia el problema.
+if (process.argv.includes('--debug-test-print')) {
+  app.whenReady().then(async () => {
+    try {
+      await runTestPrint();
+      console.log('DEBUG_TEST_PRINT_OK');
+      app.exit(0);
+    } catch (err) {
+      console.error('DEBUG_TEST_PRINT_ERROR:', err && err.stack ? err.stack : err);
+      app.exit(1);
+    }
+  });
+} else {
+  app.whenReady().then(() => {
+    registerIpc();
+    createTray();
+    printer.warmup();
+    worker.setStatusListener(broadcastStatus);
+    worker.start();
 
-  // Auto-inicio con Windows -- un agente que no arranca solo despues de
-  // reiniciar la PC del local es, en la practica, un agente que se olvidan
-  // de prender y deja de imprimir tickets sin que nadie se de cuenta hasta
-  // la primera venta del dia.
-  app.setLoginItemSettings({ openAtLogin: true, path: process.execPath });
+    // Auto-inicio con Windows -- un agente que no arranca solo despues de
+    // reiniciar la PC del local es, en la practica, un agente que se
+    // olvidan de prender y deja de imprimir tickets sin que nadie se de
+    // cuenta hasta la primera venta del dia.
+    app.setLoginItemSettings({ openAtLogin: true, path: process.execPath });
 
-  const cfg = config.getConfig();
-  if (!cfg.deviceId || !cfg.token) {
-    openSetupWindow();
-  }
-});
+    const cfg = config.getConfig();
+    if (!cfg.deviceId || !cfg.token) {
+      openSetupWindow();
+    }
+  });
+}
+
 
 // No hay ventana "principal": esto es un agente de bandeja, no debe
 // cerrarse solo porque se cerro la ventana de configuracion (comportamiento
