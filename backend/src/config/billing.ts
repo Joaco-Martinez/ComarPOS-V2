@@ -127,7 +127,29 @@ export const PLANS: Plan[] = [
     tagline: "Para arrancar con lo justo y necesario.",
     highlighted: false,
     limits: { maxBusinessLocations: 1, maxProducts: 300, maxUsers: 2 },
-    features: { ...ALL_FEATURES_ON, fidelidad: false, promociones: false, cuentasCorrientes: false },
+    // Sincronizado a mano con el override real vigente en /platform-admin >
+    // Módulos por plan (PlanFeatureConfig, ver planFeatureConfig.service.ts)
+    // al 2026-08-26 -- ese panel es la fuente de verdad del dia a dia y
+    // pisa esto sin deploy, pero conviene que el default del codigo no
+    // quede desactualizado (es lo que rige si algun dia se borra el
+    // PlanFeatureConfig de "esencial" en la DB).
+    features: {
+      ...ALL_FEATURES_ON,
+      remitos: false,
+      conteoStock: false,
+      cuentasCorrientes: false,
+      fidelidad: false,
+      promociones: false,
+      compras: false,
+      ordenesCompra: false,
+      proveedores: false,
+      finanzas: false,
+      gastosRecurrentes: false,
+      tipoCambio: false,
+      reportes: false,
+      objetivosVentas: false,
+      auditoria: false,
+    },
   },
   {
     id: "profesional",
