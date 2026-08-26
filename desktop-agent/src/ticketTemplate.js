@@ -121,20 +121,9 @@ async function buildTicketHtml(payload, paperWidthMm = 80) {
   .qr { display: flex; justify-content: center; margin: 6px 0; }
   .totals .row { margin-bottom: 2px; }
   .footer { margin-top: 8px; }
-  .logo { display: flex; justify-content: center; margin-bottom: 4px; }
-  .logo img { max-width: 32mm; max-height: 20mm; object-fit: contain; }
 </style>
 </head>
 <body>
-  ${/* logoUrl (imagen normal del tenant), no logoEscposUrl -- ese otro campo
-       es el bitmap ya convertido a comandos ESC/POS que usa el ESP32 (ver
-       printbox/src/main.cpp#ensureTenantLogoCached), inutil como <img> acá.
-       Mismo orden que el firmware: el logo va primero, antes del nombre. */
-    business.logoUrl ? `
-    <div class="logo">
-      <img src="${esc(business.logoUrl)}" onerror="this.parentElement.style.display='none'" />
-    </div>
-  ` : ''}
   <div class="center big">${esc(business.name)}</div>
   ${business.cuit ? `<div class="center">CUIT: ${esc(business.cuit)}</div>` : ''}
   ${business.address ? `<div class="center">${esc(business.address)}</div>` : ''}
