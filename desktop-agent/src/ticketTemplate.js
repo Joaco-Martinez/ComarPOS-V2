@@ -122,7 +122,7 @@ async function buildTicketHtml(payload, paperWidthMm = 80) {
   .totals .row { margin-bottom: 2px; }
   .footer { margin-top: 8px; }
   .logo { display: flex; justify-content: center; margin-bottom: 4px; }
-  .logo img { max-width: 28mm; max-height: 14mm; object-fit: contain; }
+  .logo img { max-width: 40mm; max-height: 24mm; object-fit: contain; }
 </style>
 </head>
 <body>

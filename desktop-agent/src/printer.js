@@ -72,9 +72,18 @@ function printHtml(html, printerName, paperWidthMm = 80) {
             pageSize: { width: contentWidthMm(paperWidthMm) * 1000, height: 297042 },
           },
           (success, errorType) => {
-            cleanup();
-            if (success) resolve();
-            else reject(new Error(errorType || 'Error al imprimir'));
+            // Este callback dispara cuando Windows ACEPTA el trabajo para
+            // imprimir, no necesariamente cuando la impresora fisica
+            // termina de imprimirlo -- son cosas asincronicas separadas.
+            // Se espera un poco antes de borrar el HTML temporal para
+            // darle tiempo al driver/spooler a terminar de leerlo del
+            // todo (a pedido del usuario: el ticket se estaba cortando
+            // antes de terminar).
+            setTimeout(() => {
+              cleanup();
+              if (success) resolve();
+              else reject(new Error(errorType || 'Error al imprimir'));
+            }, 3000);
           }
         );
       })
