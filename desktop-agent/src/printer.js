@@ -2,9 +2,26 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { BrowserWindow } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const pdfToPrinter = require('pdf-to-printer');
 const { contentWidthMm } = require('./ticketTemplate');
+
+// pdf-to-printer decide solo si esta empaquetado (para saber si tiene que
+// buscar su SumatraPDF.exe bundleado adentro de app.asar.unpacked en vez
+// de app.asar) leyendo process.mainModule.filename -- esa propiedad esta
+// deprecada y viene undefined en esta version de Electron, asi que esa
+// deteccion siempre da "no empaquetado" aunque lo este, y termina
+// intentando ejecutar el .exe desde DENTRO del .asar (no existe ahi como
+// archivo real, un binario no se puede correr desde adentro del archive).
+// Reproducido: probado en modo dev andaba perfecto (no hay asar de por
+// medio, la deteccion rota da el resultado correcto por accidente), pero
+// en la app empaquetada real no imprimia nada. Se lo pasamos ya resuelto
+// nosotros mismos con app.isPackaged (la API real y confiable de
+// Electron para esto), evitando su deteccion interna por completo.
+function resolveSumatraPdfPath() {
+  const base = path.join(__dirname, '..', 'node_modules', 'pdf-to-printer', 'dist', 'SumatraPDF-3.4.6-32.exe');
+  return app.isPackaged ? base.replace('app.asar', 'app.asar.unpacked') : base;
+}
 
 // Imprime via el driver de Windows de la impresora ya instalada (GDI), no
 // ESC/POS crudo -- a diferencia del ESP32 (que le habla directo al puerto
@@ -92,6 +109,7 @@ async function printHtml(html, printerName, paperWidthMm = 80) {
       printer: printerName || undefined,
       scale: 'noscale',
       silent: true,
+      sumatraPdfPath: resolveSumatraPdfPath(),
     });
   } finally {
     cleanup();
