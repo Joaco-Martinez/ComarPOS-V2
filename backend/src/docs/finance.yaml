@@ -397,6 +397,14 @@ components:
         category:
           type: string
           example: "Insumos"
+        financeAccountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Opcional: id de una cuenta del plan de cuentas configurable por
+            tenant (ver /finance-accounts). Si no se manda, el movimiento se
+            registra igual usando solo `category` (compatibilidad).
         description:
           type: string
           example: "Compra de cajas de cartón"
@@ -417,6 +425,10 @@ components:
           type: number
         category:
           type: string
+        financeAccountId:
+          type: string
+          format: uuid
+          nullable: true
         description:
           type: string
         date:

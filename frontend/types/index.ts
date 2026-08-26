@@ -284,9 +284,25 @@ export interface FinanceEntry {
   amount: number;
   description?: string | null;
   category: string;
+  // Opcional: cuenta del plan de cuentas configurable por tenant (ver
+  // FinanceAccount). category se mantiene siempre, esto es aditivo.
+  financeAccountId?: string | null;
+  financeAccount?: FinanceAccount | null;
   paymentMethod?: PaymentMethod | null;
   date: string;
   createdAt: string;
+}
+
+/** Plan de cuentas configurable por tenant (aditivo a CategoryFinance). */
+export interface FinanceAccount {
+  id: string;
+  tenantId?: string | null;
+  name: string;
+  type: 'INGRESO' | 'EGRESO';
+  isSystem: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AccountMovement {

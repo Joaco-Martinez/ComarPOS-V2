@@ -130,6 +130,7 @@ model Tenant {
   returns           Return[]
   productStocks     ProductStock[]
   repairOrders      RepairOrder[]
+  financeAccounts   FinanceAccount[]
 }
 
 // === Platform admin (super-admin de SaaS, fuera de cualquier tenant) ===
@@ -1082,23 +1083,60 @@ model ProductStats {
 }
 
 model Finance {
-  id            String          @id @default(uuid())
-  tenantId      String?
-  tenant        Tenant?         @relation(fields: [tenantId], references: [id])
-  type          FinanceType
-  amount        Float
-  category      CategoryFinance
-  paymentMethod PaymentMethod?
-  description   String?
-  date          DateTime
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  purchase      Purchase?
+  id               String          @id @default(uuid())
+  tenantId         String?
+  tenant           Tenant?         @relation(fields: [tenantId], references: [id])
+  type             FinanceType
+  amount           Float
+  // Enum legacy hardcodeado para un unico negocio (ver CategoryFinance mas
+  // abajo) - se mantiene tal cual por compatibilidad (otros modulos y datos
+  // historicos dependen de el), NO se borra ni se hace nullable. El plan de
+  // cuentas real y configurable por tenant vive en financeAccountId/
+  // FinanceAccount; category queda como fallback para callers que todavia
+  // no migraron.
+  category         CategoryFinance
+  // FK opcional al plan de cuentas por tenant (FinanceAccount). Nullable a
+  // proposito: los Finance existentes (y los nuevos que no la manden) siguen
+  // funcionando solo con `category`. Ver financeAccount.service.ts.
+  financeAccountId String?
+  financeAccount   FinanceAccount? @relation(fields: [financeAccountId], references: [id])
+  paymentMethod    PaymentMethod?
+  description      String?
+  date             DateTime
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  purchase         Purchase?
 
   @@index([type])
   @@index([category])
   @@index([date])
   @@index([tenantId])
+  @@index([financeAccountId])
+}
+
+// Plan de cuentas configurable por tenant (aditivo, no reemplaza
+// CategoryFinance). Cada tenant puede crear/renombrar/desactivar sus propias
+// cuentas de ingreso/egreso en vez de estar atado al enum fijo pensado
+// originalmente para un solo negocio. isSystem=true marca las cuentas
+// sembradas automaticamente a partir de CategoryFinance (una por valor del
+// enum, ver migracion 20260826200000_add_finance_account) - se pueden
+// renombrar/desactivar como cualquier otra pero no las crea el usuario a
+// mano. No hay borrado fisico: una cuenta con movimientos asociados solo se
+// desactiva (isActive=false), ver financeAccount.service.ts#remove.
+model FinanceAccount {
+  id        String      @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?     @relation(fields: [tenantId], references: [id])
+  name      String
+  type      FinanceType
+  isSystem  Boolean     @default(false)
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  finances  Finance[]
+
+  @@index([tenantId])
+  @@index([type])
 }
 
 model StockMovement {

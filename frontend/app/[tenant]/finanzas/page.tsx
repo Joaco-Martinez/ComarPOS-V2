@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { FinanceEntry } from '@/types';
+import type { FinanceAccount, FinanceEntry } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -37,8 +37,14 @@ export default function FinanzasPage() {
   const [to, setTo] = useState(todayInputAR());
   const [typeFilter, setTypeFilter] = useState('');
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ type: 'INGRESO' as 'INGRESO' | 'EGRESO', amount: '', category: 'VENTA', description: '', paymentMethod: 'EFECTIVO', date: todayInputAR() });
+  const [form, setForm] = useState({ type: 'INGRESO' as 'INGRESO' | 'EGRESO', amount: '', category: 'VENTA', financeAccountId: '', description: '', paymentMethod: 'EFECTIVO', date: todayInputAR() });
   const [saving, setSaving] = useState(false);
+  // Plan de cuentas configurable por tenant (aditivo a CATEGORIES): selector
+  // opcional en el modal de carga, además de la categoría clásica. Si el
+  // tenant no creó ninguna cuenta (o no es ADMIN), esta lista queda vacía y
+  // el selector directamente no se muestra — la carga sigue funcionando
+  // igual que antes solo con category.
+  const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -49,16 +55,22 @@ export default function FinanzasPage() {
   };
 
   useEffect(() => { load(); }, [from, to, typeFilter]);
+  useEffect(() => {
+    api.get('/finance-accounts')
+      .then(({ data }) => setAccounts(normalizeArray<FinanceAccount>(data)))
+      .catch(() => setAccounts([])); // no ADMIN o sin plan de cuentas: selector queda oculto
+  }, []);
 
+  const accountsForType = accounts.filter((a) => a.type === form.type);
 
   const save = async () => {
     if (!form.amount || !form.category) return;
     setSaving(true);
     try {
-      await api.post('/finance', { ...form, amount: Number(form.amount) });
+      await api.post('/finance', { ...form, amount: Number(form.amount), financeAccountId: form.financeAccountId || undefined });
       toast.success(`${form.type === 'INGRESO' ? 'Ingreso' : 'Egreso'} registrado`);
       setModal(false);
-      setForm({ type: 'INGRESO', amount: '', category: 'VENTA', description: '', paymentMethod: 'EFECTIVO', date: todayInputAR() });
+      setForm({ type: 'INGRESO', amount: '', category: 'VENTA', financeAccountId: '', description: '', paymentMethod: 'EFECTIVO', date: todayInputAR() });
       load();
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? 'Error al guardar');
@@ -178,7 +190,10 @@ export default function FinanzasPage() {
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Tipo</label>
-                  <select value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value as any }))}>
+                  <select
+                    value={form.type}
+                    onChange={(e) => setForm((p) => ({ ...p, type: e.target.value as any, financeAccountId: '' }))}
+                  >
                     <option value="INGRESO">Ingreso</option>
                     <option value="EGRESO">Egreso</option>
                   </select>
@@ -190,6 +205,15 @@ export default function FinanzasPage() {
                   </select>
                 </div>
               </div>
+              {accountsForType.length > 0 && (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Cuenta (plan de cuentas)</label>
+                  <select value={form.financeAccountId} onChange={(e) => setForm((p) => ({ ...p, financeAccountId: e.target.value }))}>
+                    <option value="">Sin cuenta (solo categoría)</option>
+                    {accountsForType.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Monto *</label>
