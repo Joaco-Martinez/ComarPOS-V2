@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast';
 import PwaRegister from '@/components/PwaRegister';
 import KeyboardInsetWatcher from '@/components/KeyboardInsetWatcher';
 import GoogleAnalytics from '@/components/GoogleAnalytics';
+import GoogleAdsTag from '@/components/GoogleAdsTag';
 import CookieBanner from '@/components/CookieBanner';
 import './globals.css';
 
@@ -92,6 +93,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <PwaRegister />
         <KeyboardInsetWatcher />
         <GoogleAnalytics />
+        <GoogleAdsTag />
         <Analytics />
         <CookieBanner />
         {/* z-index al maximo entero seguro a proposito: tiene que ganarle
