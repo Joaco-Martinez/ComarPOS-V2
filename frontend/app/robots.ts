@@ -21,6 +21,11 @@ export default function robots(): MetadataRoute.Robots {
         // compartir un link (og:image) -- si no, el Disallow: '/' de abajo
         // tambien se los bloquea a ellos aunque el archivo exista y sirva bien.
         '/favicon.ico', '/icon.png', '/apple-icon.png', '/opengraph-image', '/manifest.webmanifest', '/icons/',
+        // El propio sitemap tiene que estar permitido explicitamente: el
+        // Disallow: '/' de abajo lo alcanza a el tambien, y Search Console
+        // reporta "No se ha podido acceder a tu sitemap" cuando el archivo
+        // referenciado en Sitemap: mas abajo esta bloqueado por robots.txt.
+        '/sitemap.xml',
       ],
       disallow: '/',
     },
