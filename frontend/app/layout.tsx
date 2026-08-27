@@ -97,10 +97,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* z-index al maximo entero seguro a proposito: tiene que ganarle
             siempre a .modal-overlay (hasta 2147483021, ver globals.css y
             ClientFormModal.tsx) para que un toast disparado con un modal
-            abierto (ej. error de un formulario) se vea. */}
+            abierto (ej. error de un formulario) se vea.
+            top-right (no bottom-right) porque en mobile el toast se pintaba
+            justo sobre la bottom-nav y el carrito del POS -- arriba a la
+            derecha no choca con nada fijo. El offset de "top" deja lugar al
+            app-header (56px + 14px de aire, mismo criterio que el toast
+            local de POS en pos/page.tsx) mas el safe-area del notch. */}
         <Toaster
-          position="bottom-right"
-          containerStyle={{ zIndex: 2147483647 }}
+          position="top-right"
+          containerStyle={{ zIndex: 2147483647, top: 'calc(70px + env(safe-area-inset-top, 0px))' }}
           toastOptions={{
             duration: 3500,
             style: {

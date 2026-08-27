@@ -617,6 +617,11 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
 @media (max-width: 640px) {
   .app-header { height: auto; min-height: 56px; flex-wrap: wrap; padding: 10px 14px; gap: 8px; }
   .app-header-actions { flex-wrap: wrap; flex-shrink: 1; }
+  /* Los botones de icono del header (tema, ayuda, notificaciones) miden
+     ~29px con el padding pensado para mouse -- por debajo del minimo de
+     44px recomendado para touch, y son los mas usados del header en
+     mobile. Se agranda el area de toque sin tocar el tamano del icono. */
+  .app-header-actions button { min-width: 40px; min-height: 40px; padding: 10px !important; }
 }
 
 /* --- Mobile modal --- */
@@ -717,8 +722,13 @@ body:has(.modal-overlay) .pos-mobile-bar {
 }
 /* !important: PwaRegister fija su propio display:flex por estilo inline
    (maxima especificidad posible), una regla de hoja de estilos comun no
-   alcanza para ganarle sin esto. */
-body:has(.modal-overlay) .pwa-install-banner {
+   alcanza para ganarle sin esto. Se agrega .pos-cart-wrap.open ademas de
+   .modal-overlay porque el carrito del POS es su propio overlay (no usa
+   esa clase, ver mas abajo) y el banner quedaba pintado encima de los
+   botones "Confirmar venta"/"Guardar pendiente", bloqueando el tap justo
+   en el paso final de una venta. */
+body:has(.modal-overlay) .pwa-install-banner,
+body:has(.pos-cart-wrap.open) .pwa-install-banner {
   display: none !important;
 }
 .bottom-nav-item {
@@ -744,7 +754,13 @@ body:has(.modal-overlay) .pwa-install-banner {
   position: fixed; inset: 0; z-index: 2147483003;
   background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
   display: flex; align-items: flex-end; justify-content: center;
+  /* Montado siempre (ver BottomNav.tsx) y animado via esta clase en vez de
+     un fade-in por keyframe al montar -- asi el cierre (tocar afuera o
+     elegir una seccion) tambien desliza/desvanece en vez de desaparecer
+     de un corte, como ya hace el carrito del POS (.pos-cart-wrap). */
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
 }
+.more-sheet-overlay.open { opacity: 1; pointer-events: auto; }
 .more-sheet {
   /* dvh (con vh como fallback), mismo motivo que .modal mas arriba. */
   width: 100%; max-height: 78dvh; overflow-y: auto;
@@ -752,8 +768,10 @@ body:has(.modal-overlay) .pwa-install-banner {
   border-radius: var(--m-radius-lg) var(--m-radius-lg) 0 0;
   box-shadow: var(--m-shadow-lg);
   padding: 10px 16px max(16px, env(safe-area-inset-bottom, 16px));
-  animation: fadeIn 0.2s ease;
+  transform: translateY(100%);
+  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
 }
+.more-sheet-overlay.open .more-sheet { transform: translateY(0); }
 .more-sheet-handle { width: 44px; height: 5px; border-radius: 999px; background: var(--border2); margin: 6px auto 14px; }
 .more-sheet-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 4px; }
 .more-sheet-item {

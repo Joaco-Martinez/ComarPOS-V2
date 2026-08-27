@@ -61,6 +61,7 @@ export default function PosPage() {
   const [showClientPicker, setShowClientPicker] = useState(false);
   const [discountType, setDiscountType] = useState<DiscountType>('PERCENTAGE');
   const [discountValue, setDiscountValue] = useState('');
+  const [discountMode, setDiscountMode] = useState<'DISCOUNT' | 'SURCHARGE'>('DISCOUNT');
   const [paymentMode, setPaymentMode] = useState<'single' | 'multi'>('single');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
   const [payments, setPayments] = useState<SalePayment[]>([{ method: 'EFECTIVO', amount: 0 }]);
@@ -352,12 +353,16 @@ export default function PosPage() {
     return acc + price * qty;
   }, 0);
 
+  // Negativo = recargo (suma al total en vez de restar) - mismo campo que el
+  // descuento, con el signo dado por discountMode. El backend no distingue
+  // tipos separados: total = subtotal - discountAmount funciona para ambos.
   const discountAmount = useMemo(() => {
     const dv = num(discountValue);
     if (!dv) return 0;
-    if (discountType === 'PERCENTAGE') return subtotal * (dv / 100);
-    return Math.min(dv, subtotal);
-  }, [subtotal, discountType, discountValue]);
+    const amount = discountType === 'PERCENTAGE' ? subtotal * (dv / 100) : dv;
+    if (discountMode === 'SURCHARGE') return -amount;
+    return Math.min(amount, subtotal);
+  }, [subtotal, discountType, discountValue, discountMode]);
 
   const total = Math.max(0, subtotal - discountAmount);
 
@@ -393,6 +398,7 @@ export default function PosPage() {
     setClientSearch('');
     setDiscountValue('');
     setDiscountType('PERCENTAGE');
+    setDiscountMode('DISCOUNT');
     setPaymentMode('single');
     setPaymentMethod('EFECTIVO');
     setPayments([{ method: 'EFECTIVO', amount: 0 }]);
@@ -442,7 +448,10 @@ export default function PosPage() {
           payments: payments.filter((p) => num(p.amount) > 0).map((p) => ({ method: p.method, amount: num(p.amount) })),
         }),
         ...(selectedClient && { clientId: selectedClient.id }),
-        ...(discountValue && { discountType, discountValue: num(discountValue) }),
+        ...(discountValue && {
+          discountType,
+          discountValue: discountMode === 'SURCHARGE' ? -num(discountValue) : num(discountValue),
+        }),
         ...(deliveryMethod === 'LOCAL_DELIVERY' && deliveryCalc && {
           deliveryMethod: 'LOCAL_DELIVERY',
           businessLocationId: deliveryLocationId,
@@ -595,14 +604,16 @@ export default function PosPage() {
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3, marginBottom: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: 30 }}>
                       {p.name}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 10, color: lowStock ? 'var(--warn)' : 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 6 }}>
+                      <span style={{ fontSize: 10, color: lowStock ? 'var(--warn)' : 'var(--text3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
                         {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
                         {noStock ? 'Sin stock' : `Stock: ${p.saleUnit === 'KG' ? `${stock}kg` : stock}`}
                       </span>
-                      <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
-                        {categoryName(p).slice(0, 8)}
-                      </span>
+                      {categoryName(p) !== 'Sin categoría' && (
+                        <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {categoryName(p)}
+                        </span>
+                      )}
                     </div>
                     {/* minmax(0, 1fr) y no 1fr: un track "1fr" no encoge por
                         debajo del min-content de su contenido, y en la
@@ -862,20 +873,36 @@ export default function PosPage() {
 
           {/* Totals + controls */}
           <div style={{ borderTop: '1px solid var(--border)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* Discount */}
+            {/* Discount / surcharge */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button
+                onClick={() => setDiscountMode(discountMode === 'DISCOUNT' ? 'SURCHARGE' : 'DISCOUNT')}
+                className="btn btn-secondary btn-xs"
+                style={{
+                  padding: '4px 8px',
+                  flexShrink: 0,
+                  color: discountMode === 'SURCHARGE' ? 'var(--accent)' : 'var(--warn)',
+                }}
+                title={discountMode === 'DISCOUNT' ? 'Cambiar a recargo (suma al total)' : 'Cambiar a descuento (resta del total)'}
+              >
+                {discountMode === 'DISCOUNT' ? <Minus size={12} /> : <Plus size={12} />}
+              </button>
               <button
                 onClick={() => setDiscountType(discountType === 'PERCENTAGE' ? 'FIXED' : 'PERCENTAGE')}
                 className="btn btn-secondary btn-xs"
                 style={{ padding: '4px 8px', flexShrink: 0 }}
-                title="Cambiar tipo de descuento"
+                title="Cambiar tipo de descuento/recargo"
               >
                 {discountType === 'PERCENTAGE' ? <Percent size={12} /> : <DollarSign size={12} />}
               </button>
               <input
                 value={discountValue}
                 onChange={(e) => setDiscountValue(e.target.value)}
-                placeholder={discountType === 'PERCENTAGE' ? 'Descuento %' : 'Descuento $'}
+                placeholder={
+                  discountMode === 'DISCOUNT'
+                    ? (discountType === 'PERCENTAGE' ? 'Descuento %' : 'Descuento $')
+                    : (discountType === 'PERCENTAGE' ? 'Recargo %' : 'Recargo $')
+                }
                 type="number" min="0" step="any"
                 style={{ padding: '5px 9px' }}
               />
@@ -912,6 +939,12 @@ export default function PosPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--warn)' }}>
                       <span>Descuento</span>
                       <span style={{ fontFamily: 'var(--mono)' }}>−{fmtMoney(discountAmount)}</span>
+                    </div>
+                  )}
+                  {discountAmount < 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--accent)' }}>
+                      <span>Recargo</span>
+                      <span style={{ fontFamily: 'var(--mono)' }}>+{fmtMoney(-discountAmount)}</span>
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, color: 'var(--text)', paddingTop: 4, borderTop: '1px solid var(--border)' }}>

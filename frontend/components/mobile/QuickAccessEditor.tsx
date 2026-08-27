@@ -69,7 +69,18 @@ function Row({
       </span>
       <span className="qa-row-label">{item.label}</span>
       <div className="qa-row-actions">
-        <button type="button" className="qa-icon-btn" onClick={onToggleMenu} aria-label="Opciones">
+        {/* stopPropagation: el contenedor raiz (.qa-editor) cierra
+            cualquier menu abierto con un onClick propio (closeMenu) para
+            poder tocar afuera y cerrarlo -- sin cortar la propagacion aca,
+            ese mismo click "subia" hasta la raiz en la misma pasada y
+            deshacia el toggle: el menu se abria y cerraba en el mismo tap,
+            como si el boton no hiciera nada. */}
+        <button
+          type="button"
+          className="qa-icon-btn"
+          onClick={(e) => { e.stopPropagation(); onToggleMenu(); }}
+          aria-label="Opciones"
+        >
           <FolderInput size={15} />
         </button>
         {menuOpen && menu}

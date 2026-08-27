@@ -114,7 +114,15 @@ export default function NotificationsBell() {
 
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 340, maxWidth: '90vw',
+          // fixed y anclado al viewport (no al boton) a proposito: con
+          // position:absolute + right:0 relativo al wrapper, el panel se
+          // pintaba fuera de pantalla por la izquierda apenas el header
+          // envolvia a 2 lineas (ver .app-header en globals.css) y el
+          // wrapper de la campana dejaba de quedar pegado al borde derecho
+          // real -- un ancho fijo de 340px "colgando" desde ahi se salia
+          // del viewport en vez de solo desplazarse.
+          position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 8px)', right: 12,
+          width: 'min(340px, calc(100vw - 24px))',
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
           boxShadow: '0 12px 32px rgba(0,0,0,0.25)', zIndex: 60, overflow: 'hidden',
         }}>
