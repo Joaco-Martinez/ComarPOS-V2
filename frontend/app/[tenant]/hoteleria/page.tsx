@@ -447,13 +447,18 @@ export default function HoteleriaPage() {
     <AppLayout
       title="Hotelería"
       subtitle={tab === 'habitaciones' ? `${rooms.length} habitaciones` : `${availability.length} habitaciones en el calendario`}
-      actions={
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className={`btn btn-sm ${tab === 'habitaciones' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('habitaciones')}>Habitaciones</button>
-          <button className={`btn btn-sm ${tab === 'reservas' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('reservas')}>Reservas</button>
-        </div>
-      }
     >
+      {/* El switcher de vistas va en el cuerpo de la pagina, no en las
+          "actions" del header -- el header es position:fixed y su alto lo
+          sincroniza AppLayout con ResizeObserver; dos botones de texto ahi
+          empujan el header a 2-3 lineas en mobile y ese sync puede quedar
+          un frame atras, tapando el contenido de mas arriba. Como fila
+          normal del body no tiene ese riesgo. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button className={`btn btn-sm ${tab === 'habitaciones' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('habitaciones')}>Habitaciones</button>
+        <button className={`btn btn-sm ${tab === 'reservas' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('reservas')}>Reservas</button>
+      </div>
+
       {tab === 'habitaciones' ? (
         <>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
