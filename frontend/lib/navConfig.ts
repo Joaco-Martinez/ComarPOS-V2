@@ -4,7 +4,7 @@ import {
   OrdenesCompraIcon, ProveedoresIcon, ConteoStockIcon, FinanzasIcon, GastosRecurrentesIcon,
   TipoCambioIcon, CuentasCorrientesIcon, ReportesIcon, ObjetivosVentasIcon, PromocionesIcon,
   FidelidadIcon, UsuariosIcon, AuditoriaIcon, SucursalesIcon, ArcaIcon, EmpresaIcon, PrintboxIcon,
-  GuiaIcon, AyudaIcon,
+  GuiaIcon, AyudaIcon, HoteleriaIcon,
   type ComarIconProps,
 } from '@/components/icons/ComarIcons';
 import type { PlanFeatureKey } from '@/types';
@@ -26,6 +26,7 @@ export const NAV: NavItem[] = [
   { href: '/alertas',      icon: AlertasIcon,     label: 'Alertas',            color: '#EF4444', moduleKey: 'alertas' },
   { href: '/caja',         icon: CajaIcon,        label: 'Caja',               color: '#18C15E', moduleKey: 'caja' },
   { href: '/servicios',    icon: ServiciosIcon,   label: 'Servicios',          color: '#F39C12', moduleKey: 'servicios' },
+  { href: '/hoteleria',    icon: HoteleriaIcon,   label: 'Hotelería',          color: '#8B5CF6', moduleKey: 'hoteleria' },
   { href: '/remitos',      icon: RemitosIcon,     label: 'Remitos',            color: '#00B4DB', moduleKey: 'remitos' },
   { href: '/facturacion',  icon: FacturacionIcon, label: 'AFIP / Facturas',    color: '#00B4DB', moduleKey: 'facturacion' },
   { href: '/devoluciones', icon: DevolucionesIcon,label: 'Devoluciones',       color: '#F39C12', moduleKey: 'devoluciones' },

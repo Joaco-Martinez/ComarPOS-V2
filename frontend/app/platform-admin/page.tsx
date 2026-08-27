@@ -25,10 +25,11 @@ const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
   cuentasCorrientes: 'Cuentas Corrientes', reportes: 'Reportes', objetivosVentas: 'Objetivos de Ventas',
   promociones: 'Promociones', fidelidad: 'Fidelidad', usuarios: 'Usuarios', auditoria: 'Auditoría',
   sucursales: 'Sucursales', arca: 'ARCA / AFIP (config.)', empresa: 'Empresa', printbox: 'PrintBox',
+  hoteleria: 'Hotelería',
 };
 
 const FEATURE_GROUPS: { label: string; keys: PlanFeatureKey[] }[] = [
-  { label: 'Ventas y caja', keys: ['pos', 'ventas', 'caja', 'servicios', 'facturacion', 'devoluciones', 'remitos'] },
+  { label: 'Ventas y caja', keys: ['pos', 'ventas', 'caja', 'servicios', 'hoteleria', 'facturacion', 'devoluciones', 'remitos'] },
   { label: 'Catálogo y stock', keys: ['productos', 'categorias', 'stock', 'conteoStock', 'alertas'] },
   { label: 'Clientes', keys: ['clientes', 'cuentasCorrientes', 'fidelidad', 'promociones'] },
   { label: 'Compras', keys: ['compras', 'ordenesCompra', 'proveedores'] },

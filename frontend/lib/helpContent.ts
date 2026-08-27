@@ -6,6 +6,7 @@ import {
   PosIcon, FacturacionIcon, ProductosIcon, CajaIcon, ClientesIcon, RemitosIcon,
   DevolucionesIcon, ComprasIcon, FinanzasIcon, PromocionesIcon, UsuariosIcon, PrintboxIcon,
   ServiciosIcon,
+  HoteleriaIcon,
 } from '@/components/icons/ComarIcons';
 import { Rocket, CreditCard, Smartphone } from 'lucide-react';
 
@@ -219,6 +220,33 @@ export const HELP_CATEGORIES: HelpCategory[] = [
       {
         q: '¿Cómo se cobra y entrega una reparación terminada?',
         a: 'Cuando el equipo está "Listo para retirar", desde la orden se hace el cobro (eligiendo medio de pago y si corresponde ticket o factura) y al confirmarlo la orden pasa a "Entregado", igual que cerrar una venta desde el POS.',
+      },
+    ],
+  },
+  {
+    id: 'hoteleria',
+    label: 'Hotelería',
+    icon: HoteleriaIcon,
+    entries: [
+      {
+        q: '¿Para qué sirve la sección Hotelería?',
+        a: 'Es para manejar habitaciones y reservas: cargás los tipos de habitación con su tarifa por noche, las habitaciones físicas de cada tipo, y reservás fechas para cada una viendo un calendario de disponibilidad.',
+      },
+      {
+        q: '¿Cómo cargo las habitaciones?',
+        a: 'Primero creás los "Tipos de habitación" (ej. Individual, Doble, Suite) con su tarifa por noche y capacidad, desde el botón "Tipos de habitación" en la pestaña Habitaciones. Después creás cada habitación física asignándole un tipo.',
+      },
+      {
+        q: '¿Cómo hago una reserva?',
+        a: 'Desde la pestaña Reservas, hacé click en una celda libre del calendario (habitación × día) o en "Nueva reserva". El sistema no deja reservar una habitación en fechas que ya están ocupadas por otra reserva.',
+      },
+      {
+        q: '¿Qué estados puede tener una reserva y una habitación?',
+        a: 'La reserva pasa de Reservada a Check-in hecho y después Check-out hecho (o Cancelada / No se presentó). La habitación en paralelo pasa de Libre a Ocupada al hacer check-in, y a Limpieza al cobrar el check-out — desde ahí se marca Libre a mano cuando está lista.',
+      },
+      {
+        q: '¿Cómo se cobra una estadía?',
+        a: 'Desde el detalle de la reserva, con "Cobrar" (eligiendo medio de pago y ticket o factura). Esto genera una venta normal que ya figura en Ventas, igual que cerrar una venta desde el POS.',
       },
     ],
   },

@@ -61,7 +61,8 @@ export type PlanFeatureKey =
   | "sucursales"
   | "arca"
   | "empresa"
-  | "printbox";
+  | "printbox"
+  | "hoteleria";
 
 export const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
   dashboard: "Dashboard",
@@ -95,6 +96,7 @@ export const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
   arca: "ARCA / AFIP (configuración)",
   empresa: "Empresa",
   printbox: "PrintBox",
+  hoteleria: "Hotelería",
 };
 
 const ALL_FEATURES_ON: Record<PlanFeatureKey, boolean> = Object.fromEntries(

@@ -376,3 +376,16 @@ export function AyudaIcon(props: ComarIconProps) {
     </Svg>
   );
 }
+
+export function HoteleriaIcon(props: ComarIconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 19V11A2 2 0 015 9H19A2 2 0 0121 11V19" />
+      <path d="M3 15H21" />
+      <rect x="5.5" y="10.5" width="5" height="3" rx="1.2" />
+      <path d="M3 19V21" />
+      <path d="M21 19V21" />
+      <circle cx="18.3" cy="6" r="1" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}

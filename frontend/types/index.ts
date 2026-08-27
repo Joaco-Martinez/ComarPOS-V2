@@ -554,6 +554,60 @@ export interface RepairOrder {
   updatedAt?: string;
 }
 
+export type RoomStatus = 'LIBRE' | 'OCUPADA' | 'LIMPIEZA' | 'MANTENIMIENTO' | 'FUERA_DE_SERVICIO';
+export type ReservationStatus = 'RESERVADA' | 'CHECKED_IN' | 'CHECKED_OUT' | 'CANCELADA' | 'NO_SHOW';
+
+export interface RoomType {
+  id: string;
+  name: string;
+  nightlyRate: number;
+  capacity: number;
+  description?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Room {
+  id: string;
+  businessLocationId?: string | null;
+  businessLocation?: { id: string; name: string } | null;
+  roomTypeId: string;
+  roomType: RoomType;
+  number: string;
+  floor?: string | null;
+  status: RoomStatus;
+  notes?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Reservation {
+  id: string;
+  businessLocationId?: string | null;
+  roomId: string;
+  room: Room;
+  clientId?: string | null;
+  client?: Client | null;
+  userId?: string | null;
+  user?: { id: string; name: string } | null;
+  guestName: string;
+  guestPhone?: string | null;
+  checkInDate: string;
+  checkOutDate: string;
+  actualCheckInAt?: string | null;
+  actualCheckOutAt?: string | null;
+  nightlyRateSnapshot: number;
+  totalAmount: number;
+  status: ReservationStatus;
+  notes?: string | null;
+  saleId?: string | null;
+  sale?: { id: string; total: number; status: SaleStatus; invoiceStatus?: string; receiptType: ReceiptType; createdAt: string } | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface Notification {
   id: string;
   userId?: string | null;
@@ -618,7 +672,7 @@ export type PlanFeatureKey =
   | 'caja' | 'servicios' | 'remitos' | 'facturacion' | 'devoluciones' | 'compras' | 'ordenesCompra' | 'proveedores'
   | 'conteoStock' | 'finanzas' | 'gastosRecurrentes' | 'tipoCambio' | 'cuentasCorrientes' | 'reportes'
   | 'objetivosVentas' | 'promociones' | 'fidelidad' | 'usuarios' | 'auditoria' | 'sucursales'
-  | 'arca' | 'empresa' | 'printbox';
+  | 'arca' | 'empresa' | 'printbox' | 'hoteleria';
 
 export interface BillingPlan {
   id: string;

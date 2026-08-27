@@ -131,6 +131,9 @@ model Tenant {
   productStocks     ProductStock[]
   repairOrders      RepairOrder[]
   financeAccounts   FinanceAccount[]
+  roomTypes         RoomType[]
+  rooms             Room[]
+  reservations      Reservation[]
 }
 
 // === Platform admin (super-admin de SaaS, fuera de cualquier tenant) ===
@@ -197,43 +200,44 @@ model TenantPaymentLog {
 }
 
 model User {
-  id                   String            @id @default(uuid())
-  tenantId             String?
-  tenant               Tenant?           @relation(fields: [tenantId], references: [id])
-  email                String
-  password             String
-  name                 String
-  role                 Role
-  isActive             Boolean           @default(true)
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  id                       String                    @id @default(uuid())
+  tenantId                 String?
+  tenant                   Tenant?                   @relation(fields: [tenantId], references: [id])
+  email                    String
+  password                 String
+  name                     String
+  role                     Role
+  isActive                 Boolean                   @default(true)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
   // Se pisa en cada login exitoso (ver auth.service.ts) - usado por
   // platform-admin para auditar si una cuenta se llego a usar o no.
-  lastLoginAt          DateTime?
-  passwordResetExpires DateTime?
-  passwordResetToken   String?           @unique
-  mustChangePassword   Boolean           @default(false)
+  lastLoginAt              DateTime?
+  passwordResetExpires     DateTime?
+  passwordResetToken       String?                   @unique
+  mustChangePassword       Boolean                   @default(false)
   // Layout personal de accesos rapidos del mobile nav (BottomNav.tsx),
   // por usuario. null = sin personalizar, usa el orden default de
   // navConfig.ts (ver frontend/lib/quickAccess.ts#buildEffectiveNav).
-  quickAccessConfig    Json?
-  accountMovements     AccountMovement[]
-  client               Client?
-  remitos              Remito[]
-  Sale                 Sale[]
-  StockMovements       StockMovement[]
-  purchases            Purchase[]
+  quickAccessConfig        Json?
+  accountMovements         AccountMovement[]
+  client                   Client?
+  remitos                  Remito[]
+  Sale                     Sale[]
+  StockMovements           StockMovement[]
+  purchases                Purchase[]
   // new modules
-  cashSessions         CashSession[]
-  stockCounts          StockCount[]
-  purchaseOrders       PurchaseOrder[]
-  notifications        Notification[]
-  auditLogs            AuditLog[]
-  returns              Return[]
-  pushTokens           PushToken[]
-  repairOrders         RepairOrder[]
-  vatSettlementsClosed VatSettlement[]
+  cashSessions             CashSession[]
+  stockCounts              StockCount[]
+  purchaseOrders           PurchaseOrder[]
+  notifications            Notification[]
+  auditLogs                AuditLog[]
+  returns                  Return[]
+  pushTokens               PushToken[]
+  repairOrders             RepairOrder[]
+  vatSettlementsClosed     VatSettlement[]
   supplierAccountMovements SupplierAccountMovement[]
+  reservations             Reservation[]
 
   @@unique([email])
   @@index([role])
@@ -291,6 +295,7 @@ model Client {
   loyaltyAccount    LoyaltyAccount?
   returns           Return[]
   repairOrders      RepairOrder[]
+  reservations      Reservation[]
 
   @@unique([tenantId, dni])
   @@unique([tenantId, gmail])
@@ -330,6 +335,8 @@ model BusinessLocation {
   stockLocationSales Sale[]               @relation("SaleStockLocation")
   stockCounts        StockCount[]
   repairOrders       RepairOrder[]
+  rooms              Room[]
+  reservations       Reservation[]
 
   @@index([type])
   @@index([isDefault])
@@ -714,32 +721,32 @@ model InvoiceAfip {
 // (volver a BORRADOR) es una accion explicita aparte, no implicita al
 // recalcular.
 model VatSettlement {
-  id                   String                @id @default(uuid())
+  id                   String              @id @default(uuid())
   tenantId             String?
-  tenant               Tenant?               @relation(fields: [tenantId], references: [id])
+  tenant               Tenant?             @relation(fields: [tenantId], references: [id])
   year                 Int
   month                Int
   // Suma de importeIva de las facturas de Ventas del periodo.
-  debitoFiscal         Float                 @default(0)
+  debitoFiscal         Float               @default(0)
   // Suma de importeIvaLiquidado + percepcionIva (IVA sufrido) de las
   // compras del periodo -- ver liquidacion.service.ts para el detalle de
   // por que no se suman las otras percepciones (IIBB, municipales, etc: no
   // son IVA, no restan credito fiscal de IVA).
-  creditoFiscal        Float                 @default(0)
+  creditoFiscal        Float               @default(0)
   // Saldo a favor arrastrado del periodo anterior (CERRADO), 0 si el
   // anterior dio a pagar o no hay periodo anterior.
-  saldoTecnicoAnterior Float                 @default(0)
+  saldoTecnicoAnterior Float               @default(0)
   // debitoFiscal - creditoFiscal - saldoTecnicoAnterior. Positivo = a
   // pagar; negativo (o cero) = a favor, magnitud = lo que se arrastra al
   // periodo siguiente.
-  saldoTecnico         Float                 @default(0)
+  saldoTecnico         Float               @default(0)
   resultado            VatSettlementResult
-  status               VatSettlementStatus   @default(BORRADOR)
+  status               VatSettlementStatus @default(BORRADOR)
   closedAt             DateTime?
   closedByUserId       String?
-  closedByUser         User?                 @relation(fields: [closedByUserId], references: [id])
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  closedByUser         User?               @relation(fields: [closedByUserId], references: [id])
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
   @@unique([tenantId, year, month])
   @@index([tenantId])
@@ -813,6 +820,7 @@ model Sale {
   payments                SalePayment[]
   returns                 Return[]
   repairOrder             RepairOrder?
+  reservation             Reservation?
 
   @@index([quotationExpiresAt])
   @@index([clientId])
@@ -1176,13 +1184,13 @@ model StockMovement {
 }
 
 model Purchase {
-  id                 String            @id @default(uuid())
-  tenantId           String?
-  tenant             Tenant?           @relation(fields: [tenantId], references: [id])
-  providerName       String?
-  invoiceNumber      String?
-  description        String?
-  totalAmount        Float             @default(0)
+  id                          String            @id @default(uuid())
+  tenantId                    String?
+  tenant                      Tenant?           @relation(fields: [tenantId], references: [id])
+  providerName                String?
+  invoiceNumber               String?
+  description                 String?
+  totalAmount                 Float             @default(0)
   // Datos fiscales del comprobante recibido -- para armar el archivo de
   // Compras del Libro IVA Digital (RG 4597). Todo nullable/con default:
   // una compra sin estos datos sigue funcionando igual que antes, solo
@@ -1201,29 +1209,29 @@ model Purchase {
   iibbPerceptionAmount        Float             @default(0)
   municipalPerceptionAmount   Float             @default(0)
   internalTaxAmount           Float             @default(0)
-  paymentMethod      PaymentMethod?
-  to                 Location          @default(DEPOSITO)
+  paymentMethod               PaymentMethod?
+  to                          Location          @default(DEPOSITO)
   // Reemplaza `to` (enum Location fijo) - ver doc de migracion
   // "ubicaciones de stock dinamicas". Nullable en la etapa aditiva, pasa a
   // requerido una vez migrado el codigo que la escribe.
-  businessLocationId String?
-  businessLocation   BusinessLocation? @relation(fields: [businessLocationId], references: [id])
-  date               DateTime          @default(now())
-  status             PurchaseStatus    @default(COMPLETED)
-  userId             String?
-  financeId          String?           @unique
+  businessLocationId          String?
+  businessLocation            BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+  date                        DateTime          @default(now())
+  status                      PurchaseStatus    @default(COMPLETED)
+  userId                      String?
+  financeId                   String?           @unique
   // new: link to supplier entity and purchase order
-  supplierId         String?
-  supplier           Supplier?         @relation(fields: [supplierId], references: [id])
-  purchaseOrderId    String?
-  purchaseOrder      PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id])
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  supplierId                  String?
+  supplier                    Supplier?         @relation(fields: [supplierId], references: [id])
+  purchaseOrderId             String?
+  purchaseOrder               PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id])
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
 
-  user           User?           @relation(fields: [userId], references: [id])
-  finance        Finance?        @relation(fields: [financeId], references: [id])
-  items          PurchaseItem[]
-  stockMovements StockMovement[]
+  user                     User?                     @relation(fields: [userId], references: [id])
+  finance                  Finance?                  @relation(fields: [financeId], references: [id])
+  items                    PurchaseItem[]
+  stockMovements           StockMovement[]
   supplierAccountMovements SupplierAccountMovement[]
 
   @@index([userId])
@@ -1271,25 +1279,25 @@ model Invoice {
 // ═══════════════════════════════════════════════════
 
 model Supplier {
-  id          String   @id @default(uuid())
-  tenantId    String?
-  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
-  name        String
-  cuit        String?
-  contactName String?
-  phone       String?
-  email       String?
-  address     String?
-  notes       String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(uuid())
+  tenantId       String?
+  tenant         Tenant?  @relation(fields: [tenantId], references: [id])
+  name           String
+  cuit           String?
+  contactName    String?
+  phone          String?
+  email          String?
+  address        String?
+  notes          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   // Cuenta corriente de proveedor (deuda propia con el proveedor, espejo de
   // Client.currentBalance) -- positivo = le debemos plata al proveedor. Se
   // actualiza en supplierAccount.service.ts, nunca a mano. No hay
   // creditLimit/isAccountEnabled como en Client: no hay concepto de "venta a
   // fiado" del lado proveedor, la deuda nace directo de Purchase.totalAmount.
-  currentBalance Float @default(0)
+  currentBalance Float    @default(0)
 
   purchases        Purchase[]
   purchaseOrders   PurchaseOrder[]
@@ -1745,6 +1753,100 @@ model RepairOrderItem {
   @@index([productId])
 }
 
+// Modulo de Hoteleria: tipos de habitacion con su tarifa por noche, las
+// habitaciones fisicas de cada tipo, y las reservas sobre ellas. Al hacer
+// checkout de una reserva se genera una Sale normal (ver
+// reservation.service.ts#checkout), mismo patron que RepairOrder mas arriba
+// -- reusa el circuito existente de pagos/AFIP/cuenta corriente en vez de
+// reimplementarlo.
+model RoomType {
+  id          String   @id @default(uuid())
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  name        String
+  nightlyRate Float
+  capacity    Int      @default(2)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  rooms       Room[]
+
+  @@index([tenantId])
+}
+
+model Room {
+  id                 String            @id @default(uuid())
+  tenantId           String?
+  tenant             Tenant?           @relation(fields: [tenantId], references: [id])
+  businessLocationId String?
+  businessLocation   BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+  roomTypeId         String
+  roomType           RoomType          @relation(fields: [roomTypeId], references: [id])
+  number             String
+  floor              String?
+  status             RoomStatus        @default(LIBRE)
+  notes              String?
+  isActive           Boolean           @default(true)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  reservations       Reservation[]
+
+  @@index([tenantId])
+  @@index([businessLocationId])
+  @@index([roomTypeId])
+  @@index([status])
+}
+
+// checkInDate/checkOutDate son las fechas planificadas (para el calendario
+// de disponibilidad); actualCheckInAt/actualCheckOutAt quedan null hasta
+// que el huesped efectivamente llega/se va. nightlyRateSnapshot congela la
+// tarifa del RoomType al momento de reservar (igual que
+// RepairOrderItem.unitPrice), para no romper reservas viejas si despues se
+// cambia la tarifa del tipo de habitacion. saleId se completa recien al
+// hacer checkout (cobrar), igual que RepairOrder.saleId. guestName/guestPhone
+// permiten cargar una reserva de un huesped ocasional sin tener que crear
+// un Client (clientId sigue siendo opcional, para vincularla si ya existe).
+model Reservation {
+  id                 String            @id @default(uuid())
+  tenantId           String?
+  tenant             Tenant?           @relation(fields: [tenantId], references: [id])
+  businessLocationId String?
+  businessLocation   BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+  roomId             String
+  room               Room              @relation(fields: [roomId], references: [id])
+  clientId           String?
+  client             Client?           @relation(fields: [clientId], references: [id])
+  userId             String?
+  user               User?             @relation(fields: [userId], references: [id])
+
+  guestName  String
+  guestPhone String?
+
+  checkInDate      DateTime
+  checkOutDate     DateTime
+  actualCheckInAt  DateTime?
+  actualCheckOutAt DateTime?
+
+  nightlyRateSnapshot Float
+  totalAmount         Float
+  status              ReservationStatus @default(RESERVADA)
+  notes               String?
+
+  saleId String? @unique
+  sale   Sale?   @relation(fields: [saleId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([roomId])
+  @@index([clientId])
+  @@index([status])
+  @@index([checkInDate])
+  @@index([checkOutDate])
+}
+
 // ═══════════════════════════════════════════════════
 // ENUMS
 // ═══════════════════════════════════════════════════
@@ -2025,4 +2127,20 @@ enum RepairOrderStatus {
 enum RepairOrderItemType {
   PART
   LABOR
+}
+
+enum RoomStatus {
+  LIBRE
+  OCUPADA
+  LIMPIEZA
+  MANTENIMIENTO
+  FUERA_DE_SERVICIO
+}
+
+enum ReservationStatus {
+  RESERVADA
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELADA
+  NO_SHOW
 }
