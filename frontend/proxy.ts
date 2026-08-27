@@ -1,5 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Dominio(s) donde "/" sirve la landing de ventas en vez del sistema.
+// Cualquier otro host (subdominios de tenant, ej. grupovj.comarpos.com.ar)
+// entra a "/" y se lo manda a /login. Se resuelve acá (en vez de con
+// headers() dentro de app/page.tsx) para que esa page pueda ser estática:
+// headers() forzaba SSR dinámico en cada request a "/", con
+// Cache-Control: no-store -- eso bloqueaba el browser back/forward cache y
+// le sacaba a la landing cualquier chance de cachearse en CDN.
+const MARKETING_HOSTS = new Set([
+  'comarpos.com.ar',
+  'www.comarpos.com.ar',
+  'comarpos.com',
+  'www.comarpos.com',
+  'localhost:3000',
+  'localhost',
+]);
+
+function isMarketingHost(host: string) {
+  return MARKETING_HOSTS.has(host) || MARKETING_HOSTS.has(host.split(':')[0]);
+}
+
 type JwtPayload = { role?: string; exp?: number };
 
 function decodeJwt(token: string): JwtPayload | null {
@@ -69,9 +89,9 @@ export function proxy(req: NextRequest) {
   // la URL nunca cambie a /login en el momento de instalar el ícono - ver
   // el comentario en app/app/page.tsx.
   const isLogin = pathname === '/login' || pathname === '/app';
-  // "/" es público: en el dominio de marketing sirve la landing de ventas; en
-  // cualquier otro caso page.tsx redirige a /login (donde sí aplica el gate
-  // de auth de más abajo).
+  // "/" es público: en el dominio de marketing sirve la landing de ventas
+  // (app/page.tsx, estática); en cualquier otro host se redirige a /login
+  // acá mismo (donde sí aplica el gate de auth de más abajo).
   const isRoot = pathname === '/';
   // Página pública de instrucciones para instalar la PWA (paso a paso
   // iPhone/Android) - tiene que verse sin estar logueado.
@@ -100,6 +120,11 @@ export function proxy(req: NextRequest) {
   }
 
   if (isRoot) {
+    if (!isMarketingHost(req.headers.get('host') ?? '')) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
     return NextResponse.next();
   }
 
