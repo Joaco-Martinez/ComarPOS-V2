@@ -8,7 +8,7 @@ import {
   dateText,
   safe,
   getBusinessName,
-  getQuotationCategoryLabel,
+  getQuotationDiscountLabel,
   getClientName,
   getClientDetails,
   getProductName,
@@ -71,11 +71,13 @@ export async function drawHeader(doc: PDFKit.PDFDocument, sale: CotizacionPDFSal
 
   await drawLogo(doc, x, y, sale.logoUrl);
 
+  const discountLabel = getQuotationDiscountLabel(sale);
+
   doc
     .fillColor(C.black)
     .font("Helvetica-Bold")
     .fontSize(21)
-    .text(`${getBusinessName(sale)} - ${getQuotationCategoryLabel(sale.client)}`, x + 78, y + 13, {
+    .text(discountLabel ? `${getBusinessName(sale)} - ${discountLabel}` : getBusinessName(sale), x + 78, y + 13, {
       width: 330,
       ellipsis: true,
     });
@@ -320,11 +322,13 @@ export function addPage(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale) {
   doc.addPage({ size: "A4", margin: 0 });
   drawPageBackground(doc);
 
+  const discountLabel = getQuotationDiscountLabel(sale);
+
   doc
     .fillColor(C.black)
     .font("Helvetica-Bold")
     .fontSize(13)
-    .text(`${getBusinessName(sale)} - ${getQuotationCategoryLabel(sale.client)}`, PAGE.marginX, 42, {
+    .text(discountLabel ? `${getBusinessName(sale)} - ${discountLabel}` : getBusinessName(sale), PAGE.marginX, 42, {
       width: 400,
       ellipsis: true,
     });
@@ -415,21 +419,20 @@ export function drawTotals(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, y: 
     ivaOffsetY += 20;
   }
 
-  const hasDiscount =
-    sale.discountValue !== null &&
-    sale.discountValue !== undefined &&
-    Number(sale.discountValue) > 0;
+  // subtotal - total > 0 -> descuento; < 0 -> recargo (ver flujo de POS).
+  const adjustment = Number(sale.subtotal || 0) - Number(sale.total || 0);
+  const hasAdjustment = Math.abs(adjustment) > 0.01;
 
   let totalBoxY = boxY + 26 + ivaOffsetY;
 
-  if (hasDiscount) {
-    const discountAmount = Number(sale.subtotal || 0) - Number(sale.total || 0);
+  if (hasAdjustment) {
+    const isSurcharge = adjustment < 0;
 
     doc
       .fillColor(C.muted)
       .font("Helvetica")
       .fontSize(10.5)
-      .text("Descuento", boxX, boxY + 22, {
+      .text(isSurcharge ? "Recargo" : "Descuento", boxX, boxY + 22, {
         width: 100,
         align: "left",
       });
@@ -438,7 +441,7 @@ export function drawTotals(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, y: 
       .fillColor(C.black)
       .font("Helvetica-Bold")
       .fontSize(11)
-      .text(`- ${money(discountAmount)}`, boxX + 120, boxY + 22, {
+      .text(`${isSurcharge ? "+" : "-"} ${money(Math.abs(adjustment))}`, boxX + 120, boxY + 22, {
         width: 120,
         align: "right",
       });

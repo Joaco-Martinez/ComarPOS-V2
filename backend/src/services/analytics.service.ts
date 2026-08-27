@@ -186,9 +186,11 @@ async function getSalesSummary(from: Date, to: Date) {
   const grossProfit = sales.reduce((s, x) => s + x.grossProfit, 0);
   const deliveryRevenue = sales.reduce((s, x) => s + (x.deliveryCost ?? 0), 0);
 
+  // discountValue negativo = recargo (ver POS), no un descuento -- se excluye
+  // acá para no restarle a totalDiscountGiven.
   let totalDiscount = 0;
   for (const s of sales) {
-    if (!s.discountValue) continue;
+    if (!s.discountValue || s.discountValue <= 0) continue;
     totalDiscount +=
       s.discountType === "PERCENTAGE"
         ? s.subtotal * (s.discountValue / 100)
@@ -431,6 +433,10 @@ async function getSalesDiscounts(from: Date, to: Date) {
     select: { total: true, subtotal: true, grossProfit: true, discountType: true, discountValue: true },
   });
 
+  // discountValue negativo = recargo (ver POS), no un descuento -- cae en el
+  // grupo "sin descuento" de más abajo, no en withDiscount. Se usa el
+  // complemento exacto (en vez de === 0) para que revenueWith + revenueWithout
+  // sigan sumando el total del período sin importar el signo.
   const withDiscount = sales.filter((s) => s.discountValue && s.discountValue > 0);
   let totalDiscountAmount = 0;
   for (const s of withDiscount) {
@@ -443,7 +449,9 @@ async function getSalesDiscounts(from: Date, to: Date) {
 
   const revenueWith = withDiscount.reduce((s, x) => s + x.total, 0);
   const profitWith = withDiscount.reduce((s, x) => s + x.grossProfit, 0);
-  const revenueWithout = sales.filter((s) => !s.discountValue || s.discountValue === 0).reduce((s, x) => s + x.total, 0);
+  const revenueWithout = sales
+    .filter((s) => !(s.discountValue && s.discountValue > 0))
+    .reduce((s, x) => s + x.total, 0);
 
   return {
     totalSales: sales.length,

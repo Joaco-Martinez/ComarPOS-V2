@@ -41,30 +41,21 @@ export function getBusinessName(sale: CotizacionPDFSale) {
   return sale.businessName?.trim() || "Mi Negocio";
 }
 
-export function getQuotationCategoryLabel(client?: CotizacionPDFSale["client"]) {
-  const category = client?.category?.trim();
+export function getQuotationDiscountLabel(
+  sale: Pick<CotizacionPDFSale, "discountType" | "discountValue">
+) {
+  const raw = Number(sale.discountValue || 0);
 
-  if (!client || !category) return "Minorista";
+  if (!raw) return "";
 
-  if (category === "Mayorista") return "Mayorista";
-  if (category === "Cliente") return "Cliente";
-  if (category === "Price") return "Minorista";
+  // Negativo = recargo (mismo campo que el descuento, ver flujo de POS).
+  const isSurcharge = raw < 0;
+  const value = Math.abs(raw);
+  const suffix = isSurcharge ? "de recargo" : "de descuento";
 
-  const normalized = category.toLowerCase();
+  if (sale.discountType === "FIXED") return `${money(value)} ${suffix}`;
 
-  if (normalized.includes("mayorista")) return "Mayorista";
-  if (normalized.includes("cliente")) return "Cliente";
-
-  if (
-    normalized.includes("minorista") ||
-    normalized.includes("consumidor") ||
-    normalized.includes("final") ||
-    normalized.includes("price")
-  ) {
-    return "Minorista";
-  }
-
-  return "Minorista";
+  return `${value}% ${suffix}`;
 }
 
 export function getClientName(client?: CotizacionPDFSale["client"]) {
