@@ -80,6 +80,7 @@ export async function updateStatus(id: string, status: SaleStatus) {
       productType: item.product?.type as ProductType,
       saleUnit: item.product?.saleUnit as SaleUnit,
       isService: Boolean((item.product as any)?.isService),
+      unlimitedStock: Boolean((item.product as any)?.unlimitedStock),
       quantity: item.quantity,
       quantityKg: item.quantityKg ?? null,
       price: item.price,

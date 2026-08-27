@@ -112,6 +112,7 @@ export interface Product {
   imageUrl?: string | null;
   imageId?: string | null;
   isService?: boolean;
+  unlimitedStock?: boolean;
   isActive?: boolean;
   components?: ProductComponent[];
   usedIn?: ProductComponent[];

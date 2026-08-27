@@ -55,4 +55,8 @@ describe("shouldDiscountStock", () => {
   it("el item de envio no descuenta stock aunque no sea isService", () => {
     expect(shouldDiscountStock(item({ productSku: "ENVIO-FLETE2", isService: false }))).toBe(false);
   });
+
+  it("un producto marcado sin stock (unlimitedStock) no descuenta stock", () => {
+    expect(shouldDiscountStock(item({ unlimitedStock: true }))).toBe(false);
+  });
 });

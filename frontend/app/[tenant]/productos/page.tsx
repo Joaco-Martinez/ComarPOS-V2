@@ -16,7 +16,7 @@ import { Package, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, 
 
 const emptyForm = {
   name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '',
-  saleUnit: 'UNIT', isService: 'false',
+  saleUnit: 'UNIT', isService: 'false', unlimitedStock: 'false',
   price: '', wholesalePrice: '', purchasePrice: '',
   ivaRate: '21',
   pricePerKg: '', wholesalePricePerKg: '',
@@ -81,6 +81,7 @@ export default function ProductosPage() {
       name: p.name, description: p.description ?? '', sku: p.sku ?? '',
       type: p.type, categoryId: p.categoryId ?? '', saleUnit: p.saleUnit,
       isService: String(p.isService ?? false),
+      unlimitedStock: String(p.unlimitedStock ?? false),
       price: String(p.price), wholesalePrice: String(p.wholesalePrice),
       purchasePrice: String(p.purchasePrice ?? ''),
       ivaRate: String((p as any).ivaRate ?? 21),
@@ -234,6 +235,9 @@ export default function ProductosPage() {
               },
               {
                 key: 'stock', header: 'Stock total', render: (p) => {
+                  if (p.unlimitedStock) {
+                    return <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text3)' }}>Sin límite</span>;
+                  }
                   const stockVal = productStock(p);
                   const minVal = productMinStock(p);
                   const low = stockVal <= minVal && minVal > 0;
@@ -302,10 +306,14 @@ export default function ProductosPage() {
                   </div>
                   <div className="mobile-card-row">
                     <span>Stock / mínimo</span>
-                    <span style={{ fontFamily: 'var(--mono)', color: low ? 'var(--warn)' : 'var(--text2)' }}>
-                      {low && <AlertTriangle size={11} style={{ display: 'inline', marginRight: 4 }} />}
-                      {stockVal}{p.saleUnit === 'KG' ? 'kg' : ''} / {minVal}
-                    </span>
+                    {p.unlimitedStock ? (
+                      <span style={{ fontFamily: 'var(--mono)', color: 'var(--text3)' }}>Sin límite</span>
+                    ) : (
+                      <span style={{ fontFamily: 'var(--mono)', color: low ? 'var(--warn)' : 'var(--text2)' }}>
+                        {low && <AlertTriangle size={11} style={{ display: 'inline', marginRight: 4 }} />}
+                        {stockVal}{p.saleUnit === 'KG' ? 'kg' : ''} / {minVal}
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                     <button onClick={() => openEdit(p)} className="btn btn-secondary btn-xs" style={{ flex: 1, gap: 4 }}><Edit2 size={12} /> Editar</button>
@@ -369,7 +377,7 @@ export default function ProductosPage() {
                 </div>
               </div>
 
-              <div className="form-row">
+              <div className="form-grid-3">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Tipo</label>
                   <select value={form.type} onChange={f('type')}>
@@ -382,6 +390,15 @@ export default function ProductosPage() {
                   <select value={form.isService} onChange={f('isService')}>
                     <option value="false">No</option>
                     <option value="true">Sí</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" title="Se puede vender siempre, sin importar el stock cargado. No se descuenta ni se controla stock para este producto.">
+                    Sin stock
+                  </label>
+                  <select value={form.unlimitedStock} onChange={f('unlimitedStock')}>
+                    <option value="false">No, controlar stock</option>
+                    <option value="true">Sí, siempre disponible</option>
                   </select>
                 </div>
               </div>

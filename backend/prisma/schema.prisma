@@ -429,6 +429,13 @@ model Product {
   purchasePrice       Float               @default(0)
   ivaRate             Float               @default(21)
   isService           Boolean             @default(false)
+  // Producto fisico que se puede seguir vendiendo sin importar el stock
+  // cargado (ej. algo que no se quiere contar/tildar en cada venta) -
+  // distinto de isService: NO se excluye de reportes/alertas de stock por
+  // ser un servicio, simplemente nunca bloquea la venta por falta de stock
+  // y no descuenta/restaura stock al vender/cancelar (ver shouldDiscountStock
+  // en sale.pricing.ts).
+  unlimitedStock      Boolean             @default(false)
   minStockDeposito    Int?
   minStockDepositoKg  Float?
   alerts              Alert[]

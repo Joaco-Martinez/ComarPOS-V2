@@ -114,6 +114,7 @@ export async function create(data: CreateProductInput) {
       saleUnit,
       sku,
       isService: isTrue(data.isService),
+      unlimitedStock: isTrue(data.unlimitedStock),
       purchasePrice: toNumberOrZero(data.purchasePrice),
       ivaRate: data.ivaRate !== undefined ? toNumberOrZero(data.ivaRate) : 21,
       imageUrl,
@@ -298,6 +299,7 @@ export async function update(id: string, data: Partial<Product> & any) {
   setIfDefined("imageId", data.imageId);
   setIfDefined("isActive", data.isActive);
   setIfDefined("isService", data.isService !== undefined ? isTrue(data.isService) : undefined);
+  setIfDefined("unlimitedStock", data.unlimitedStock !== undefined ? isTrue(data.unlimitedStock) : undefined);
   setIfDefined("saleUnit", data.saleUnit);
 
   setIfDefined("price", data.price !== undefined ? Number(data.price) : undefined);

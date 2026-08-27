@@ -73,7 +73,7 @@ export default function StockPage() {
   useEffect(() => { loadMovements(); }, [movFrom, movTo]);
 
   const filtered = useMemo(() => {
-    let p = products.filter((x) => x.isService !== true);
+    let p = products.filter((x) => x.isService !== true && x.unlimitedStock !== true);
     if (catFilter) p = p.filter((x) => x.categoryId === catFilter);
     if (search.trim()) {
       const q = search.toLowerCase();

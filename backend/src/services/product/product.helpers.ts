@@ -69,6 +69,7 @@ export type CreateProductInput = {
   purchasePrice?: number | string;
   ivaRate?: number | string;
   isService?: boolean | string;
+  unlimitedStock?: boolean | string;
 
   categoryId?: string;
   category?: string;

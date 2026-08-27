@@ -34,6 +34,7 @@ function isDeliverySaleItem(item: ResolvedSaleItem) {
 
 function shouldDiscountStock(item: ResolvedSaleItem) {
   if (item.isService) return false;
+  if (item.unlimitedStock) return false;
   if (isDeliverySaleItem(item)) return false;
 
   return true;
@@ -220,6 +221,7 @@ async function resolveSaleItems(
       type: true,
       saleUnit: true,
       isService: true,
+      unlimitedStock: true,
 
       price: true,
       pricePerKg: true,
@@ -323,6 +325,7 @@ async function resolveSaleItems(
       productType: product.type,
       saleUnit: product.saleUnit,
       isService: product.isService,
+      unlimitedStock: product.unlimitedStock,
       quantity,
       quantityKg,
       price: unitPrice,
@@ -350,6 +353,7 @@ function saleItemToResolved(item: any): ResolvedSaleItem {
     productType: item.product?.type as ProductType,
     saleUnit: item.product?.saleUnit as SaleUnit,
     isService: Boolean(item.product?.isService),
+    unlimitedStock: Boolean(item.product?.unlimitedStock),
     quantity: item.quantity,
     quantityKg: item.quantityKg ?? null,
     price: item.price,

@@ -1040,7 +1040,7 @@ function sumStock(stock: { quantity: number; quantityKg: number }[], isKg: boole
 async function getInventoryValue() {
   const scope = tenantScope();
   const products = await prisma.product.findMany({
-    where: { isActive: true, isService: false, ...scope },
+    where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
     select: {
       id: true, name: true, sku: true, saleUnit: true, purchasePrice: true, price: true,
       stock: { select: { quantity: true, quantityKg: true } },
@@ -1104,7 +1104,7 @@ async function getDeadStock(days = 45) {
   const tenantId = currentTenantId();
 
   const products = await prisma.product.findMany({
-    where: { isActive: true, isService: false, ...scope },
+    where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
     select: {
       id: true, name: true, sku: true, saleUnit: true, purchasePrice: true,
       stock: { select: { quantity: true, quantityKg: true } },
@@ -1150,7 +1150,7 @@ async function getDeadStock(days = 45) {
 async function getLowStock() {
   const scope = tenantScope();
   const products = await prisma.product.findMany({
-    where: { isActive: true, isService: false, ...scope },
+    where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
     select: {
       id: true, name: true, sku: true, saleUnit: true, purchasePrice: true, price: true,
       category: { select: { name: true } },
@@ -1197,7 +1197,7 @@ async function getInventoryRotation(from: Date, to: Date) {
       select: { productId: true, quantity: true, quantityKg: true, subtotal: true, profit: true },
     }),
     prisma.product.findMany({
-      where: { isActive: true, isService: false, ...scope },
+      where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
       select: {
         id: true, name: true, sku: true, saleUnit: true, purchasePrice: true,
         stock: { select: { quantity: true, quantityKg: true } },
@@ -1606,7 +1606,7 @@ async function getInsights() {
 
   // 3. Dead stock with high value
   const deadProducts = await prisma.product.findMany({
-    where: { isActive: true, isService: false, ...scope },
+    where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
     select: {
       id: true, name: true, purchasePrice: true, saleUnit: true,
       stock: { select: { quantity: true, quantityKg: true } },
@@ -1888,7 +1888,7 @@ async function getRiskAlerts() {
 
   // 4. Products below min stock count
   const allProducts = await prisma.product.findMany({
-    where: { isActive: true, isService: false, ...scope },
+    where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
     select: {
       saleUnit: true,
       stock: { select: { quantity: true, quantityKg: true, minQuantity: true, minQuantityKg: true } },

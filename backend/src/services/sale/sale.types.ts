@@ -78,6 +78,7 @@ export type ResolvedSaleItem = {
   productType: ProductType;
   saleUnit: SaleUnit;
   isService: boolean;
+  unlimitedStock: boolean;
   priceType: SaleItemPriceType;
   quantity: number;
   quantityKg: number | null;

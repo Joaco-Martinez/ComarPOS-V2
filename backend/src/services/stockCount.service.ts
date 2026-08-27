@@ -23,7 +23,7 @@ export const stockCountService = {
     const stockRows = await prisma.productStock.findMany({
       where: {
         businessLocationId: data.businessLocationId,
-        product: { isActive: true, isService: false, ...scope },
+        product: { isActive: true, isService: false, unlimitedStock: false, ...scope },
       },
       select: {
         productId: true,

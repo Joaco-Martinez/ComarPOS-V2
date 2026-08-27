@@ -69,6 +69,7 @@ class AlertService {
     }[] = [];
 
     if (product.isService) return alerts;
+    if (product.unlimitedStock) return alerts;
     if (!product.isActive) return alerts;
 
     const isKg = product.saleUnit === SaleUnit.KG;

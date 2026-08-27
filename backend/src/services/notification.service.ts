@@ -89,7 +89,7 @@ export const notificationService = {
   async checkLowStock() {
     const scope = tenantScope();
     const products = await prisma.product.findMany({
-      where: { isActive: true, isService: false, ...scope },
+      where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
       select: {
         id: true,
         name: true,

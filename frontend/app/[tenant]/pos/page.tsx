@@ -578,8 +578,8 @@ export default function PosPage() {
                 const stock = productStock(p);
                 const stockRow = p.stock?.find((s) => s.businessLocationId === stockLocationId);
                 const minStock = num(p.saleUnit === 'KG' ? stockRow?.minQuantityKg : stockRow?.minQuantity);
-                const lowStock = stock <= minStock && minStock > 0;
-                const noStock = p.saleUnit !== 'KG' && stock <= 0 && !p.isService;
+                const lowStock = stock <= minStock && minStock > 0 && !p.unlimitedStock;
+                const noStock = p.saleUnit !== 'KG' && stock <= 0 && !p.isService && !p.unlimitedStock;
                 const retailPrice = productPrice(p, 'price');
                 const wholesalePrice = productPrice(p, 'wholesalePrice');
 
@@ -607,7 +607,9 @@ export default function PosPage() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 6 }}>
                       <span style={{ fontSize: 10, color: lowStock ? 'var(--warn)' : 'var(--text3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
                         {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
-                        {noStock ? 'Sin stock' : `Stock: ${p.saleUnit === 'KG' ? `${stock}kg` : stock}`}
+                        {p.unlimitedStock
+                          ? 'Sin límite'
+                          : noStock ? 'Sin stock' : `Stock: ${p.saleUnit === 'KG' ? `${stock}kg` : stock}`}
                       </span>
                       {categoryName(p) !== 'Sin categoría' && (
                         <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
