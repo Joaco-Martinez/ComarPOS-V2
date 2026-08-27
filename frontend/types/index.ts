@@ -579,6 +579,14 @@ export interface Room {
   status: RoomStatus;
   notes?: string | null;
   isActive: boolean;
+  // Direccion propia (para una cabaña/unidad sin sucursal cargada).
+  addressStreet?: string | null;
+  addressCity?: string | null;
+  addressProvince?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  imageUrl?: string | null;
+  imageId?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -653,6 +661,11 @@ export interface Tenant {
   mpSubscriptionAmount?: number | null;
   notes?: string | null;
   createdAt: string;
+  // Override de modulos por este tenant puntual, por encima del plan (ver
+  // backend Tenant.featureOverrides / planFeature.service.ts). Modulos
+  // verticales como "hoteleria" arrancan apagados en todos los planes y se
+  // prenden desde aca, tenant por tenant.
+  featureOverrides?: Partial<Record<PlanFeatureKey, boolean>> | null;
   paymentLogs?: TenantPaymentLog[];
   users?: User[];
   // Uso real (ver platformTenant.service.ts): calculados server-side, no

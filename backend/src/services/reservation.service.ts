@@ -156,6 +156,10 @@ export const reservationService = {
     checkInDate: Date;
     checkOutDate: Date;
     notes?: string | null;
+    // Pisa la tarifa del RoomType para esta reserva puntual (ej. descuento
+    // negociado, temporada, etc.) -- si no se manda, se usa
+    // room.roomType.nightlyRate como hasta ahora.
+    nightlyRate?: number | null;
   }) {
     const guestName = cleanString(data.guestName);
     if (!guestName) throw new AppError("VALIDATION_ERROR", "El nombre del huésped es obligatorio", 400);
@@ -184,10 +188,17 @@ export const reservationService = {
       if (!location) throw new AppError("LOCATION_NOT_FOUND", "Sucursal no encontrada", 404);
     }
 
+    if (data.nightlyRate !== undefined && data.nightlyRate !== null) {
+      if (!Number.isFinite(data.nightlyRate) || data.nightlyRate < 0) {
+        throw new AppError("VALIDATION_ERROR", "La tarifa por noche es inválida", 400);
+      }
+    }
+
     await assertRoomAvailable(data.roomId, checkInDate, checkOutDate);
 
     const nights = nightsBetween(checkInDate, checkOutDate);
-    const nightlyRateSnapshot = room.roomType.nightlyRate;
+    const nightlyRateSnapshot =
+      data.nightlyRate !== undefined && data.nightlyRate !== null ? data.nightlyRate : room.roomType.nightlyRate;
     const totalAmount = round2(nights * nightlyRateSnapshot);
 
     const reservation = await prisma.reservation.create({

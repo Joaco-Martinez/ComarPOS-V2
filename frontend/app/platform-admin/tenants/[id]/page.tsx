@@ -6,9 +6,10 @@ import { useParams, useRouter } from 'next/navigation';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { Tenant, TenantSubscriptionStatus, BillingPlan } from '@/types';
+import type { Tenant, TenantSubscriptionStatus, BillingPlan, PlanFeatureKey } from '@/types';
 import { fmtDate, daysRemaining, normalizeArray, fmtMoney } from '@/lib/helpers';
-import { ArrowLeft, History, Save, Users, LogIn, Activity } from 'lucide-react';
+import { FEATURE_LABELS, FEATURE_GROUPS } from '@/lib/planFeatureGroups';
+import { ArrowLeft, History, Save, Users, LogIn, Activity, SlidersHorizontal, ToggleLeft, ToggleRight } from 'lucide-react';
 
 const statusBadge = (s: TenantSubscriptionStatus) =>
   s === 'TRIAL' ? 'badge-blue' : s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
@@ -29,6 +30,7 @@ export default function PlatformAdminTenantDetailPage() {
   const [saving, setSaving] = useState(false);
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [impersonating, setImpersonating] = useState(false);
+  const [togglingFeature, setTogglingFeature] = useState<PlanFeatureKey | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -85,6 +87,19 @@ export default function PlatformAdminTenantDetailPage() {
       toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleTenantFeature = async (feature: PlanFeatureKey, enabled: boolean) => {
+    setTogglingFeature(feature);
+    try {
+      await api.patch(`/platform-admin/tenants/${id}/feature-overrides`, { feature, enabled });
+      toast.success(`${FEATURE_LABELS[feature]} ${enabled ? 'activado' : 'desactivado'} para este tenant`);
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
+    } finally {
+      setTogglingFeature(null);
     }
   };
 
@@ -191,6 +206,53 @@ export default function PlatformAdminTenantDetailPage() {
           <button onClick={save} disabled={saving} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
             {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><Save size={13} /> Guardar</>}
           </button>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <SlidersHorizontal size={15} style={{ color: 'var(--text3)' }} />
+          <span style={{ fontWeight: 700, fontSize: 13 }}>Módulos para este tenant</span>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>
+          Por defecto usa lo que incluye su plan ({billingPlans.find((p) => p.id === tenant.planId)?.name ?? tenant.planId}). Activar/desactivar acá pisa el plan solo para este tenant — útil para módulos verticales como Hotelería, que no dependen del plan.
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Módulo</th><th>Plan</th><th>Este tenant</th></tr></thead>
+            <tbody>
+              {FEATURE_GROUPS.flatMap((g) => g.keys).map((feature) => {
+                const planEnabled = !!billingPlans.find((p) => p.id === tenant.planId)?.features[feature];
+                const override = tenant.featureOverrides?.[feature];
+                const effective = override !== undefined ? override : planEnabled;
+                return (
+                  <tr key={feature}>
+                    <td style={{ fontSize: 12, color: 'var(--text)' }}>{FEATURE_LABELS[feature]}</td>
+                    <td style={{ fontSize: 11, color: 'var(--text3)' }}>{planEnabled ? 'Incluido' : 'No incluido'}</td>
+                    <td>
+                      <button
+                        onClick={() => toggleTenantFeature(feature, !effective)}
+                        disabled={togglingFeature === feature}
+                        className="btn btn-ghost btn-xs"
+                        style={{ color: effective ? 'var(--success)' : 'var(--text3)', gap: 6 }}
+                      >
+                        {togglingFeature === feature ? (
+                          <span className="spinner" style={{ width: 13, height: 13 }} />
+                        ) : effective ? (
+                          <ToggleRight size={18} />
+                        ) : (
+                          <ToggleLeft size={18} />
+                        )}
+                        <span style={{ fontSize: 11 }}>
+                          {effective ? 'Activo' : 'Inactivo'}{override !== undefined ? ' (forzado)' : ''}
+                        </span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 

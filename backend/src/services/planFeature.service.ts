@@ -4,13 +4,30 @@ import { planFeatureConfigService } from "./planFeatureConfig.service";
 
 export const planFeatureService = {
   /**
-   * Chequeo de si el plan actual del tenant incluye un modulo (fidelidad,
-   * promociones, cuentas corrientes -- ver config/billing.ts). Usa el
-   * override editable desde /platform-admin (planFeatureConfig.service.ts),
-   * no el default hardcodeado directo, para que un cambio del super-admin
-   * se refleje al toque en todos los tenants de ese plan. Mismo patron que
-   * planLimits.service.ts: cada call site decide como surfacear el
-   * resultado (middleware vs throw directo), este helper solo informa.
+   * Feature-set efectivo de un tenant: el del plan (con el override de
+   * /platform-admin > "Modulos por plan" ya aplicado, ver
+   * planFeatureConfigService.getEffectiveFeatures) pisado por
+   * Tenant.featureOverrides (override por TENANT puntual, no por plan --
+   * pensado para modulos verticales como "hoteleria" que se activan
+   * negocio por negocio). El de tenant gana si ambos definen la misma key.
+   */
+  async getEffectiveFeatures(tenantId: string): Promise<Record<PlanFeatureKey, boolean> | null> {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { planId: true, featureOverrides: true },
+    });
+    if (!tenant) return null;
+
+    const planFeatures = await planFeatureConfigService.getEffectiveFeatures(tenant.planId);
+    return { ...planFeatures, ...((tenant.featureOverrides as Partial<Record<PlanFeatureKey, boolean>>) ?? {}) };
+  },
+
+  /**
+   * Chequeo de si el tenant tiene un modulo habilitado (fidelidad,
+   * promociones, cuentas corrientes, hoteleria... ver config/billing.ts).
+   * Mismo patron que planLimits.service.ts: cada call site decide como
+   * surfacear el resultado (middleware vs throw directo), este helper solo
+   * informa.
    */
   async checkFeature(
     tenantId: string | null | undefined,
@@ -18,15 +35,14 @@ export const planFeatureService = {
   ): Promise<{ ok: true } | { ok: false; message: string }> {
     if (!tenantId) return { ok: true };
 
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { planId: true } });
-    if (!tenant) return { ok: true };
-
-    const features = await planFeatureConfigService.getEffectiveFeatures(tenant.planId);
+    const features = await planFeatureService.getEffectiveFeatures(tenantId);
+    if (!features) return { ok: true };
     if (features[feature]) return { ok: true };
 
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { planId: true } });
     return {
       ok: false,
-      message: `${FEATURE_LABELS[feature]} no está disponible en tu plan (${getPlan(tenant.planId).name}). Mejorá tu plan desde Suscripción para usarla.`,
+      message: `${FEATURE_LABELS[feature]} no está disponible en tu plan (${getPlan(tenant?.planId).name}). Mejorá tu plan desde Suscripción para usarla, o pedile al administrador que lo active para tu cuenta.`,
     };
   },
 };

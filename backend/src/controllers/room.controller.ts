@@ -29,5 +29,7 @@ export const roomController = {
 
   setStatus: wrap(async (req) => roomService.setStatus(req.params.id as string, req.body.status)),
 
+  uploadImage: wrap(async (req) => roomService.uploadImage(req.params.id as string, (req as any).file)),
+
   remove: wrap(async (req) => roomService.remove(req.params.id as string)),
 };

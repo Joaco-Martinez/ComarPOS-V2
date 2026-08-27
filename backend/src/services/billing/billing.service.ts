@@ -59,13 +59,26 @@ export const billingService = {
         mpPreapprovalId: true,
         mpSubscriptionAmount: true,
         planId: true,
+        featureOverrides: true,
       },
     });
 
     if (!tenant) throw new Error("Tenant no encontrado");
 
     const effectivePlan = await planFeatureConfigService.getEffectivePlan(tenant.planId);
-    return { ...tenant, plan: withEffectivePrice(effectivePlan) };
+    // El override por TENANT (ver planFeature.service.ts#getEffectiveFeatures,
+    // Tenant.featureOverrides) tiene que reflejarse aca tambien -- este
+    // status es lo que lee store/planFeatures.ts en el frontend para
+    // Sidebar/AppLayout, si no quedaria mostrando un modulo bloqueado en el
+    // menu aunque el backend ya lo este permitiendo.
+    const plan = withEffectivePrice(effectivePlan);
+    plan.features = {
+      ...plan.features,
+      ...((tenant.featureOverrides as Partial<typeof plan.features>) ?? {}),
+    };
+
+    const { featureOverrides, ...tenantRest } = tenant;
+    return { ...tenantRest, plan };
   },
 
   /**

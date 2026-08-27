@@ -22,6 +22,11 @@ router.post(
   platformAuthMiddleware,
   platformAdminController.impersonateTenant
 );
+router.patch(
+  "/tenants/:id/feature-overrides",
+  platformAuthMiddleware,
+  platformAdminController.updateTenantFeatureOverride
+);
 
 router.get("/mp-plans", platformAuthMiddleware, platformAdminController.listMpPlans);
 router.post("/mp-plans/sync", platformAuthMiddleware, platformAdminController.syncMpPlans);

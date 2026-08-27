@@ -58,8 +58,8 @@ type AvailabilityReservation = {
 type AvailabilityRoom = Room & { reservations: AvailabilityReservation[] };
 
 const emptyRoomTypeForm = { name: '', nightlyRate: '', capacity: '2', description: '' };
-const emptyRoomForm = { roomTypeId: '', number: '', floor: '', businessLocationId: '' };
-const emptyReservationForm = { roomId: '', clientId: '', guestName: '', guestPhone: '', checkInDate: '', checkOutDate: '', notes: '' };
+const emptyRoomForm = { roomTypeId: '', number: '', floor: '', businessLocationId: '', addressStreet: '', addressCity: '', addressProvince: '' };
+const emptyReservationForm = { roomId: '', clientId: '', guestName: '', guestPhone: '', checkInDate: '', checkOutDate: '', notes: '', nightlyRate: '' };
 
 export default function HoteleriaPage() {
   const [tab, setTab] = useState<'habitaciones' | 'reservas'>('habitaciones');
@@ -77,6 +77,7 @@ export default function HoteleriaPage() {
   const [roomModal, setRoomModal] = useState<'create' | 'edit' | null>(null);
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [roomTypesModalOpen, setRoomTypesModalOpen] = useState(false);
   const [roomTypeForm, setRoomTypeForm] = useState(emptyRoomTypeForm);
@@ -212,6 +213,9 @@ export default function HoteleriaPage() {
       number: room.number,
       floor: room.floor ?? '',
       businessLocationId: room.businessLocationId ?? '',
+      addressStreet: room.addressStreet ?? '',
+      addressCity: room.addressCity ?? '',
+      addressProvince: room.addressProvince ?? '',
     });
     setRoomModal('edit');
   };
@@ -227,19 +231,38 @@ export default function HoteleriaPage() {
         number: roomForm.number,
         floor: roomForm.floor || undefined,
         businessLocationId: roomForm.businessLocationId || undefined,
+        addressStreet: roomForm.addressStreet || undefined,
+        addressCity: roomForm.addressCity || undefined,
+        addressProvince: roomForm.addressProvince || undefined,
       };
       if (roomModal === 'edit' && editingRoom) {
-        await api.patch(`/rooms/${editingRoom.id}`, payload);
+        const { data } = await api.patch(`/rooms/${editingRoom.id}`, payload);
+        setEditingRoom(data);
         toast.success('Habitación actualizada');
       } else {
         await api.post('/rooms', payload);
         toast.success('Habitación creada');
+        setRoomModal(null);
       }
-      setRoomModal(null);
       await loadRooms();
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? 'Error al guardar la habitación');
     } finally { setSaving(false); }
+  };
+
+  const uploadRoomImage = async (file: File) => {
+    if (!editingRoom) return;
+    setUploadingImage(true);
+    try {
+      const body = new FormData();
+      body.append('image', file);
+      const { data } = await api.post(`/rooms/${editingRoom.id}/image`, body);
+      setEditingRoom(data);
+      await loadRooms();
+      toast.success('Foto actualizada');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al subir la foto');
+    } finally { setUploadingImage(false); }
   };
 
   const setRoomStatus = async (room: Room, status: RoomStatus) => {
@@ -272,11 +295,13 @@ export default function HoteleriaPage() {
   // ===== Reservas =====
 
   const openCreateReservation = (roomId?: string, checkInDate?: string) => {
+    const room = roomId ? rooms.find((r) => r.id === roomId) : undefined;
     setReservationForm({
       ...emptyReservationForm,
       roomId: roomId ?? '',
       checkInDate: checkInDate ?? todayInputAR(),
       checkOutDate: addDaysStr(checkInDate ?? todayInputAR(), 1),
+      nightlyRate: room ? String(room.roomType.nightlyRate) : '',
     });
     setReservationModal('create');
   };
@@ -296,6 +321,7 @@ export default function HoteleriaPage() {
         checkInDate: reservationForm.checkInDate,
         checkOutDate: reservationForm.checkOutDate,
         notes: reservationForm.notes || undefined,
+        nightlyRate: reservationForm.nightlyRate !== '' ? Number(reservationForm.nightlyRate) : undefined,
       });
       toast.success('Reserva creada');
       setReservationModal(null);
@@ -400,6 +426,23 @@ export default function HoteleriaPage() {
   const reservationForDay = (room: AvailabilityRoom, day: string) =>
     room.reservations.find((r) => toDateInputAR(r.checkInDate) <= day && day < toDateInputAR(r.checkOutDate));
 
+  // "Hoy: llegan / se van" -- derivado del mismo availability que ya carga
+  // la grilla, sin pegarle a otro endpoint. Como rangeStart arranca en
+  // todayInputAR(), hoy siempre esta en la ventana visible al entrar.
+  const today = todayInputAR();
+  const arrivalsToday = useMemo(
+    () => availability.flatMap((room) =>
+      room.reservations.filter((r) => r.status === 'RESERVADA' && toDateInputAR(r.checkInDate) === today).map((r) => ({ room, r }))
+    ),
+    [availability, today]
+  );
+  const departuresToday = useMemo(
+    () => availability.flatMap((room) =>
+      room.reservations.filter((r) => r.status === 'CHECKED_IN' && toDateInputAR(r.checkOutDate) === today).map((r) => ({ room, r }))
+    ),
+    [availability, today]
+  );
+
   return (
     <AppLayout
       title="Hotelería"
@@ -434,7 +477,12 @@ export default function HoteleriaPage() {
                 emptyIcon={BedDouble}
                 emptyMessage="Sin habitaciones cargadas"
                 columns={[
-                  { key: 'numero', header: 'Habitación', render: (r) => <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>{r.number}{r.floor ? ` (piso ${r.floor})` : ''}</span> },
+                  { key: 'numero', header: 'Habitación', render: (r) => (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {r.imageUrl && <img src={r.imageUrl} alt={r.number} style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />}
+                      <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>{r.number}{r.floor ? ` (piso ${r.floor})` : ''}</span>
+                    </span>
+                  ) },
                   { key: 'tipo', header: 'Tipo', render: (r) => <span style={{ fontSize: 13, color: 'var(--text2)' }}>{r.roomType?.name}</span> },
                   { key: 'tarifa', header: 'Tarifa/noche', style: { textAlign: 'right' }, render: (r) => <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--accent)' }}>{fmtMoney(r.roomType?.nightlyRate ?? 0)}</span> },
                   { key: 'sucursal', header: 'Sucursal', render: (r) => <span style={{ fontSize: 12, color: 'var(--text3)' }}>{r.businessLocation?.name ?? '—'}</span> },
@@ -468,6 +516,45 @@ export default function HoteleriaPage() {
               <Plus size={13} /> Nueva reserva
             </button>
           </div>
+
+          {(arrivalsToday.length > 0 || departuresToday.length > 0) && (
+            <div className="grid-responsive" style={{ gap: 10, marginBottom: 16 }}>
+              <div className="card" style={{ padding: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <LogIn size={13} /> Llegan hoy ({arrivalsToday.length})
+                </div>
+                {arrivalsToday.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>Sin llegadas pendientes hoy.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {arrivalsToday.map(({ room, r }) => (
+                      <button key={r.id} onClick={() => openReservationDetail(r.id)} className="btn btn-ghost btn-sm" style={{ justifyContent: 'space-between', width: '100%' }}>
+                        <span>{r.guestName}</span>
+                        <span style={{ color: 'var(--text3)', fontSize: 11 }}>Hab. {room.number}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="card" style={{ padding: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <LogOut size={13} /> Se van hoy ({departuresToday.length})
+                </div>
+                {departuresToday.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>Sin salidas pendientes hoy.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {departuresToday.map(({ room, r }) => (
+                      <button key={r.id} onClick={() => openReservationDetail(r.id)} className="btn btn-ghost btn-sm" style={{ justifyContent: 'space-between', width: '100%' }}>
+                        <span>{r.guestName}</span>
+                        <span style={{ color: 'var(--text3)', fontSize: 11 }}>Hab. {room.number}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="card table-wrap" style={{ padding: 0 }}>
             {calendarLoading ? (
@@ -626,12 +713,52 @@ export default function HoteleriaPage() {
               </div>
             </div>
 
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="form-group">
               <label className="form-label">Sucursal</label>
               <select value={roomForm.businessLocationId} onChange={(e) => setRoomForm((f) => ({ ...f, businessLocationId: e.target.value }))} style={{ width: '100%' }}>
                 <option value="">Sin asignar</option>
                 {businessLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                Dirección propia (opcional — para una cabaña sin sucursal)
+              </div>
+              <div className="form-group">
+                <input value={roomForm.addressStreet} onChange={(e) => setRoomForm((f) => ({ ...f, addressStreet: e.target.value }))} placeholder="Calle y número" style={{ width: '100%' }} />
+              </div>
+              <div className="form-row" style={{ marginBottom: 0 }}>
+                <input value={roomForm.addressCity} onChange={(e) => setRoomForm((f) => ({ ...f, addressCity: e.target.value }))} placeholder="Ciudad" style={{ width: '100%' }} />
+                <input value={roomForm.addressProvince} onChange={(e) => setRoomForm((f) => ({ ...f, addressProvince: e.target.value }))} placeholder="Provincia" style={{ width: '100%' }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Foto</div>
+              {roomModal === 'edit' && editingRoom ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: uploadingImage ? 'default' : 'pointer' }}>
+                  <div style={{ width: 64, height: 64, borderRadius: 8, background: 'var(--surface2)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                    {uploadingImage ? (
+                      <span className="spinner" style={{ width: 18, height: 18 }} />
+                    ) : editingRoom.imageUrl ? (
+                      <img src={editingRoom.imageUrl} alt={editingRoom.number} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <BedDouble size={20} style={{ color: 'var(--text3)' }} />
+                    )}
+                  </div>
+                  <span style={{ fontSize: 12, color: 'var(--accent)' }}>{editingRoom.imageUrl ? 'Cambiar foto' : 'Subir foto'}</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    disabled={uploadingImage}
+                    style={{ display: 'none' }}
+                    onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadRoomImage(file); e.target.value = ''; }}
+                  />
+                </label>
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>Guardá la habitación primero para poder subirle una foto.</div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 16 }}>
@@ -662,7 +789,15 @@ export default function HoteleriaPage() {
 
             <div className="form-group">
               <label className="form-label">Habitación *</label>
-              <SearchableSelect value={reservationForm.roomId} onChange={(v) => setReservationForm((f) => ({ ...f, roomId: v }))} options={roomOptions} placeholder="Elegir habitación..." />
+              <SearchableSelect
+                value={reservationForm.roomId}
+                onChange={(v) => {
+                  const room = rooms.find((r) => r.id === v);
+                  setReservationForm((f) => ({ ...f, roomId: v, nightlyRate: room ? String(room.roomType.nightlyRate) : f.nightlyRate }));
+                }}
+                options={roomOptions}
+                placeholder="Elegir habitación..."
+              />
             </div>
 
             <div className="form-row">
@@ -674,6 +809,11 @@ export default function HoteleriaPage() {
                 <label className="form-label">Check-out *</label>
                 <input type="date" min={reservationForm.checkInDate || todayInputAR()} value={reservationForm.checkOutDate} onChange={(e) => setReservationForm((f) => ({ ...f, checkOutDate: e.target.value }))} style={{ width: '100%' }} />
               </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Tarifa/noche</label>
+              <input type="number" min={0} value={reservationForm.nightlyRate} onChange={(e) => setReservationForm((f) => ({ ...f, nightlyRate: e.target.value }))} placeholder="Se autocompleta con la tarifa del tipo de habitación" style={{ width: '100%' }} />
             </div>
 
             <div className="form-group">
@@ -707,6 +847,9 @@ export default function HoteleriaPage() {
             {reservationForm.checkInDate && reservationForm.checkOutDate && (
               <div style={{ marginTop: 14, fontSize: 12, color: 'var(--text3)' }}>
                 {nightsBetween(reservationForm.checkInDate, reservationForm.checkOutDate)} noche(s)
+                {reservationForm.nightlyRate !== '' && Number.isFinite(Number(reservationForm.nightlyRate)) && (
+                  <> · total estimado: <strong style={{ color: 'var(--text)' }}>{fmtMoney(nightsBetween(reservationForm.checkInDate, reservationForm.checkOutDate) * Number(reservationForm.nightlyRate))}</strong></>
+                )}
               </div>
             )}
 

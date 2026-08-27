@@ -4,8 +4,10 @@ import { Response } from "express";
 import { Role, TenantSubscriptionStatus } from "@prisma/client";
 import { invalidateTenantCache } from "../middleware/tenant";
 import { endOfDayAR } from "../utils/dateAR";
-import { PLANS, DEFAULT_PLAN_ID } from "../config/billing";
+import { PLANS, DEFAULT_PLAN_ID, PlanFeatureKey, FEATURE_LABELS } from "../config/billing";
 import { authService } from "./auth.service";
+
+const FEATURE_KEYS = Object.keys(FEATURE_LABELS) as PlanFeatureKey[];
 
 // Ultimo login entre todas las cuentas del tenant -- el indicador real de
 // "¿lo está usando?" es de cualquier usuario, no de uno en particular.
@@ -154,6 +156,29 @@ export const platformTenantService = {
     });
 
     invalidateTenantCache(tenant.slug, tenant.id);
+
+    return updated;
+  },
+
+  /**
+   * Prende/apaga un modulo para UN tenant puntual, sin importar su plan --
+   * a diferencia de planFeatureConfigService.setFeature (que pisa el plan
+   * entero), esto solo afecta a este tenant. Se guarda en
+   * Tenant.featureOverrides (mapa parcial), leido por
+   * planFeature.service.ts#getEffectiveFeatures y billing.service.ts#getStatus.
+   * No hay cache propio que invalidar (esos dos leen la fila del tenant al
+   * toque en cada request).
+   */
+  async setTenantFeatureOverride(id: string, feature: PlanFeatureKey, enabled: boolean) {
+    if (!FEATURE_KEYS.includes(feature)) throw new Error("Módulo inválido");
+
+    const tenant = await prisma.tenant.findUnique({ where: { id }, select: { featureOverrides: true } });
+    if (!tenant) throw new Error("Tenant no encontrado");
+
+    const current = (tenant.featureOverrides as Partial<Record<PlanFeatureKey, boolean>>) ?? {};
+    const updated = { ...current, [feature]: enabled };
+
+    await prisma.tenant.update({ where: { id }, data: { featureOverrides: updated } });
 
     return updated;
   },

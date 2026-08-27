@@ -74,6 +74,16 @@ model Tenant {
   // los topes de sucursales/productos/usuarios (planLimits.service.ts).
   planId               String  @default("profesional")
 
+  // Override de modulos por TENANT puntual, no por plan (a diferencia de
+  // PlanFeatureConfig, que pisa el default de un plan entero -- ver
+  // planFeature.service.ts#checkFeature y billing.service.ts#getStatus,
+  // que hacen merge de esto por encima del feature-set del plan). Pensado
+  // para modulos verticales como "hoteleria": apagado por defecto en todos
+  // los planes, se prende a mano tenant por tenant desde /platform-admin
+  // segun si ese negocio puntual lo necesita. Mapa parcial
+  // { [PlanFeatureKey]: boolean }, null = sin overrides.
+  featureOverrides Json?
+
   // Datos de cabecera para tickets/documentos impresos (printbox). Si son
   // null, ticket.service.ts cae a `name` para no dejar el ticket en blanco.
   ticketBusinessName String?
@@ -1788,6 +1798,21 @@ model Room {
   status             RoomStatus        @default(LIBRE)
   notes              String?
   isActive           Boolean           @default(true)
+  // Direccion propia de la habitacion/unidad, independiente de
+  // businessLocationId -- pensado para un agente con varias cabañas
+  // dispersas que no tiene (o no quiere cargar) una BusinessLocation por
+  // cada una. Ambas conviven: un hotel sigue pudiendo agrupar habitaciones
+  // bajo una sucursal, y una cabaña suelta puede en cambio cargar solo su
+  // propia direccion. Mismo naming que BusinessLocation.address* arriba.
+  addressStreet      String?
+  addressCity        String?
+  addressProvince    String?
+  latitude           Float?
+  longitude          Float?
+  // Foto de la habitacion/cabaña -- mismo patron que Product.imageUrl/imageId
+  // (product.write.ts#updateImage): sube a Cloudinary, guarda url/publicId.
+  imageUrl           String?
+  imageId            String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   reservations       Reservation[]

@@ -82,6 +82,23 @@ export const platformAdminController = {
     }
   },
 
+  async updateTenantFeatureOverride(req: Request, res: Response, next: NextFunction) {
+    try {
+      const feature = req.body.feature as PlanFeatureKey;
+      const enabled = Boolean(req.body.enabled);
+
+      const featureOverrides = await platformTenantService.setTenantFeatureOverride(
+        getParamAsString(req.params.id, "id"),
+        feature,
+        enabled
+      );
+
+      res.json({ ok: true, content: { featureOverrides } });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async createTenant(req: Request, res: Response, next: NextFunction) {
     try {
       const platformAdminId = (req as any).platformAdmin?.id;

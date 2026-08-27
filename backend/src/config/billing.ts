@@ -151,6 +151,12 @@ export const PLANS: Plan[] = [
       reportes: false,
       objetivosVentas: false,
       auditoria: false,
+      // "hoteleria" no es una feature de tier de plan, es un modulo
+      // vertical (hotel/cabañas) -- apagado por defecto en los 3 planes, se
+      // prende a mano por tenant puntual (Tenant.featureOverrides, ver
+      // planFeature.service.ts#checkFeature) desde /platform-admin, sin
+      // importar el plan que tenga contratado.
+      hoteleria: false,
     },
   },
   {
@@ -162,7 +168,7 @@ export const PLANS: Plan[] = [
     tagline: "El más elegido: todo lo que necesita un negocio en crecimiento.",
     highlighted: true,
     limits: { maxBusinessLocations: 3, maxProducts: null, maxUsers: null },
-    features: ALL_FEATURES_ON,
+    features: { ...ALL_FEATURES_ON, hoteleria: false },
   },
   {
     id: "multisucursal",
@@ -173,7 +179,7 @@ export const PLANS: Plan[] = [
     tagline: "Para cadenas y negocios con varias sucursales.",
     highlighted: false,
     limits: { maxBusinessLocations: null, maxProducts: null, maxUsers: null },
-    features: ALL_FEATURES_ON,
+    features: { ...ALL_FEATURES_ON, hoteleria: false },
   },
 ];
 

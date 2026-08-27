@@ -5,11 +5,19 @@
  * checkIn/checkout, y este servicio permite el cambio manual (ej. limpieza
  * terminada -> libre, o mandar a mantenimiento).
  */
+import fs from "fs";
 import prisma from "../prisma";
 import { RoomStatus } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { AppError } from "../utils/asyncHandler";
+import cloudinary from "../config/cloudinary";
+
+function safeDeleteLocalFile(path?: string) {
+  if (path && fs.existsSync(path)) {
+    fs.unlinkSync(path);
+  }
+}
 
 const ROOM_INCLUDE = {
   roomType: true,
@@ -48,6 +56,11 @@ export const roomService = {
     floor?: string | null;
     businessLocationId?: string | null;
     notes?: string | null;
+    addressStreet?: string | null;
+    addressCity?: string | null;
+    addressProvince?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
   }) {
     const number = cleanString(data.number);
     if (!number) throw new AppError("VALIDATION_ERROR", "El número/nombre de la habitación es obligatorio", 400);
@@ -69,6 +82,11 @@ export const roomService = {
         floor: cleanString(data.floor),
         businessLocationId: data.businessLocationId || null,
         notes: cleanString(data.notes),
+        addressStreet: cleanString(data.addressStreet),
+        addressCity: cleanString(data.addressCity),
+        addressProvince: cleanString(data.addressProvince),
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
       },
       include: ROOM_INCLUDE,
     });
@@ -85,6 +103,11 @@ export const roomService = {
       businessLocationId: string | null;
       notes: string | null;
       isActive: boolean;
+      addressStreet: string | null;
+      addressCity: string | null;
+      addressProvince: string | null;
+      latitude: number | null;
+      longitude: number | null;
     }>
   ) {
     await findOrThrow(id);
@@ -104,9 +127,53 @@ export const roomService = {
     if (data.businessLocationId !== undefined) updateData.businessLocationId = data.businessLocationId || null;
     if (data.notes !== undefined) updateData.notes = cleanString(data.notes);
     if (data.isActive !== undefined) updateData.isActive = !!data.isActive;
+    if (data.addressStreet !== undefined) updateData.addressStreet = cleanString(data.addressStreet);
+    if (data.addressCity !== undefined) updateData.addressCity = cleanString(data.addressCity);
+    if (data.addressProvince !== undefined) updateData.addressProvince = cleanString(data.addressProvince);
+    if (data.latitude !== undefined) updateData.latitude = data.latitude;
+    if (data.longitude !== undefined) updateData.longitude = data.longitude;
 
     await prisma.room.update({ where: { id }, data: updateData });
     return findOrThrow(id);
+  },
+
+  // Mismo patron que product.write.ts#updateImage: sube a Cloudinary, borra
+  // la imagen vieja si habia, guarda url/publicId.
+  async uploadImage(id: string, file?: Express.Multer.File) {
+    if (!file) throw new AppError("FILE_REQUIRED", "Falta el archivo de imagen", 400);
+    const room = await findOrThrow(id);
+
+    let newImageId: string | undefined;
+    try {
+      const result = await cloudinary.uploader.upload(file.path, {
+        folder: "comarpos/rooms",
+        resource_type: "image",
+      });
+      newImageId = result.public_id;
+
+      safeDeleteLocalFile(file.path);
+
+      if (room.imageId) {
+        await cloudinary.uploader.destroy(room.imageId).catch(() => undefined);
+      }
+
+      await prisma.room.update({
+        where: { id },
+        data: { imageUrl: result.secure_url, imageId: result.public_id },
+      });
+      return findOrThrow(id);
+    } catch (err) {
+      safeDeleteLocalFile(file?.path);
+      if (newImageId) {
+        await cloudinary.uploader.destroy(newImageId).catch(() => undefined);
+      }
+      if (err instanceof AppError) throw err;
+      throw new AppError(
+        "IMAGE_UPLOAD_FAILED",
+        "No se pudo subir la imagen: el servicio de imágenes no está configurado (CLOUDINARY_* en .env).",
+        502
+      );
+    }
   },
 
   async setStatus(id: string, status: string) {
