@@ -609,58 +609,60 @@ export default function HoteleriaPage() {
       {/* Modal: tipos de habitación */}
       {roomTypesModalOpen && (
         <div className="modal-overlay" onClick={() => setRoomTypesModalOpen(false)}>
-          <div className="modal modal-lg" style={{ padding: 24 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Tipos de habitación</div>
               <button className="btn btn-ghost btn-sm" onClick={() => setRoomTypesModalOpen(false)}><X size={15} /></button>
             </div>
 
-            {/* Lista tipo flex en vez de <table> -- con solo 3 datos cortos + 2
-                botones por fila no hace falta una grilla rigida que en
-                mobile termina recortando la columna de acciones; esto envuelve
-                solo, sin scroll horizontal. */}
-            <div style={{ marginBottom: 14 }}>
-              {roomTypes.length === 0 ? (
-                <div style={{ padding: 16, textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>Sin tipos de habitación todavía</div>
-              ) : (
-                roomTypes.map((rt) => (
-                  <div key={rt.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 2px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{rt.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{fmtMoney(rt.nightlyRate)}/noche · cap. {rt.capacity}</div>
+            <div className="modal-body">
+              {/* Lista tipo flex en vez de <table> -- con solo 3 datos cortos + 2
+                  botones por fila no hace falta una grilla rigida que en
+                  mobile termina recortando la columna de acciones; esto envuelve
+                  solo, sin scroll horizontal. */}
+              <div style={{ marginBottom: 14 }}>
+                {roomTypes.length === 0 ? (
+                  <div style={{ padding: 16, textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>Sin tipos de habitación todavía</div>
+                ) : (
+                  roomTypes.map((rt) => (
+                    <div key={rt.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 2px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{rt.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{fmtMoney(rt.nightlyRate)}/noche · cap. {rt.capacity}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button className="btn btn-ghost btn-xs" onClick={() => editRoomType(rt)}>Editar</button>
+                        <button className="btn btn-ghost btn-xs" onClick={() => removeRoomType(rt)} style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                      <button className="btn btn-ghost btn-xs" onClick={() => editRoomType(rt)}>Editar</button>
-                      <button className="btn btn-ghost btn-xs" onClick={() => removeRoomType(rt)} style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))
+                )}
+              </div>
 
-            <div style={{ background: 'var(--surface2)', borderRadius: 8, padding: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>
-                {editingRoomTypeId ? 'Editar tipo' : 'Nuevo tipo de habitación'}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Nombre</label>
-                <input value={roomTypeForm.name} onChange={(e) => setRoomTypeForm((f) => ({ ...f, name: e.target.value }))} placeholder="Individual, Doble, Suite..." style={{ width: '100%' }} />
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Tarifa/noche</label>
-                  <input type="number" min={0} value={roomTypeForm.nightlyRate} onChange={(e) => setRoomTypeForm((f) => ({ ...f, nightlyRate: e.target.value }))} style={{ width: '100%' }} />
+              <div style={{ background: 'var(--surface2)', borderRadius: 8, padding: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>
+                  {editingRoomTypeId ? 'Editar tipo' : 'Nuevo tipo de habitación'}
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Capacidad</label>
-                  <input type="number" min={1} value={roomTypeForm.capacity} onChange={(e) => setRoomTypeForm((f) => ({ ...f, capacity: e.target.value }))} style={{ width: '100%' }} />
+                  <label className="form-label">Nombre</label>
+                  <input value={roomTypeForm.name} onChange={(e) => setRoomTypeForm((f) => ({ ...f, name: e.target.value }))} placeholder="Individual, Doble, Suite..." style={{ width: '100%' }} />
                 </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                {editingRoomTypeId && <button className="btn btn-ghost btn-sm" onClick={resetRoomTypeForm}>Cancelar</button>}
-                <button className="btn btn-primary btn-sm" onClick={submitRoomType} disabled={saving}>
-                  {editingRoomTypeId ? 'Guardar' : 'Agregar'}
-                </button>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Tarifa/noche</label>
+                    <input type="number" min={0} value={roomTypeForm.nightlyRate} onChange={(e) => setRoomTypeForm((f) => ({ ...f, nightlyRate: e.target.value }))} style={{ width: '100%' }} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Capacidad</label>
+                    <input type="number" min={1} value={roomTypeForm.capacity} onChange={(e) => setRoomTypeForm((f) => ({ ...f, capacity: e.target.value }))} style={{ width: '100%' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  {editingRoomTypeId && <button className="btn btn-ghost btn-sm" onClick={resetRoomTypeForm}>Cancelar</button>}
+                  <button className="btn btn-primary btn-sm" onClick={submitRoomType} disabled={saving}>
+                    {editingRoomTypeId ? 'Guardar' : 'Agregar'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -670,91 +672,93 @@ export default function HoteleriaPage() {
       {/* Modal: crear/editar habitación */}
       {roomModal && (
         <div className="modal-overlay" onClick={() => setRoomModal(null)}>
-          <div className="modal" style={{ padding: 24, maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{roomModal === 'edit' ? 'Editar habitación' : 'Nueva habitación'}</div>
               <button className="btn btn-ghost btn-sm" onClick={() => setRoomModal(null)}><X size={15} /></button>
             </div>
 
-            {roomModal === 'edit' && editingRoom && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-                {(Object.keys(ROOM_STATUS_LABEL) as RoomStatus[]).map((s) => (
-                  <button
-                    key={s}
-                    className={`btn btn-xs ${editingRoom.status === s ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setRoomStatus(editingRoom, s)}
-                  >
-                    {ROOM_STATUS_LABEL[s]}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="form-group">
-              <label className="form-label">Tipo de habitación</label>
-              <SearchableSelect value={roomForm.roomTypeId} onChange={(v) => setRoomForm((f) => ({ ...f, roomTypeId: v }))} options={roomTypeOptions} placeholder="Elegir tipo..." />
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Número / nombre</label>
-                <input value={roomForm.number} onChange={(e) => setRoomForm((f) => ({ ...f, number: e.target.value }))} placeholder="101" style={{ width: '100%' }} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Piso</label>
-                <input value={roomForm.floor} onChange={(e) => setRoomForm((f) => ({ ...f, floor: e.target.value }))} style={{ width: '100%' }} />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Sucursal</label>
-              <select value={roomForm.businessLocationId} onChange={(e) => setRoomForm((f) => ({ ...f, businessLocationId: e.target.value }))} style={{ width: '100%' }}>
-                <option value="">Sin asignar</option>
-                {businessLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
-                Dirección propia (opcional — para una cabaña sin sucursal)
-              </div>
-              <div className="form-group">
-                <input value={roomForm.addressStreet} onChange={(e) => setRoomForm((f) => ({ ...f, addressStreet: e.target.value }))} placeholder="Calle y número" style={{ width: '100%' }} />
-              </div>
-              <div className="form-row" style={{ marginBottom: 0 }}>
-                <input value={roomForm.addressCity} onChange={(e) => setRoomForm((f) => ({ ...f, addressCity: e.target.value }))} placeholder="Ciudad" style={{ width: '100%' }} />
-                <input value={roomForm.addressProvince} onChange={(e) => setRoomForm((f) => ({ ...f, addressProvince: e.target.value }))} placeholder="Provincia" style={{ width: '100%' }} />
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Foto</div>
-              {roomModal === 'edit' && editingRoom ? (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: uploadingImage ? 'default' : 'pointer' }}>
-                  <div style={{ width: 64, height: 64, borderRadius: 8, background: 'var(--surface2)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-                    {uploadingImage ? (
-                      <span className="spinner" style={{ width: 18, height: 18 }} />
-                    ) : editingRoom.imageUrl ? (
-                      <img src={editingRoom.imageUrl} alt={editingRoom.number} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <BedDouble size={20} style={{ color: 'var(--text3)' }} />
-                    )}
-                  </div>
-                  <span style={{ fontSize: 12, color: 'var(--accent)' }}>{editingRoom.imageUrl ? 'Cambiar foto' : 'Subir foto'}</span>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    disabled={uploadingImage}
-                    style={{ display: 'none' }}
-                    onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadRoomImage(file); e.target.value = ''; }}
-                  />
-                </label>
-              ) : (
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>Guardá la habitación primero para poder subirle una foto.</div>
+            <div className="modal-body">
+              {roomModal === 'edit' && editingRoom && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                  {(Object.keys(ROOM_STATUS_LABEL) as RoomStatus[]).map((s) => (
+                    <button
+                      key={s}
+                      className={`btn btn-xs ${editingRoom.status === s ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setRoomStatus(editingRoom, s)}
+                    >
+                      {ROOM_STATUS_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
               )}
+
+              <div className="form-group">
+                <label className="form-label">Tipo de habitación</label>
+                <SearchableSelect value={roomForm.roomTypeId} onChange={(v) => setRoomForm((f) => ({ ...f, roomTypeId: v }))} options={roomTypeOptions} placeholder="Elegir tipo..." />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Número / nombre</label>
+                  <input value={roomForm.number} onChange={(e) => setRoomForm((f) => ({ ...f, number: e.target.value }))} placeholder="101" style={{ width: '100%' }} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Piso</label>
+                  <input value={roomForm.floor} onChange={(e) => setRoomForm((f) => ({ ...f, floor: e.target.value }))} style={{ width: '100%' }} />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Sucursal</label>
+                <select value={roomForm.businessLocationId} onChange={(e) => setRoomForm((f) => ({ ...f, businessLocationId: e.target.value }))} style={{ width: '100%' }}>
+                  <option value="">Sin asignar</option>
+                  {businessLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                  Dirección propia (opcional — para una cabaña sin sucursal)
+                </div>
+                <div className="form-group">
+                  <input value={roomForm.addressStreet} onChange={(e) => setRoomForm((f) => ({ ...f, addressStreet: e.target.value }))} placeholder="Calle y número" style={{ width: '100%' }} />
+                </div>
+                <div className="form-row" style={{ marginBottom: 0 }}>
+                  <input value={roomForm.addressCity} onChange={(e) => setRoomForm((f) => ({ ...f, addressCity: e.target.value }))} placeholder="Ciudad" style={{ width: '100%' }} />
+                  <input value={roomForm.addressProvince} onChange={(e) => setRoomForm((f) => ({ ...f, addressProvince: e.target.value }))} placeholder="Provincia" style={{ width: '100%' }} />
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Foto</div>
+                {roomModal === 'edit' && editingRoom ? (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: uploadingImage ? 'default' : 'pointer' }}>
+                    <div style={{ width: 64, height: 64, borderRadius: 8, background: 'var(--surface2)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                      {uploadingImage ? (
+                        <span className="spinner" style={{ width: 18, height: 18 }} />
+                      ) : editingRoom.imageUrl ? (
+                        <img src={editingRoom.imageUrl} alt={editingRoom.number} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <BedDouble size={20} style={{ color: 'var(--text3)' }} />
+                      )}
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--accent)' }}>{editingRoom.imageUrl ? 'Cambiar foto' : 'Subir foto'}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={uploadingImage}
+                      style={{ display: 'none' }}
+                      onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadRoomImage(file); e.target.value = ''; }}
+                    />
+                  </label>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>Guardá la habitación primero para poder subirle una foto.</div>
+                )}
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 16 }}>
+            <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
               {roomModal === 'edit' && editingRoom ? (
                 <button className="btn btn-ghost btn-sm" onClick={() => removeRoom(editingRoom)} style={{ color: 'var(--danger)' }}><Trash2 size={13} /></button>
               ) : <span />}
@@ -772,81 +776,83 @@ export default function HoteleriaPage() {
       {/* Modal: nueva reserva */}
       {reservationModal === 'create' && (
         <div className="modal-overlay" onClick={() => setReservationModal(null)}>
-          <div className="modal modal-lg" style={{ padding: 24 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <BedDouble size={16} style={{ color: 'var(--accent)' }} /> Nueva reserva
               </div>
               <button className="btn btn-ghost btn-sm" onClick={() => setReservationModal(null)}><X size={15} /></button>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Habitación *</label>
-              <SearchableSelect
-                value={reservationForm.roomId}
-                onChange={(v) => {
-                  const room = rooms.find((r) => r.id === v);
-                  setReservationForm((f) => ({ ...f, roomId: v, nightlyRate: room ? String(room.roomType.nightlyRate) : f.nightlyRate }));
-                }}
-                options={roomOptions}
-                placeholder="Elegir habitación..."
-              />
-            </div>
-
-            <div className="form-row">
+            <div className="modal-body">
               <div className="form-group">
-                <label className="form-label">Check-in *</label>
-                <input type="date" min={todayInputAR()} value={reservationForm.checkInDate} onChange={(e) => setReservationForm((f) => ({ ...f, checkInDate: e.target.value }))} style={{ width: '100%' }} />
+                <label className="form-label">Habitación *</label>
+                <SearchableSelect
+                  value={reservationForm.roomId}
+                  onChange={(v) => {
+                    const room = rooms.find((r) => r.id === v);
+                    setReservationForm((f) => ({ ...f, roomId: v, nightlyRate: room ? String(room.roomType.nightlyRate) : f.nightlyRate }));
+                  }}
+                  options={roomOptions}
+                  placeholder="Elegir habitación..."
+                />
               </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Check-in *</label>
+                  <input type="date" min={todayInputAR()} value={reservationForm.checkInDate} onChange={(e) => setReservationForm((f) => ({ ...f, checkInDate: e.target.value }))} style={{ width: '100%' }} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Check-out *</label>
+                  <input type="date" min={reservationForm.checkInDate || todayInputAR()} value={reservationForm.checkOutDate} onChange={(e) => setReservationForm((f) => ({ ...f, checkOutDate: e.target.value }))} style={{ width: '100%' }} />
+                </div>
+              </div>
+
               <div className="form-group">
-                <label className="form-label">Check-out *</label>
-                <input type="date" min={reservationForm.checkInDate || todayInputAR()} value={reservationForm.checkOutDate} onChange={(e) => setReservationForm((f) => ({ ...f, checkOutDate: e.target.value }))} style={{ width: '100%' }} />
+                <label className="form-label">Tarifa/noche</label>
+                <input type="number" min={0} value={reservationForm.nightlyRate} onChange={(e) => setReservationForm((f) => ({ ...f, nightlyRate: e.target.value }))} placeholder="Se autocompleta con la tarifa del tipo de habitación" style={{ width: '100%' }} />
               </div>
-            </div>
 
-            <div className="form-group">
-              <label className="form-label">Tarifa/noche</label>
-              <input type="number" min={0} value={reservationForm.nightlyRate} onChange={(e) => setReservationForm((f) => ({ ...f, nightlyRate: e.target.value }))} placeholder="Se autocompleta con la tarifa del tipo de habitación" style={{ width: '100%' }} />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Cliente (opcional)</label>
-              <SearchableSelect
-                value={reservationForm.clientId}
-                onChange={(v) => setReservationForm((f) => ({ ...f, clientId: v }))}
-                options={clientOptions}
-                placeholder="Sin cliente asignado"
-                onCreateNew={(q) => setNewClientQuery(q)}
-                createNewLabel={(q) => q ? `Crear cliente "${q}"` : 'Crear cliente nuevo'}
-              />
-            </div>
-
-            <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Nombre del huésped *</label>
-                <input value={reservationForm.guestName} onChange={(e) => setReservationForm((f) => ({ ...f, guestName: e.target.value }))} style={{ width: '100%' }} />
+                <label className="form-label">Cliente (opcional)</label>
+                <SearchableSelect
+                  value={reservationForm.clientId}
+                  onChange={(v) => setReservationForm((f) => ({ ...f, clientId: v }))}
+                  options={clientOptions}
+                  placeholder="Sin cliente asignado"
+                  onCreateNew={(q) => setNewClientQuery(q)}
+                  createNewLabel={(q) => q ? `Crear cliente "${q}"` : 'Crear cliente nuevo'}
+                />
               </div>
-              <div className="form-group">
-                <label className="form-label">Teléfono</label>
-                <input value={reservationForm.guestPhone} onChange={(e) => setReservationForm((f) => ({ ...f, guestPhone: e.target.value }))} style={{ width: '100%' }} />
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Nombre del huésped *</label>
+                  <input value={reservationForm.guestName} onChange={(e) => setReservationForm((f) => ({ ...f, guestName: e.target.value }))} style={{ width: '100%' }} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Teléfono</label>
+                  <input value={reservationForm.guestPhone} onChange={(e) => setReservationForm((f) => ({ ...f, guestPhone: e.target.value }))} style={{ width: '100%' }} />
+                </div>
               </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Notas</label>
+                <textarea value={reservationForm.notes} onChange={(e) => setReservationForm((f) => ({ ...f, notes: e.target.value }))} rows={2} style={{ width: '100%', resize: 'vertical' }} />
+              </div>
+
+              {reservationForm.checkInDate && reservationForm.checkOutDate && (
+                <div style={{ marginTop: 14, fontSize: 12, color: 'var(--text3)' }}>
+                  {nightsBetween(reservationForm.checkInDate, reservationForm.checkOutDate)} noche(s)
+                  {reservationForm.nightlyRate !== '' && Number.isFinite(Number(reservationForm.nightlyRate)) && (
+                    <> · total estimado: <strong style={{ color: 'var(--text)' }}>{fmtMoney(nightsBetween(reservationForm.checkInDate, reservationForm.checkOutDate) * Number(reservationForm.nightlyRate))}</strong></>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Notas</label>
-              <textarea value={reservationForm.notes} onChange={(e) => setReservationForm((f) => ({ ...f, notes: e.target.value }))} rows={2} style={{ width: '100%', resize: 'vertical' }} />
-            </div>
-
-            {reservationForm.checkInDate && reservationForm.checkOutDate && (
-              <div style={{ marginTop: 14, fontSize: 12, color: 'var(--text3)' }}>
-                {nightsBetween(reservationForm.checkInDate, reservationForm.checkOutDate)} noche(s)
-                {reservationForm.nightlyRate !== '' && Number.isFinite(Number(reservationForm.nightlyRate)) && (
-                  <> · total estimado: <strong style={{ color: 'var(--text)' }}>{fmtMoney(nightsBetween(reservationForm.checkInDate, reservationForm.checkOutDate) * Number(reservationForm.nightlyRate))}</strong></>
-                )}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <div className="modal-footer">
               <button className="btn btn-secondary btn-sm" onClick={() => setReservationModal(null)}>Cancelar</button>
               <button className="btn btn-primary btn-sm" onClick={createReservation} disabled={saving}>
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Reservar'}
@@ -859,8 +865,8 @@ export default function HoteleriaPage() {
       {/* Modal: detalle de reserva */}
       {reservationModal === 'detail' && selected && (
         <div className="modal-overlay" onClick={() => setReservationModal(null)}>
-          <div className="modal modal-lg" style={{ padding: 24 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ alignItems: 'flex-start' }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <BedDouble size={16} style={{ color: 'var(--accent)' }} />
@@ -875,43 +881,45 @@ export default function HoteleriaPage() {
               <button className="btn btn-ghost btn-sm" onClick={() => setReservationModal(null)}><X size={15} /></button>
             </div>
 
-            <div className="grid-responsive" style={{ gap: 10, marginBottom: 14 }}>
-              {[
-                ['Teléfono', selected.guestPhone || '—'],
-                ['Noches', String(nightsBetween(toDateInputAR(selected.checkInDate), toDateInputAR(selected.checkOutDate)))],
-                ['Tarifa/noche', fmtMoney(selected.nightlyRateSnapshot)],
-                ['Total', fmtMoney(selected.totalAmount)],
-              ].map(([k, v]) => (
-                <div key={k}><div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>{k}</div><div style={{ fontSize: 13, color: 'var(--text)' }}>{v}</div></div>
-              ))}
-            </div>
-
-            {selected.notes && (
-              <div className="form-group">
-                <label className="form-label">Notas</label>
-                <div style={{ fontSize: 13, color: 'var(--text2)', background: 'var(--surface2)', borderRadius: 6, padding: '8px 10px' }}>{selected.notes}</div>
+            <div className="modal-body">
+              <div className="grid-responsive" style={{ gap: 10, marginBottom: 14 }}>
+                {[
+                  ['Teléfono', selected.guestPhone || '—'],
+                  ['Noches', String(nightsBetween(toDateInputAR(selected.checkInDate), toDateInputAR(selected.checkOutDate)))],
+                  ['Tarifa/noche', fmtMoney(selected.nightlyRateSnapshot)],
+                  ['Total', fmtMoney(selected.totalAmount)],
+                ].map(([k, v]) => (
+                  <div key={k}><div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>{k}</div><div style={{ fontSize: 13, color: 'var(--text)' }}>{v}</div></div>
+                ))}
               </div>
-            )}
 
-            {selected.saleId && selected.sale && (
-              <div style={{ fontSize: 12, color: 'var(--text2)', background: 'var(--surface2)', borderRadius: 6, padding: '8px 10px', marginBottom: 16 }}>
-                Cobrada por <strong style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(selected.sale.total)}</strong> ({selected.sale.receiptType === 'FACTURA' ? 'factura' : 'ticket'}) — gestioná la factura AFIP desde Facturación si todavía está pendiente.
+              {selected.notes && (
+                <div className="form-group">
+                  <label className="form-label">Notas</label>
+                  <div style={{ fontSize: 13, color: 'var(--text2)', background: 'var(--surface2)', borderRadius: 6, padding: '8px 10px' }}>{selected.notes}</div>
+                </div>
+              )}
+
+              {selected.saleId && selected.sale && (
+                <div style={{ fontSize: 12, color: 'var(--text2)', background: 'var(--surface2)', borderRadius: 6, padding: '8px 10px', marginBottom: 16 }}>
+                  Cobrada por <strong style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(selected.sale.total)}</strong> ({selected.sale.receiptType === 'FACTURA' ? 'factura' : 'ticket'}) — gestioná la factura AFIP desde Facturación si todavía está pendiente.
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {selected.status === 'RESERVADA' && (
+                  <button className="btn btn-secondary btn-sm" onClick={doCheckIn} style={{ gap: 6 }}><LogIn size={13} /> Check-in</button>
+                )}
+                {(selected.status === 'CHECKED_IN' || selected.status === 'RESERVADA') && !selected.saleId && (
+                  <button className="btn btn-primary btn-sm" onClick={openCheckout} style={{ gap: 6 }}><CreditCard size={13} /> Cobrar</button>
+                )}
+                {(selected.status === 'RESERVADA' || selected.status === 'CHECKED_IN') && (
+                  <button className="btn btn-danger btn-sm" onClick={askCancelReservation} style={{ gap: 6 }}><LogOut size={13} /> Cancelar reserva</button>
+                )}
+                {!selected.saleId && (
+                  <button className="btn btn-ghost btn-sm" onClick={askDeleteReservation} style={{ color: 'var(--danger)' }}><Trash2 size={13} /></button>
+                )}
               </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
-              {selected.status === 'RESERVADA' && (
-                <button className="btn btn-secondary btn-sm" onClick={doCheckIn} style={{ gap: 6 }}><LogIn size={13} /> Check-in</button>
-              )}
-              {(selected.status === 'CHECKED_IN' || selected.status === 'RESERVADA') && !selected.saleId && (
-                <button className="btn btn-primary btn-sm" onClick={openCheckout} style={{ gap: 6 }}><CreditCard size={13} /> Cobrar</button>
-              )}
-              {(selected.status === 'RESERVADA' || selected.status === 'CHECKED_IN') && (
-                <button className="btn btn-danger btn-sm" onClick={askCancelReservation} style={{ gap: 6 }}><LogOut size={13} /> Cancelar reserva</button>
-              )}
-              {!selected.saleId && (
-                <button className="btn btn-ghost btn-sm" onClick={askDeleteReservation} style={{ color: 'var(--danger)' }}><Trash2 size={13} /></button>
-              )}
             </div>
           </div>
         </div>
@@ -920,41 +928,43 @@ export default function HoteleriaPage() {
       {/* Modal: cobrar estadía */}
       {checkoutOpen && selected && (
         <div className="modal-overlay" onClick={() => setCheckoutOpen(false)}>
-          <div className="modal" style={{ padding: 24, maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Cobrar estadía</div>
               <button className="btn btn-ghost btn-sm" onClick={() => setCheckoutOpen(false)}><X size={15} /></button>
             </div>
 
-            <div style={{ background: 'var(--surface2)', borderRadius: 6, padding: '10px 12px', marginBottom: 14, fontSize: 13 }}>
-              Total a cobrar: <strong style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(selected.totalAmount)}</strong>
-            </div>
+            <div className="modal-body">
+              <div style={{ background: 'var(--surface2)', borderRadius: 6, padding: '10px 12px', marginBottom: 14, fontSize: 13 }}>
+                Total a cobrar: <strong style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(selected.totalAmount)}</strong>
+              </div>
 
-            <div className="form-group">
-              <label className="form-label">Sucursal / depósito</label>
-              <select value={checkoutForm.businessLocationId} onChange={(e) => setCheckoutForm((f) => ({ ...f, businessLocationId: e.target.value }))} style={{ width: '100%' }}>
-                <option value="">Seleccionar...</option>
-                {businessLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </div>
-
-            <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Método de pago</label>
-                <select value={checkoutForm.paymentMethod} onChange={(e) => setCheckoutForm((f) => ({ ...f, paymentMethod: e.target.value as PaymentMethod }))} style={{ width: '100%' }}>
-                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
+                <label className="form-label">Sucursal / depósito</label>
+                <select value={checkoutForm.businessLocationId} onChange={(e) => setCheckoutForm((f) => ({ ...f, businessLocationId: e.target.value }))} style={{ width: '100%' }}>
+                  <option value="">Seleccionar...</option>
+                  {businessLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">Comprobante</label>
-                <select value={checkoutForm.receiptType} onChange={(e) => setCheckoutForm((f) => ({ ...f, receiptType: e.target.value as ReceiptType }))} style={{ width: '100%' }}>
-                  <option value="TICKET">Ticket</option>
-                  <option value="FACTURA">Factura</option>
-                </select>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Método de pago</label>
+                  <select value={checkoutForm.paymentMethod} onChange={(e) => setCheckoutForm((f) => ({ ...f, paymentMethod: e.target.value as PaymentMethod }))} style={{ width: '100%' }}>
+                    {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Comprobante</label>
+                  <select value={checkoutForm.receiptType} onChange={(e) => setCheckoutForm((f) => ({ ...f, receiptType: e.target.value as ReceiptType }))} style={{ width: '100%' }}>
+                    <option value="TICKET">Ticket</option>
+                    <option value="FACTURA">Factura</option>
+                  </select>
+                </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <div className="modal-footer">
               <button className="btn btn-secondary btn-sm" onClick={() => setCheckoutOpen(false)}>Cancelar</button>
               <button className="btn btn-primary btn-sm" onClick={submitCheckout} disabled={saving} style={{ gap: 6 }}>
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><CreditCard size={13} /> Confirmar cobro</>}
