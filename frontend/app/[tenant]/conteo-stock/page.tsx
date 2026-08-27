@@ -240,7 +240,7 @@ export default function ConteoStockPage() {
                             placeholder={String(system)}
                             onChange={(e) => setDirtyItems((d) => ({ ...d, [it.productId]: e.target.value }))}
                             onBlur={(e) => updateItem(it.productId, e.target.value)}
-                            style={{ width: 80, fontSize: 13 }}
+                            style={{ width: 80 }}
                           />
                         ) : (
                           <span style={{ fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{counted}</span>

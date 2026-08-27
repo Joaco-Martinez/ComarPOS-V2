@@ -115,9 +115,9 @@ export default function FinanzasPage() {
 
       {/* Filters */}
       <div className="filter-bar" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150, fontSize: 13 }} />
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150, fontSize: 13 }} />
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13, width: 150 }}>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150 }} />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150 }} />
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ width: 150 }}>
           <option value="">Todos</option>
           <option value="INGRESO">Ingresos</option>
           <option value="EGRESO">Egresos</option>

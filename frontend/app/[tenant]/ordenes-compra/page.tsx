@@ -165,7 +165,7 @@ export default function OrdenesCompraPage() {
     >
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 13 }}>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{}}>
           <option value="">Todos los estados</option>
           {(Object.keys(statusLabel) as Status[]).map((s) => (
             <option key={s} value={s}>{statusLabel[s]}</option>
@@ -258,19 +258,19 @@ export default function OrdenesCompraPage() {
             <div className="grid-responsive" style={{ gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Proveedor</label>
-                <select value={form.supplierId} onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))} style={{ width: '100%', fontSize: 13 }}>
+                <select value={form.supplierId} onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))} style={{ width: '100%' }}>
                   <option value="">Sin proveedor</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name ?? s.nombre}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Fecha esperada</label>
-                <input type="date" value={form.expectedDate} onChange={(e) => setForm((f) => ({ ...f, expectedDate: e.target.value }))} style={{ width: '100%', fontSize: 13 }} />
+                <input type="date" value={form.expectedDate} onChange={(e) => setForm((f) => ({ ...f, expectedDate: e.target.value }))} style={{ width: '100%' }} />
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Notas</label>
-              <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} style={{ width: '100%', fontSize: 13, resize: 'vertical' }} />
+              <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} style={{ width: '100%', resize: 'vertical' }} />
             </div>
 
             {/* Items */}
@@ -283,12 +283,12 @@ export default function OrdenesCompraPage() {
               <div className="line-item-scroll">
                 {items.map((it, i) => (
                   <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 32px', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                    <select value={it.productId} onChange={(e) => updateItem(i, 'productId', e.target.value)} style={{ fontSize: 13 }}>
+                    <select value={it.productId} onChange={(e) => updateItem(i, 'productId', e.target.value)} style={{}}>
                       <option value="">Producto...</option>
                       {products.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.nombre}</option>)}
                     </select>
-                    <input type="number" min={1} placeholder="Cant." value={it.quantityOrdered} onChange={(e) => updateItem(i, 'quantityOrdered', e.target.value)} style={{ fontSize: 13 }} />
-                    <input type="number" min={0} placeholder="Costo u." value={it.unitCost} onChange={(e) => updateItem(i, 'unitCost', e.target.value)} style={{ fontSize: 13 }} />
+                    <input type="number" min={1} placeholder="Cant." value={it.quantityOrdered} onChange={(e) => updateItem(i, 'quantityOrdered', e.target.value)} style={{}} />
+                    <input type="number" min={0} placeholder="Costo u." value={it.unitCost} onChange={(e) => updateItem(i, 'unitCost', e.target.value)} style={{}} />
                     <button className="btn btn-ghost btn-sm" onClick={() => removeItem(i)}><X size={13} /></button>
                   </div>
                 ))}
@@ -359,7 +359,7 @@ export default function OrdenesCompraPage() {
                             placeholder="0"
                             value={receiveItems[it.productId] ?? ''}
                             onChange={(e) => setReceiveItems((r) => ({ ...r, [it.productId]: e.target.value }))}
-                            style={{ width: 70, fontSize: 13 }}
+                            style={{ width: 70 }}
                           />
                         )}
                       </td>

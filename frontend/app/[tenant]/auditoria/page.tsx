@@ -106,9 +106,9 @@ export default function AuditoriaPage() {
           value={entity}
           onChange={(e) => setEntity(e.target.value)}
           placeholder="Entidad (ej: Sale, Product…)"
-          style={{ fontSize: 13, width: 190 }}
+          style={{ width: 190 }}
         />
-        <select value={action} onChange={(e) => setAction(e.target.value)} style={{ fontSize: 13, width: 140 }}>
+        <select value={action} onChange={(e) => setAction(e.target.value)} style={{ width: 140 }}>
           <option value="">Todas las acciones</option>
           <option value="CREATE">Crear</option>
           <option value="UPDATE">Actualizar</option>
@@ -118,13 +118,13 @@ export default function AuditoriaPage() {
           type="date"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
-          style={{ fontSize: 13, width: 150 }}
+          style={{ width: 150 }}
         />
         <input
           type="date"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          style={{ fontSize: 13, width: 150 }}
+          style={{ width: 150 }}
         />
         <div style={{ position: 'relative' }}>
           <User size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
@@ -132,7 +132,7 @@ export default function AuditoriaPage() {
             value={userFilter}
             onChange={(e) => setUserFilter(e.target.value)}
             placeholder="Filtrar por usuario…"
-            style={{ fontSize: 13, width: 180, paddingLeft: 28 }}
+            style={{ width: 180, paddingLeft: 28 }}
           />
         </div>
       </div>

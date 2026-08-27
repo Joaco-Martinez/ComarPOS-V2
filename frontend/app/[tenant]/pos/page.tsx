@@ -703,7 +703,7 @@ export default function PosPage() {
                     value={clientSearch}
                     onChange={(e) => setClientSearch(e.target.value)}
                     placeholder="Buscar cliente..."
-                    style={{ paddingLeft: 28, fontSize: 12 }}
+                    style={{ paddingLeft: 28 }}
                     autoFocus
                   />
                 </div>
@@ -778,7 +778,7 @@ export default function PosPage() {
                 <select
                   value={deliveryLocationId}
                   onChange={(e) => { setDeliveryLocationId(e.target.value); setDeliveryCalc(null); }}
-                  style={{ fontSize: 11, padding: '4px 6px' }}
+                  style={{ padding: '4px 6px' }}
                 >
                   {businessLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
@@ -877,7 +877,7 @@ export default function PosPage() {
                 onChange={(e) => setDiscountValue(e.target.value)}
                 placeholder={discountType === 'PERCENTAGE' ? 'Descuento %' : 'Descuento $'}
                 type="number" min="0" step="any"
-                style={{ fontSize: 12, padding: '5px 9px' }}
+                style={{ padding: '5px 9px' }}
               />
             </div>
 
@@ -946,7 +946,7 @@ export default function PosPage() {
                   <select
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                    style={{ fontSize: 12, padding: '6px 8px' }}
+                    style={{ padding: '6px 8px' }}
                   >
                     {ALL_METHODS.map((m) => (
                       <option key={m.method} value={m.method}>{m.label}</option>
@@ -963,7 +963,7 @@ export default function PosPage() {
                       <select
                         value={pay.method}
                         onChange={(e) => updatePayment(idx, 'method', e.target.value)}
-                        style={{ fontSize: 11, padding: '4px 6px', flex: 1 }}
+                        style={{ padding: '4px 6px', flex: 1 }}
                       >
                         {ALL_METHODS.map((m) => (
                           <option key={m.method} value={m.method}>{m.label}</option>
@@ -974,7 +974,7 @@ export default function PosPage() {
                         value={pay.amount || ''}
                         onChange={(e) => updatePayment(idx, 'amount', Number(e.target.value))}
                         placeholder={idx === 0 ? fmtMoney(total).replace('$', '') : '0'}
-                        style={{ fontSize: 12, padding: '4px 8px', width: 80, flexShrink: 0 }}
+                        style={{ padding: '4px 8px', width: 80, flexShrink: 0 }}
                       />
                       {payments.length > 1 && (
                         <button onClick={() => removePayment(idx)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', padding: 3 }}>

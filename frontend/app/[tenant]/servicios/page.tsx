@@ -333,13 +333,13 @@ export default function ServiciosPage() {
       }
     >
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 13 }}>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{}}>
           <option value="">Todos los estados</option>
           {(Object.keys(STATUS_LABEL) as RepairOrderStatus[]).map((s) => (
             <option key={s} value={s}>{STATUS_LABEL[s]}</option>
           ))}
         </select>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por cliente, equipo o falla..." style={{ fontSize: 13, minWidth: 240 }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por cliente, equipo o falla..." style={{ minWidth: 240 }} />
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -628,13 +628,13 @@ export default function ServiciosPage() {
                       />
                     </div>
                   ) : (
-                    <input value={itemForm.description} onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))} placeholder="Descripción (ej. cambio de pantalla)" style={{ fontSize: 13 }} />
+                    <input value={itemForm.description} onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))} placeholder="Descripción (ej. cambio de pantalla)" style={{}} />
                   )}
-                  <input type="number" min={1} value={itemForm.quantity} onChange={(e) => setItemForm((f) => ({ ...f, quantity: e.target.value }))} placeholder="Cant." style={{ fontSize: 13 }} />
-                  <select value={itemForm.ivaRate} onChange={(e) => setItemForm((f) => ({ ...f, ivaRate: e.target.value }))} style={{ fontSize: 13 }}>
+                  <input type="number" min={1} value={itemForm.quantity} onChange={(e) => setItemForm((f) => ({ ...f, quantity: e.target.value }))} placeholder="Cant." style={{}} />
+                  <select value={itemForm.ivaRate} onChange={(e) => setItemForm((f) => ({ ...f, ivaRate: e.target.value }))} style={{}}>
                     {IVA_RATES.map((r) => <option key={r} value={r}>{fmtIvaRate(r)}</option>)}
                   </select>
-                  <input type="number" min={0} value={itemForm.unitPrice} onChange={(e) => setItemForm((f) => ({ ...f, unitPrice: e.target.value }))} placeholder="Precio" style={{ fontSize: 13 }} />
+                  <input type="number" min={0} value={itemForm.unitPrice} onChange={(e) => setItemForm((f) => ({ ...f, unitPrice: e.target.value }))} placeholder="Precio" style={{}} />
                   <button className="btn btn-secondary btn-sm" onClick={addItem} disabled={saving} style={{ gap: 5 }}><Plus size={12} /> Agregar</button>
                 </div>
               </div>

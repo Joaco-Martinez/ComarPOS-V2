@@ -64,7 +64,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => { setOpen(true); setQuery(''); }}
           placeholder={placeholder}
-          style={{ paddingLeft: 30, paddingRight: 28, fontSize: 13, width: '100%' }}
+          style={{ paddingLeft: 30, paddingRight: 28, width: '100%' }}
         />
         {value ? (
           <button

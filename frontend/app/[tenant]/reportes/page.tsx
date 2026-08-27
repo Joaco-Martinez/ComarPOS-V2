@@ -332,8 +332,8 @@ export default function ReportesPage() {
     >
       {/* Date filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150, fontSize: 13 }} />
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150, fontSize: 13 }} />
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150 }} />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150 }} />
         <button onClick={() => { setFrom(firstDayOfMonthAR()); setTo(todayInputAR()); }} className="btn btn-secondary btn-sm">Este mes</button>
       </div>
 

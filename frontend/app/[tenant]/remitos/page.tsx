@@ -160,7 +160,7 @@ export default function RemitosPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ fontSize: 13, minWidth: 140 }}
+          style={{ minWidth: 140 }}
         >
           <option value="">Todos los estados</option>
           <option value="PENDING">Pendiente</option>
@@ -308,7 +308,7 @@ export default function RemitosPage() {
                 placeholder="Ingresá el ID de la venta"
                 value={saleId}
                 onChange={(e) => setSaleId(e.target.value)}
-                style={{ width: '100%', fontSize: 13 }}
+                style={{ width: '100%' }}
                 autoFocus
               />
             </div>

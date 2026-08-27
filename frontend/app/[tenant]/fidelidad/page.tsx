@@ -99,7 +99,7 @@ export default function FidelidadPage() {
         <div className={selectedClient ? 'hidden md:flex' : 'flex'} style={{ flexDirection: 'column', gap: 8, minHeight: 0 }}>
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente..." style={{ paddingLeft: 30, fontSize: 13 }} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente..." style={{ paddingLeft: 30 }} />
           </div>
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {loading ? (

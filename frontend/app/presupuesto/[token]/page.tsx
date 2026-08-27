@@ -223,7 +223,7 @@ export default function PresupuestoPublicoPage() {
           </div>
           {rejecting && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Contanos por qué (opcional)" rows={2} style={{ width: '100%', resize: 'vertical', fontSize: 13 }} />
+              <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Contanos por qué (opcional)" rows={2} style={{ width: '100%', resize: 'vertical' }} />
               <button className="btn btn-danger btn-sm" onClick={reject} disabled={acting}>Confirmar rechazo</button>
             </div>
           )}

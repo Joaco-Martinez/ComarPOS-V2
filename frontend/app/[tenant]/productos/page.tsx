@@ -175,7 +175,7 @@ export default function ProductosPage() {
       {/* Filters */}
       <div style={{ marginBottom: 16 }}>
         <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Buscar por nombre o SKU...">
-          <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} style={{ fontSize: 13, width: 180 }}>
+          <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} style={{ width: 180 }}>
             <option value="">Todas las categorías</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>

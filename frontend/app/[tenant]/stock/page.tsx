@@ -208,7 +208,7 @@ export default function StockPage() {
           <div className="filter-bar" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
             <div style={{ position: 'relative', flex: '0 0 240px' }}>
               <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar producto..." style={{ paddingLeft: 30, fontSize: 13 }} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar producto..." style={{ paddingLeft: 30 }} />
             </div>
             <SearchableSelect
               value={catFilter}
@@ -360,8 +360,8 @@ export default function StockPage() {
       {tab === 'movements' && (
         <>
           <div className="filter-bar" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-            <input type="date" value={movFrom} onChange={(e) => setMovFrom(e.target.value)} style={{ fontSize: 13, width: 150 }} />
-            <input type="date" value={movTo} onChange={(e) => setMovTo(e.target.value)} style={{ fontSize: 13, width: 150 }} />
+            <input type="date" value={movFrom} onChange={(e) => setMovFrom(e.target.value)} style={{ width: 150 }} />
+            <input type="date" value={movTo} onChange={(e) => setMovTo(e.target.value)} style={{ width: 150 }} />
             {(movFrom || movTo) && (
               <button onClick={() => { setMovFrom(''); setMovTo(''); }} className="btn btn-ghost btn-sm" style={{ color: 'var(--text3)' }}>
                 <X size={13} /> Limpiar

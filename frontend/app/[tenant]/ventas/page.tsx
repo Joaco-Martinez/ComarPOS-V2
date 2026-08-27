@@ -394,15 +394,15 @@ export default function VentasPage() {
       {/* Filters */}
       <div style={{ marginBottom: 16 }}>
         <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Buscar..." collapsible>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150, fontSize: 13 }} />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150, fontSize: 13 }} />
-          <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 140, fontSize: 13 }}>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150 }} />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150 }} />
+          <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 140 }}>
             <option value="">Todos los estados</option>
             <option value="COMPLETED">Completada</option>
             <option value="PENDING">Pendiente</option>
             <option value="CANCELLED">Cancelada</option>
           </select>
-          <select value={receiptType} onChange={(e) => setReceiptType(e.target.value)} style={{ width: 140, fontSize: 13 }}>
+          <select value={receiptType} onChange={(e) => setReceiptType(e.target.value)} style={{ width: 140 }}>
             <option value="">Ticket y Factura</option>
             <option value="TICKET">Ticket</option>
             <option value="FACTURA">Factura</option>
@@ -723,13 +723,13 @@ export default function VentasPage() {
                         onChange={(e) => setEditItems((p) => p.map((x) => x.productId === it.productId
                           ? (it.saleUnit === 'KG' ? { ...x, quantityKg: Number(e.target.value) } : { ...x, quantity: Number(e.target.value) })
                           : x))}
-                        style={{ fontSize: 13 }}
+                        style={{}}
                       />
                       <input
                         type="number" min="0" step="any"
                         value={it.price}
                         onChange={(e) => setEditItems((p) => p.map((x) => x.productId === it.productId ? { ...x, price: Number(e.target.value) } : x))}
-                        style={{ fontSize: 13 }}
+                        style={{}}
                       />
                       <button onClick={() => removeEditItem(it.productId)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}>
                         <Trash2 size={13} />
@@ -744,7 +744,7 @@ export default function VentasPage() {
                 <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Agregar producto</div>
                 <div style={{ position: 'relative', marginBottom: 8 }}>
                   <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-                  <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)} placeholder="Buscar producto para agregar..." style={{ paddingLeft: 30, fontSize: 13 }} />
+                  <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)} placeholder="Buscar producto para agregar..." style={{ paddingLeft: 30 }} />
                 </div>
                 <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {loadingProducts ? (

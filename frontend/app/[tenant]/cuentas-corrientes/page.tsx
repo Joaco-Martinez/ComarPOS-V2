@@ -250,7 +250,7 @@ export default function CuentasCorrientesPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-            <input value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Buscar cliente..." style={{ paddingLeft: 30, fontSize: 13 }} />
+            <input value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Buscar cliente..." style={{ paddingLeft: 30 }} />
           </div>
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {loading ? (
@@ -390,7 +390,7 @@ export default function CuentasCorrientesPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-            <input value={supplierSearch} onChange={(e) => setSupplierSearch(e.target.value)} placeholder="Buscar proveedor..." style={{ paddingLeft: 30, fontSize: 13 }} />
+            <input value={supplierSearch} onChange={(e) => setSupplierSearch(e.target.value)} placeholder="Buscar proveedor..." style={{ paddingLeft: 30 }} />
           </div>
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {supplierLoading ? (

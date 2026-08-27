@@ -292,7 +292,7 @@ export default function DevolucionesPage() {
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text2)', marginBottom: 8 }}>1. Seleccioná la venta</div>
                 <div style={{ position: 'relative', marginBottom: 8 }}>
                   <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-                  <input value={saleSearch} onChange={(e) => setSaleSearch(e.target.value)} placeholder="Buscar por cliente..." style={{ paddingLeft: 30, fontSize: 13 }} />
+                  <input value={saleSearch} onChange={(e) => setSaleSearch(e.target.value)} placeholder="Buscar por cliente..." style={{ paddingLeft: 30 }} />
                 </div>
                 {salesLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><div className="spinner" /></div>
@@ -346,7 +346,7 @@ export default function DevolucionesPage() {
                                     max={isKg ? item.quantityKg ?? undefined : item.quantity}
                                     value={isKg ? (sel?.quantityKg ?? '') : (sel?.quantity ?? '')}
                                     onChange={(e) => setItemQty(item.id, isKg ? 'quantityKg' : 'quantity', e.target.value)}
-                                    style={{ width: 80, fontSize: 12, textAlign: 'right' }}
+                                    style={{ width: 80, textAlign: 'right' }}
                                   />
                                 </td>
                                 <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700 }}>
@@ -382,14 +382,14 @@ export default function DevolucionesPage() {
                                     type="number" min="0" step={it.saleUnit === 'KG' ? '0.001' : '1'}
                                     value={it.saleUnit === 'KG' ? it.quantityKg : it.quantity}
                                     onChange={(e) => setExchangeField(it.key, it.saleUnit === 'KG' ? 'quantityKg' : 'quantity', e.target.value)}
-                                    style={{ width: 70, fontSize: 12, textAlign: 'right' }}
+                                    style={{ width: 70, textAlign: 'right' }}
                                   />
                                 </td>
                                 <td style={{ textAlign: 'right' }}>
                                   <input
                                     type="number" min="0" value={it.price}
                                     onChange={(e) => setExchangeField(it.key, 'price', e.target.value)}
-                                    style={{ width: 80, fontSize: 12, textAlign: 'right' }}
+                                    style={{ width: 80, textAlign: 'right' }}
                                   />
                                 </td>
                                 <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700 }}>

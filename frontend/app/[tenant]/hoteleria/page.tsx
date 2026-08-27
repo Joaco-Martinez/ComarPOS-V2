@@ -508,7 +508,7 @@ export default function HoteleriaPage() {
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
             <button className="btn btn-ghost btn-sm" onClick={() => setRangeStart(addDaysStr(rangeStart, -CALENDAR_DAYS))}><ChevronLeft size={14} /></button>
-            <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} style={{ fontSize: 13 }} />
+            <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} style={{ width: 150 }} />
             <button className="btn btn-ghost btn-sm" onClick={() => setRangeStart(addDaysStr(rangeStart, CALENDAR_DAYS))}><ChevronRight size={14} /></button>
             <button className="btn btn-secondary btn-sm" onClick={() => setRangeStart(todayInputAR())}>Hoy</button>
             <button className="btn btn-ghost btn-sm" onClick={loadAvailability}><RefreshCcw size={13} /></button>

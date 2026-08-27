@@ -109,9 +109,9 @@ export default function FacturacionPage() {
       </div>
 
       <div className="filter-bar" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150, fontSize: 13 }} />
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150, fontSize: 13 }} />
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 13, width: 160 }}>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150 }} />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150 }} />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ width: 160 }}>
           <option value="">Todos los estados</option>
           <option value="INVOICED">Con CAE</option>
           <option value="PENDING">Sin CAE</option>
