@@ -615,59 +615,52 @@ export default function HoteleriaPage() {
               <button className="btn btn-ghost btn-sm" onClick={() => setRoomTypesModalOpen(false)}><X size={15} /></button>
             </div>
 
-            <div className="table-wrap" style={{ marginBottom: 14 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Nombre', 'Tarifa/noche', 'Capacidad', ''].map((h) => (
-                      <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {roomTypes.map((rt) => (
-                    <tr key={rt.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '8px 10px', color: 'var(--text)' }}>{rt.name}</td>
-                      <td style={{ padding: '8px 10px', fontFamily: 'var(--mono)' }}>{fmtMoney(rt.nightlyRate)}</td>
-                      <td style={{ padding: '8px 10px', fontFamily: 'var(--mono)' }}>{rt.capacity}</td>
-                      <td style={{ padding: '8px 10px', display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost btn-xs" onClick={() => editRoomType(rt)}>Editar</button>
-                        <button className="btn btn-ghost btn-xs" onClick={() => removeRoomType(rt)} style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
-                      </td>
-                    </tr>
-                  ))}
-                  {roomTypes.length === 0 && (
-                    <tr><td colSpan={4} style={{ padding: 16, textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>Sin tipos de habitación todavía</td></tr>
-                  )}
-                </tbody>
-              </table>
+            {/* Lista tipo flex en vez de <table> -- con solo 3 datos cortos + 2
+                botones por fila no hace falta una grilla rigida que en
+                mobile termina recortando la columna de acciones; esto envuelve
+                solo, sin scroll horizontal. */}
+            <div style={{ marginBottom: 14 }}>
+              {roomTypes.length === 0 ? (
+                <div style={{ padding: 16, textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>Sin tipos de habitación todavía</div>
+              ) : (
+                roomTypes.map((rt) => (
+                  <div key={rt.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 2px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{rt.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{fmtMoney(rt.nightlyRate)}/noche · cap. {rt.capacity}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      <button className="btn btn-ghost btn-xs" onClick={() => editRoomType(rt)}>Editar</button>
+                      <button className="btn btn-ghost btn-xs" onClick={() => removeRoomType(rt)} style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <div style={{ background: 'var(--surface2)', borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>
                 {editingRoomTypeId ? 'Editar tipo' : 'Nuevo tipo de habitación'}
               </div>
-              <div className="line-item-scroll">
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, alignItems: 'end' }}>
-                  <div>
-                    <label className="form-label">Nombre</label>
-                    <input value={roomTypeForm.name} onChange={(e) => setRoomTypeForm((f) => ({ ...f, name: e.target.value }))} placeholder="Individual, Doble, Suite..." style={{ width: '100%', fontSize: 13 }} />
-                  </div>
-                  <div>
-                    <label className="form-label">Tarifa/noche</label>
-                    <input type="number" min={0} value={roomTypeForm.nightlyRate} onChange={(e) => setRoomTypeForm((f) => ({ ...f, nightlyRate: e.target.value }))} style={{ width: '100%', fontSize: 13 }} />
-                  </div>
-                  <div>
-                    <label className="form-label">Capacidad</label>
-                    <input type="number" min={1} value={roomTypeForm.capacity} onChange={(e) => setRoomTypeForm((f) => ({ ...f, capacity: e.target.value }))} style={{ width: '100%', fontSize: 13 }} />
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {editingRoomTypeId && <button className="btn btn-ghost btn-sm" onClick={resetRoomTypeForm}>Cancelar</button>}
-                    <button className="btn btn-primary btn-sm" onClick={submitRoomType} disabled={saving}>
-                      {editingRoomTypeId ? 'Guardar' : 'Agregar'}
-                    </button>
-                  </div>
+              <div className="form-group">
+                <label className="form-label">Nombre</label>
+                <input value={roomTypeForm.name} onChange={(e) => setRoomTypeForm((f) => ({ ...f, name: e.target.value }))} placeholder="Individual, Doble, Suite..." style={{ width: '100%' }} />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Tarifa/noche</label>
+                  <input type="number" min={0} value={roomTypeForm.nightlyRate} onChange={(e) => setRoomTypeForm((f) => ({ ...f, nightlyRate: e.target.value }))} style={{ width: '100%' }} />
                 </div>
+                <div className="form-group">
+                  <label className="form-label">Capacidad</label>
+                  <input type="number" min={1} value={roomTypeForm.capacity} onChange={(e) => setRoomTypeForm((f) => ({ ...f, capacity: e.target.value }))} style={{ width: '100%' }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                {editingRoomTypeId && <button className="btn btn-ghost btn-sm" onClick={resetRoomTypeForm}>Cancelar</button>}
+                <button className="btn btn-primary btn-sm" onClick={submitRoomType} disabled={saving}>
+                  {editingRoomTypeId ? 'Guardar' : 'Agregar'}
+                </button>
               </div>
             </div>
           </div>
