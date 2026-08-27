@@ -234,7 +234,14 @@ export default function PruebaGratisPage() {
               </button>
             </form>
 
-            <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text3)', marginTop: 18 }}>
+            <p style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--text3)', marginTop: 14, lineHeight: 1.5 }}>
+              Al crear tu cuenta aceptás los{' '}
+              <Link href="/terminos" style={{ color: 'var(--accent)' }}>términos</Link>
+              {' '}y la{' '}
+              <Link href="/privacidad" style={{ color: 'var(--accent)' }}>privacidad</Link>.
+            </p>
+
+            <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text3)', marginTop: 10 }}>
               ¿Ya tenés cuenta? <Link href="/login" style={{ color: 'var(--accent)', fontWeight: 600 }}>Iniciar sesión</Link>
             </p>
           </div>
