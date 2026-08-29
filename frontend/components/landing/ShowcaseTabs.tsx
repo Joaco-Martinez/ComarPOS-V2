@@ -64,21 +64,26 @@ export default function ShowcaseTabs() {
               <div className="showcase-tab-icon"><Icon size={17} /></div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>{label}</div>
-                {i === active && (
-                  <div style={{ marginTop: 8, animation: 'fadeIn 0.3s ease' }}>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.35 }}>
-                      {heading}
-                    </p>
-                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 10 }}>{desc}</p>
-                    <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {bullets.map((b) => (
-                        <li key={b} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12.5, color: 'var(--text2)' }}>
-                          <CheckCircle2 size={13} style={{ color: 'var(--success)', flexShrink: 0, marginTop: 2 }} /> {b}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {/* Las 4 pestañas se renderizan siempre (antes solo la
+                    activa se montaba via `i === active &&`) -- un crawler
+                    sin JS solo veía el heading/desc/bullets de la primera.
+                    display:none oculta visualmente las inactivas sin
+                    sacarlas del HTML, y como el toggle es none->block (no
+                    unmount/remount), la animation sigue reproduciendose
+                    igual que antes al cambiar de pestaña. */}
+                <div style={{ marginTop: 8, display: i === active ? 'block' : 'none', animation: i === active ? 'fadeIn 0.3s ease' : undefined }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.35 }}>
+                    {heading}
+                  </h3>
+                  <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 10 }}>{desc}</p>
+                  <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {bullets.map((b) => (
+                      <li key={b} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12.5, color: 'var(--text2)' }}>
+                        <CheckCircle2 size={13} style={{ color: 'var(--success)', flexShrink: 0, marginTop: 2 }} /> {b}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </button>
           ))}

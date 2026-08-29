@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isResolvableAppPath } from '@/lib/routeGuard';
 import {
-  MARKDOWN_NEGOTIATED_PATHS, appendVaryAccept, markdownRouteFor, preferredType,
+  MARKDOWN_NEGOTIATED_PATHS, appendVaryAccept, markdownRouteFor, notFoundMarkdownBody, preferredType,
 } from '@/lib/contentNegotiation';
 
 // Dominio(s) donde "/" sirve la landing de ventas en vez del sistema.
@@ -179,6 +179,20 @@ export function proxy(req: NextRequest) {
   // "Is Agentic": un agente probando /some-path-that-does-not-exist veia un
   // 200 y concluia que la ruta existe.
   if (!isResolvableAppPath(pathname)) {
+    // Para un agente que pide Accept: text/markdown, el 404 tambien negocia
+    // -- le devolvemos un cuerpo markdown corto con links al sitemap/llms.txt
+    // (ver lib/contentNegotiation.ts#notFoundMarkdownBody) en vez de forzarlo
+    // a parsear el HTML de not-found.tsx. Para un navegador normal (Accept:
+    // text/html o sin header) no cambia nada: sigue de largo y Next renderiza
+    // app/not-found.tsx, igual que antes.
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      const chosen = preferredType(req.headers.get('accept'));
+      if (chosen === 'text/markdown') {
+        const headers = new Headers({ 'Content-Type': 'text/markdown; charset=utf-8' });
+        appendVaryAccept(headers);
+        return new NextResponse(notFoundMarkdownBody(pathname), { status: 404, headers });
+      }
+    }
     return NextResponse.next();
   }
 

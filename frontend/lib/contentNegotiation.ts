@@ -91,3 +91,28 @@ export const MARKDOWN_NEGOTIATED_PATHS = new Set(['/', '/about', '/contact', '/p
 export function markdownRouteFor(pathname: string): string {
   return pathname === '/' ? '/api/markdown' : `/api/markdown${pathname}`;
 }
+
+export const SITE_URL = 'https://www.comarpos.com';
+
+// Cuerpo markdown del 404 para un agente que pidio Accept: text/markdown a
+// un path que ninguna page.tsx resuelve (ver lib/routeGuard.ts) -- le da
+// links por donde recuperarse en vez de un callejon sin salida, siguiendo
+// la recomendacion de la auditoria "Is Agentic" ("point agents at your
+// sitemap, llms.txt, or docs index"). El 404 en HTML (para navegadores)
+// sigue siendo app/not-found.tsx, sin cambios.
+export function notFoundMarkdownBody(pathname: string): string {
+  return [
+    '# 404 — Not Found',
+    '',
+    `\`${pathname}\` does not exist on this site.`,
+    '',
+    'Where to look next:',
+    '',
+    `- [Home](${SITE_URL}/)`,
+    `- [Sitemap](${SITE_URL}/sitemap.xml)`,
+    `- [llms.txt](${SITE_URL}/llms.txt)`,
+    `- [About](${SITE_URL}/about)`,
+    `- [Contact](${SITE_URL}/contact)`,
+    '',
+  ].join('\n');
+}

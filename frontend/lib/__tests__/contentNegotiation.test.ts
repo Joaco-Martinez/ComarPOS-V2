@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  appendVaryAccept, markdownRouteFor, preferredType,
+  appendVaryAccept, markdownRouteFor, notFoundMarkdownBody, preferredType,
 } from '../contentNegotiation';
 
 describe('preferredType', () => {
@@ -69,5 +69,22 @@ describe('markdownRouteFor', () => {
     expect(markdownRouteFor('/about')).toBe('/api/markdown/about');
     expect(markdownRouteFor('/contact')).toBe('/api/markdown/contact');
     expect(markdownRouteFor('/privacy')).toBe('/api/markdown/privacy');
+  });
+});
+
+describe('notFoundMarkdownBody', () => {
+  it('starts with a markdown H1', () => {
+    expect(notFoundMarkdownBody('/some-path')).toMatch(/^# 404/);
+  });
+
+  it('echoes the requested path', () => {
+    expect(notFoundMarkdownBody('/some-random-path')).toContain('/some-random-path');
+  });
+
+  it('links to the sitemap and llms.txt so an agent can recover', () => {
+    const body = notFoundMarkdownBody('/x');
+    expect(body).toContain('](https://www.comarpos.com/sitemap.xml)');
+    expect(body).toContain('](https://www.comarpos.com/llms.txt)');
+    expect(body).toContain('](https://www.comarpos.com/)');
   });
 });
