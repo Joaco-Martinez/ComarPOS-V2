@@ -517,6 +517,40 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
   .pos-price-btn { padding: 4px 6px !important; }
 }
 
+/* --- POS price mode (mobile): un solo toggle Minorista/Mayorista arriba de
+   la grilla en vez de 2 botones de precio por tarjeta -- reemplaza
+   .pos-price-grid (que queda solo para desktop/tablet) por .pos-price-mobile,
+   un unico boton por tarjeta segun el toggle. --- */
+.pos-price-seg { display: none; }
+.pos-price-mobile { display: none; }
+@media (max-width: 767px) {
+  .pos-price-seg {
+    display: flex; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 14px; padding: 4px; gap: 4px; flex-shrink: 0;
+  }
+  .pos-price-seg-btn {
+    flex: 1; text-align: center; padding: 9px 6px; border-radius: 11px;
+    font-size: 12.5px; font-weight: 700; border: none; background: none; color: var(--text2);
+  }
+  .pos-price-seg-btn.active { background: var(--m-gradient); color: #fff; box-shadow: var(--m-shadow); }
+
+  .pos-price-grid { display: none !important; }
+  .pos-price-mobile { display: block; }
+}
+
+/* --- POS cart steps (mobile): el bottom-sheet del carrito se separa en 2
+   pasos -- "items" (cliente + lista de productos) y "checkout" (entrega,
+   descuento, resumen, metodo de pago, confirmar) -- en vez de mostrar todo
+   junto. En desktop el sidebar sigue mostrando todo de una, sin pasos. */
+.step-continue-btn { display: none; }
+.step-back-btn { display: none; }
+@media (max-width: 767px) {
+  .pos-cart[data-step="items"] .step-continue-btn { display: flex; }
+  .pos-cart[data-step="checkout"] .step-back-btn { display: inline-flex; }
+  .pos-cart[data-step="checkout"] .step-items-only { display: none !important; }
+  .pos-cart[data-step="items"] .step-checkout-only { display: none !important; }
+}
+
 .pos-cart-wrap { }
 @media (max-width: 767px) {
   .pos-cart-wrap {

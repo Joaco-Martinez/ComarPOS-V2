@@ -181,7 +181,6 @@ export default function UsuariosPage() {
                 <select value={form.role} onChange={f('role')}>
                   <option value="EMPLEADO">Empleado</option>
                   <option value="ADMIN">Administrador</option>
-                  <option value="CLIENTE">Cliente</option>
                 </select>
               </div>
             </div>

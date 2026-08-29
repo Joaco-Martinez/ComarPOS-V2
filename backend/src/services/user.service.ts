@@ -195,7 +195,7 @@ const userSelect = {
 export const userService = {
   async getAll() {
     return prisma.user.findMany({
-      where: { ...tenantScope() },
+      where: { role: { not: Role.CLIENTE }, ...tenantScope() },
       orderBy: { createdAt: "desc" },
       select: userSelect,
     });

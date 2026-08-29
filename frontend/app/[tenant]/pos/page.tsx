@@ -9,7 +9,7 @@ import api from '@/lib/api';
 import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, Product, ProductCategory, SalePayment } from '@/types';
 import { categoryName, clientName, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
 import {
-  AlertTriangle, Check, Minus, Package, Plus, RefreshCcw,
+  AlertTriangle, Check, ChevronLeft, Minus, Package, Plus, RefreshCcw,
   ScanBarcode, Search, ShoppingCart, Trash2, X, User, Percent,
   DollarSign, CreditCard, Banknote, Smartphone, Truck, MapPin, Warehouse,
 } from 'lucide-react';
@@ -69,6 +69,8 @@ export default function PosPage() {
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [showMobileCart, setShowMobileCart] = useState(false);
+  const [mobileCartStep, setMobileCartStep] = useState<'items' | 'checkout'>('items');
+  const [mobilePriceMode, setMobilePriceMode] = useState<QuickPriceType>('price');
 
   const [skuScannerOpen, setSkuScannerOpen] = useState(false);
   const [scannerLoading, setScannerLoading] = useState(false);
@@ -406,6 +408,7 @@ export default function PosPage() {
     setDeliveryMethod('PICKUP');
     setDeliveryCalc(null);
     setDeliveryError('');
+    setMobileCartStep('items');
     searchRef.current?.focus();
   };
 
@@ -566,6 +569,22 @@ export default function PosPage() {
             ))}
           </div>
 
+          {/* Price mode toggle — mobile only; reemplaza los 2 botones de precio por tarjeta por un único selector global */}
+          <div className="pos-price-seg">
+            <button
+              onClick={() => setMobilePriceMode('price')}
+              className={`pos-price-seg-btn ${mobilePriceMode === 'price' ? 'active' : ''}`}
+            >
+              Vendiendo Minorista
+            </button>
+            <button
+              onClick={() => setMobilePriceMode('wholesalePrice')}
+              className={`pos-price-seg-btn ${mobilePriceMode === 'wholesalePrice' ? 'active' : ''}`}
+            >
+              Vendiendo Mayorista
+            </button>
+          </div>
+
           {/* Product grid */}
           <div className="pos-products-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8, alignContent: 'start' }}>
             {filtered.length === 0 ? (
@@ -654,6 +673,24 @@ export default function PosPage() {
                         </span>
                       </button>
                     </div>
+
+                    {/* Mobile: un solo botón de precio, según el toggle Minorista/Mayorista de arriba */}
+                    <div className="pos-price-mobile">
+                      <button
+                        onClick={() => addToCart(p, mobilePriceMode)}
+                        disabled={noStock}
+                        className={`btn ${mobilePriceMode === 'wholesalePrice' ? 'btn-cyan' : 'btn-secondary'} pos-price-btn`}
+                        style={{ width: '100%', flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
+                        title={mobilePriceMode === 'wholesalePrice' ? 'Agregar con precio mayorista' : 'Agregar con precio minorista'}
+                      >
+                        <span style={{ fontSize: 9, opacity: mobilePriceMode === 'wholesalePrice' ? 0.8 : 1, color: mobilePriceMode === 'wholesalePrice' ? undefined : 'var(--text3)' }}>
+                          {mobilePriceMode === 'wholesalePrice' ? 'Mayorista' : 'Minorista'}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--mono)' }}>
+                          {fmtMoney(mobilePriceMode === 'wholesalePrice' ? wholesalePrice : retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 );
               })
@@ -675,13 +712,20 @@ export default function PosPage() {
           className={`pos-cart-wrap ${showMobileCart ? 'open' : ''}`}
           onClick={() => setShowMobileCart(false)}
         >
-        <div className="pos-cart" onClick={(e) => e.stopPropagation()}>
+        <div className="pos-cart" data-step={mobileCartStep} onClick={(e) => e.stopPropagation()}>
           <div className="pos-cart-handle" />
           {/* Cart header */}
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => setMobileCartStep('items')}
+                className="btn btn-ghost btn-xs step-back-btn"
+                style={{ padding: 4 }}
+              >
+                <ChevronLeft size={16} />
+              </button>
               <ShoppingCart size={16} style={{ color: 'var(--accent)' }} />
-              <span style={{ fontSize: 13, fontWeight: 700 }}>Carrito</span>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>{mobileCartStep === 'checkout' ? 'Cobro' : 'Carrito'}</span>
               {cart.length > 0 && (
                 <span className="badge badge-blue" style={{ fontSize: 10 }}>{cart.length}</span>
               )}
@@ -707,7 +751,7 @@ export default function PosPage() {
           </div>
 
           {/* Client picker */}
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+          <div className="step-items-only" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
             {showClientPicker ? (
               <div>
                 <div style={{ position: 'relative', marginBottom: 6 }}>
@@ -768,7 +812,7 @@ export default function PosPage() {
           </div>
 
           {/* Delivery */}
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="step-checkout-only" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', gap: 4 }}>
               <button
                 onClick={() => setDeliveryMethodAndSync('PICKUP')}
@@ -815,7 +859,7 @@ export default function PosPage() {
           </div>
 
           {/* Cart items */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+          <div className="step-items-only" style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
             {cart.length === 0 ? (
               <div className="empty-state" style={{ padding: '32px 20px' }}>
                 <ShoppingCart size={28} />
@@ -873,8 +917,24 @@ export default function PosPage() {
             )}
           </div>
 
+          {/* Continuar al cobro — mobile only, paso "items" del carrito */}
+          <div className="step-continue-btn" style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)' }}>
+              <span>Subtotal</span>
+              <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{fmtMoney(total)}</span>
+            </div>
+            <button
+              onClick={() => setMobileCartStep('checkout')}
+              disabled={cart.length === 0}
+              className="btn btn-primary"
+              style={{ width: '100%', fontSize: 14, padding: '12px 16px' }}
+            >
+              Continuar al cobro
+            </button>
+          </div>
+
           {/* Totals + controls */}
-          <div style={{ borderTop: '1px solid var(--border)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="step-checkout-only" style={{ borderTop: '1px solid var(--border)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* Discount / surcharge */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <button
@@ -1071,7 +1131,7 @@ export default function PosPage() {
 
       {/* Mobile cart bar — siempre visible, fija abajo, por encima de todo */}
       {!showMobileCart && (
-        <button className="pos-mobile-bar" onClick={() => setShowMobileCart(true)}>
+        <button className="pos-mobile-bar" onClick={() => { setShowMobileCart(true); setMobileCartStep('items'); }}>
           <span className="pos-mobile-bar-left">
             <ShoppingCart size={18} />
             <span>
