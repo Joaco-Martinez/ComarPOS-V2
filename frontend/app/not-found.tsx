@@ -19,6 +19,14 @@ export default function NotFound() {
         <div style={{ marginTop: 28 }}>
           <Link href={href} className="btn btn-primary btn-sm">Ir al Dashboard</Link>
         </div>
+        {/* Pensado tambien para agentes/crawlers que llegan a un path que no
+            existe (ver frontend/lib/routeGuard.ts): les da un lugar por
+            donde seguir en vez de un callejon sin salida. */}
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 20 }}>
+          ¿Buscás algo en particular? Mirá el{' '}
+          <Link href="/sitemap.xml" style={{ color: 'var(--accent)' }}>mapa del sitio</Link>
+          {' '}o <Link href="/llms.txt" style={{ color: 'var(--accent)' }}>llms.txt</Link>.
+        </div>
       </div>
     </div>
   );

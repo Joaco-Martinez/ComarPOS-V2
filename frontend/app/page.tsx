@@ -13,7 +13,12 @@ export const metadata: Metadata = {
   title,
   description,
   alternates: { canonical: '/' },
-  openGraph: { title, description, url: 'https://www.comarpos.com' },
+  // El openGraph de este page.tsx reemplaza por completo (no mergea) al de
+  // app/layout.tsx -- por eso repite `type` explicito aca: si no, el layout
+  // ya define openGraph.type: 'website', pero al pisarlo este objeto sin el
+  // campo, og:type termina faltando en la home (asi lo marcaba la auditoria
+  // "Is Agentic": "3/4 metadata signals present - missing og:type").
+  openGraph: { title, description, url: 'https://www.comarpos.com', type: 'website' },
   twitter: { title, description },
 };
 

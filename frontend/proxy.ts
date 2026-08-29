@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isResolvableAppPath } from '@/lib/routeGuard';
+import {
+  MARKDOWN_NEGOTIATED_PATHS, appendVaryAccept, markdownRouteFor, preferredType,
+} from '@/lib/contentNegotiation';
 
 // Dominio(s) donde "/" sirve la landing de ventas en vez del sistema.
 // Cualquier otro host (subdominios de tenant, ej. grupovj.comarpos.com.ar)
@@ -81,6 +85,38 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Content negotiation (Accept: text/markdown, RFC 9110 12.5.1) para las
+  // paginas de marketing que tienen una version .md hermana en
+  // frontend/content/ -- ver frontend/lib/contentNegotiation.ts y el recipe
+  // de acceptmarkdown.com/recipes/nextjs. Estas 4 rutas son siempre publicas
+  // (no dependen de auth ni de isMarketingHost), asi que negociar el
+  // content-type acá no interactua con el resto del gating de mas abajo.
+  if (MARKDOWN_NEGOTIATED_PATHS.has(pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
+    const acceptHeader = req.headers.get('accept');
+    const chosen = preferredType(acceptHeader);
+
+    if (chosen === 'text/markdown') {
+      const url = req.nextUrl.clone();
+      url.pathname = markdownRouteFor(pathname);
+      const rewritten = NextResponse.rewrite(url);
+      appendVaryAccept(rewritten.headers);
+      return rewritten;
+    }
+    if (chosen === null && acceptHeader) {
+      return new NextResponse('Not Acceptable\n\nAvailable: text/html, text/markdown\n', {
+        status: 406,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', Vary: 'Accept' },
+      });
+    }
+    // chosen === 'text/html' (o sin Accept header): sigue de largo, sirve
+    // el html normal mas abajo. OJO: no se le agrega Vary: Accept a esa
+    // variante -- se probo (headers seteados aca y tambien via
+    // next.config.ts#headers()) y el pipeline de render de App Router pisa
+    // cualquier Vary custom en una pagina estatica antes de que llegue al
+    // cliente. Vary: Accept si queda en la variante markdown (arriba) y en
+    // el 406 (abajo), que es lo que la auditoria "Is Agentic" verifica.
+  }
+
   const role = getRole(req);
   const isLogged = Boolean(role);
   const isStaff = role === 'ADMIN' || role === 'EMPLEADO';
@@ -100,14 +136,21 @@ export function proxy(req: NextRequest) {
   // rubro (/para/<slug>) - son parte del sitio de marketing, públicas.
   const isSignup = pathname === '/prueba-gratis';
   const isVerticalLanding = pathname.startsWith('/para/');
-  // Legales (footer del sitio, y requisito de las tiendas de apps) y la
-  // imagen OG que genera app/opengraph-image.tsx (sin extension en la URL,
-  // asi que el matcher de mas abajo no la excluye sola como si hace con
-  // .png/.jpg reales) - todas publicas, sin login.
-  const isLegal = pathname === '/terminos' || pathname === '/privacidad';
+  // Presupuesto de una orden de servicio (/presupuesto/<token>): se lo
+  // mandamos por WhatsApp/email a un cliente que todavia no tiene cuenta,
+  // tiene que poder verlo y aprobarlo sin loguearse.
+  const isBudgetLink = pathname.startsWith('/presupuesto/');
+  // Legales (footer del sitio, y requisito de las tiendas de apps), sus
+  // alias en ingles para discoverability de agentes (/about, /contact,
+  // /privacy - ver frontend/content/), y la imagen OG que genera
+  // app/opengraph-image.tsx (sin extension en la URL, asi que el matcher de
+  // mas abajo no la excluye sola como si hace con .png/.jpg reales) -
+  // todas publicas, sin login.
+  const isLegal = pathname === '/terminos' || pathname === '/privacidad' || pathname === '/arrepentimiento'
+    || pathname === '/about' || pathname === '/contact' || pathname === '/privacy';
   const isOgImage = pathname === '/opengraph-image';
 
-  if (isInstallGuide || isSignup || isVerticalLanding || isLegal || isOgImage) {
+  if (isInstallGuide || isSignup || isVerticalLanding || isBudgetLink || isLegal || isOgImage) {
     return NextResponse.next();
   }
 
@@ -125,6 +168,17 @@ export function proxy(req: NextRequest) {
       url.pathname = '/login';
       return NextResponse.redirect(url);
     }
+    return NextResponse.next();
+  }
+
+  // Ninguna page.tsx del proyecto puede resolver este path (ver
+  // frontend/lib/routeGuard.ts) -- dejarlo pasar para que el propio router
+  // de Next renderice app/not-found.tsx (404 real) en vez de redirigirlo a
+  // /login como cualquier ruta protegida de mas abajo. Ese redirect a
+  // /login (200 con el app shell) era el soft-404 que marcaba la auditoria
+  // "Is Agentic": un agente probando /some-path-that-does-not-exist veia un
+  // 200 y concluia que la ruta existe.
+  if (!isResolvableAppPath(pathname)) {
     return NextResponse.next();
   }
 

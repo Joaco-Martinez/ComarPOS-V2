@@ -349,9 +349,9 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
                   </div>
                 )}
 
-                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 4, marginTop: plan.highlighted ? 6 : 0 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 4, marginTop: plan.highlighted ? 6 : 0 }}>
                   {plan.name}
-                </div>
+                </h3>
                 <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 18, minHeight: 32 }}>{plan.tagline}</p>
 
                 {launchActive && (
@@ -434,8 +434,8 @@ export default function LandingPage({ vertical }: { vertical?: Vertical } = {}) 
           {FAQS.map(({ q, a }, i) => (
             <Reveal key={q} delay={i * 0.05}>
               <details className="card" style={{ padding: '16px 20px' }}>
-                <summary style={{ fontSize: 14, fontWeight: 700, cursor: 'pointer', color: 'var(--text)' }}>
-                  {q}
+                <summary style={{ cursor: 'pointer' }}>
+                  <h3 style={{ display: 'inline', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{q}</h3>
                 </summary>
                 <p style={{ fontSize: 13, color: 'var(--text3)', lineHeight: 1.6, marginTop: 10 }}>{a}</p>
               </details>

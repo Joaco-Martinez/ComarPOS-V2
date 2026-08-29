@@ -62,6 +62,11 @@ export const viewport: Viewport = {
   themeColor: '#0C0F14',
 };
 
+// contactPoint/address con los mismos datos que ya son publicos en
+// /contact, /about y el footer del sitio (components/landing/siteConfig.ts,
+// components/landing/SiteFooter.tsx) -- no hay nada nuevo acá, solo se
+// estructura como datos para que los agentes puedan verificarlo sin tener
+// que parsear el footer.
 const ORG_JSON_LD = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
@@ -69,6 +74,20 @@ const ORG_JSON_LD = {
   url: SITE_URL,
   logo: `${SITE_URL}/brand/isologo.png`,
   description: SITE_DESCRIPTION,
+  email: 'info.comarpos@gmail.com',
+  contactPoint: {
+    '@type': 'ContactPoint',
+    contactType: 'customer support',
+    email: 'info.comarpos@gmail.com',
+    telephone: '+54-9-3546-541413',
+    areaServed: 'AR',
+    availableLanguage: ['es'],
+  },
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: 'Córdoba',
+    addressCountry: 'AR',
+  },
 };
 
 const WEBSITE_JSON_LD = {

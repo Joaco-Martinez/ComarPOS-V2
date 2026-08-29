@@ -16,16 +16,21 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: '*',
       allow: [
         '/$', '/para/', '/prueba-gratis', '/suscripcion', '/terminos', '/privacidad', '/arrepentimiento', '/login', '/instalar',
+        // Alias en ingles de las paginas de confianza (about/contact usan
+        // directamente el slug en ingles; privacy es alias de /privacidad) -
+        // ver frontend/lib/routeGuard.ts.
+        '/about', '/contact', '/privacy',
         // Assets que Google/redes sociales necesitan poder pedir directo para
         // mostrar el favicon en resultados de busqueda y la preview al
         // compartir un link (og:image) -- si no, el Disallow: '/' de abajo
         // tambien se los bloquea a ellos aunque el archivo exista y sirva bien.
         '/favicon.ico', '/icon.png', '/apple-icon.png', '/opengraph-image', '/manifest.webmanifest', '/icons/',
-        // El propio sitemap tiene que estar permitido explicitamente: el
-        // Disallow: '/' de abajo lo alcanza a el tambien, y Search Console
-        // reporta "No se ha podido acceder a tu sitemap" cuando el archivo
-        // referenciado en Sitemap: mas abajo esta bloqueado por robots.txt.
-        '/sitemap.xml',
+        // El propio sitemap y el llms.txt tienen que estar permitidos
+        // explicitamente: el Disallow: '/' de abajo tambien los alcanza, y
+        // Search Console reporta "No se ha podido acceder a tu sitemap"
+        // cuando el archivo referenciado en Sitemap: mas abajo esta
+        // bloqueado por robots.txt.
+        '/sitemap.xml', '/llms.txt',
       ],
       disallow: '/',
     },
