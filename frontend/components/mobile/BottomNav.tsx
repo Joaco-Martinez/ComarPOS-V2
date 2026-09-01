@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
-import { NAV, ADMIN_NAV, type NavItem } from '@/lib/navConfig';
+import { NAV, ADMIN_NAV, groupNavItems, type NavItem } from '@/lib/navConfig';
 import { buildEffectiveNav, effectiveNavToConfig } from '@/lib/quickAccess';
 import { Grid2x2, LogOut, X, ChevronDown, Pencil, Lock } from 'lucide-react';
 import QuickAccessEditor from './QuickAccessEditor';
@@ -59,17 +59,10 @@ export default function BottomNav() {
 
   // Antes esto se listaba plano: ~25 secciones sueltas, sin ningun orden
   // visible mas que "como quedaron" -- costaba encontrar algo puntual.
-  // Se agrupa por tema (ver el campo "group" en navConfig.ts) en el orden
-  // pedido explicitamente, no alfabetico ni el de aparicion en navConfig.
-  const GROUP_ORDER = ['Ventas', 'Productos y stock', 'Facturación', 'Clientes', 'Administración', 'Compras', 'Finanzas', 'Ayuda'];
-  const restGroups = restItems
-    .reduce<[string, NavItem[]][]>((groups, item) => {
-      const existing = groups.find(([name]) => name === item.group);
-      if (existing) existing[1].push(item);
-      else groups.push([item.group, [item]]);
-      return groups;
-    }, [])
-    .sort(([a], [b]) => GROUP_ORDER.indexOf(a) - GROUP_ORDER.indexOf(b));
+  // Se agrupa por tema (ver GROUP_ORDER en navConfig.ts, compartido con el
+  // Sidebar de escritorio) en el orden pedido explicitamente, no alfabetico
+  // ni el de aparicion en navConfig.
+  const restGroups = groupNavItems(restItems);
 
   const isActive = (href: string) => {
     const full = `/${tenantSlug}${href}`;

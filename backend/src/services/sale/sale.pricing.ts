@@ -123,7 +123,8 @@ function resolveUnitPrice(
   product: any,
   client: ClientMini,
   priceTypeInput: any,
-  manualPriceInput?: number
+  manualPriceInput?: number,
+  priceListOverride?: { price: number | null; pricePerKg: number | null } | null
 ) {
   const isKg = product.saleUnit === SaleUnit.KG;
   const hasManualPrice =
@@ -138,7 +139,17 @@ function resolveUnitPrice(
     hasManualPrice
   );
 
-  const publicPrice = isKg ? product.pricePerKg : product.price;
+  // Lista de precios custom: solo pisa el precio "minorista" (PRICE). Si la
+  // linea resuelve a mayorista o manual, la lista no aplica - son ejes
+  // independientes (ver doc "listas de precios").
+  const overrideValue = priceListOverride
+    ? isKg
+      ? priceListOverride.pricePerKg
+      : priceListOverride.price
+    : null;
+  const hasOverride = overrideValue !== null && overrideValue !== undefined && Number.isFinite(Number(overrideValue));
+
+  const publicPrice = hasOverride ? overrideValue : isKg ? product.pricePerKg : product.price;
   const wholesalePrice = isKg
     ? product.wholesalePricePerKg
     : product.wholesalePrice;
@@ -203,7 +214,8 @@ function resolvePurchasePriceSnapshot(product: any) {
 
 async function resolveSaleItems(
   saleItems: CreateSaleInput["items"],
-  client: ClientMini
+  client: ClientMini,
+  priceListId?: string | null
 ): Promise<ResolvedSaleItem[]> {
   // Se trae todos los productos en una sola query (evita N+1: antes se hacia
   // un findUnique por item, con un carrito de 10 items eran 10 roundtrips).
@@ -231,6 +243,15 @@ async function resolveSaleItems(
       wholesalePrice: true,
       clientPricePerKg: true,
       wholesalePricePerKg: true,
+
+      ...(priceListId
+        ? {
+            priceListItems: {
+              where: { priceListId },
+              select: { price: true, pricePerKg: true },
+            },
+          }
+        : {}),
 
       components: {
         select: {
@@ -283,11 +304,16 @@ async function resolveSaleItems(
       throw new Error(`Precio inválido para ${product.name}`);
     }
 
+    const priceListOverride = priceListId
+      ? (product as any).priceListItems?.[0] ?? null
+      : null;
+
     const resolvedPrice = resolveUnitPrice(
       product,
       client,
       item.priceType,
-      manualPrice
+      manualPrice,
+      priceListOverride
     );
 
     const unitPrice = resolvedPrice.unitPrice;

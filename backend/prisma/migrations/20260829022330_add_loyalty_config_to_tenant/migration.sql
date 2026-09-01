@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Tenant" ADD COLUMN     "loyaltyPointValueArs" DOUBLE PRECISION NOT NULL DEFAULT 1,
+ADD COLUMN     "loyaltyPointsPerAmount" DOUBLE PRECISION NOT NULL DEFAULT 0.01;

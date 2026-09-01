@@ -114,6 +114,19 @@ async function createTenant() {
       })),
     });
 
+    // Lista de precios default (doc "listas de precios") - siempre existe,
+    // no se puede renombrar/eliminar, se sincroniza sola desde el precio de
+    // cada producto (ver priceList.service.ts#syncDefaultPriceListItem).
+    await tx.priceList.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Minorista",
+        description: "Lista principal (venta al público) - se sincroniza con el precio del producto",
+        isDefault: true,
+        isActive: true,
+      },
+    });
+
     return { tenant, admin, location };
   });
 

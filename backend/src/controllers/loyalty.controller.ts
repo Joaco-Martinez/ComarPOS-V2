@@ -12,6 +12,15 @@ function userId(req: Request): string {
 }
 
 export const loyaltyController = {
+  getSettings: wrap(async () => loyaltyService.getSettings()),
+
+  updateSettings: wrap(async (req) =>
+    loyaltyService.updateSettings({
+      pointsPerPeso: req.body.pointsPerPeso !== undefined ? Number(req.body.pointsPerPeso) : undefined,
+      pesoValuePerPoint: req.body.pesoValuePerPoint !== undefined ? Number(req.body.pesoValuePerPoint) : undefined,
+    })
+  ),
+
   getAccount: wrap(async (req) =>
     loyaltyService.getAccount(req.params.clientId as string)
   ),
@@ -47,10 +56,11 @@ export const loyaltyController = {
 
   estimatePoints: wrap(async (req) => {
     const amount = parseFloat(req.query.amount as string);
+    const estimatedPoints = await loyaltyService.estimatePointsForAmount(amount);
     return {
       amount,
-      estimatedPoints: loyaltyService.estimatePointsForAmount(amount),
-      arsValue: loyaltyService.convertPointsToARS(loyaltyService.estimatePointsForAmount(amount)),
+      estimatedPoints,
+      arsValue: await loyaltyService.convertPointsToARS(estimatedPoints),
     };
   }),
 };

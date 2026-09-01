@@ -5,25 +5,73 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '@/store/auth';
 import type { Client, LoyaltyTransaction } from '@/types';
 import { clientName, fmtMoney, normalizeArray, num, getPlanLockMessage } from '@/lib/helpers';
 import { formatDateAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
-import { Star, Search, Gift, Plus, X, ArrowLeft, Lock } from 'lucide-react';
+import { Star, Search, Gift, Plus, X, ArrowLeft, Lock, Settings } from 'lucide-react';
+
+type LoyaltySettings = { pointsPerPeso: number; pesoValuePerPoint: number };
 
 const typeBadge: Record<string, string> = { EARN: 'badge-green', REDEEM: 'badge-cyan', EXPIRE: 'badge-red', ADJUSTMENT: 'badge-amber' };
 const typeLabel: Record<string, string> = { EARN: 'Ganado', REDEEM: 'Canjeado', EXPIRE: 'Expirado', ADJUSTMENT: 'Ajuste' };
 
 export default function FidelidadPage() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
+
   const [clients, setClients] = useState<Client[]>([]);
   const [transactions, setTransactions] = useState<LoyaltyTransaction[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [modal, setModal] = useState<'redeem' | 'adjust' | null>(null);
+  const [modal, setModal] = useState<'redeem' | 'adjust' | 'settings' | null>(null);
   const [form, setForm] = useState({ points: '', description: '' });
   const [saving, setSaving] = useState(false);
   const [lockMessage, setLockMessage] = useState<string | null>(null);
+
+  const [settings, setSettings] = useState<LoyaltySettings | null>(null);
+  const [settingsForm, setSettingsForm] = useState({ pointsPer100: '', pesoValuePerPoint: '' });
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const loadSettings = async () => {
+    try {
+      const { data } = await api.get<LoyaltySettings>('/loyalty/settings');
+      setSettings(data);
+    } catch {
+      // el bloqueo de plan ya se muestra al elegir un cliente
+    }
+  };
+
+  const openSettings = () => {
+    setSettingsForm({
+      pointsPer100: settings ? String(settings.pointsPerPeso * 100) : '',
+      pesoValuePerPoint: settings ? String(settings.pesoValuePerPoint) : '',
+    });
+    setModal('settings');
+  };
+
+  const saveSettings = async () => {
+    const pointsPer100 = Number(settingsForm.pointsPer100);
+    const pesoValuePerPoint = Number(settingsForm.pesoValuePerPoint);
+    if (!Number.isFinite(pointsPer100) || pointsPer100 <= 0 || !Number.isFinite(pesoValuePerPoint) || pesoValuePerPoint <= 0) {
+      toast.error('Ingresá valores válidos mayores a 0');
+      return;
+    }
+    setSavingSettings(true);
+    try {
+      const { data } = await api.patch<LoyaltySettings>('/loyalty/settings', {
+        pointsPerPeso: pointsPer100 / 100,
+        pesoValuePerPoint,
+      });
+      setSettings(data);
+      toast.success('Configuración actualizada');
+      setModal(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
+    } finally { setSavingSettings(false); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -33,7 +81,7 @@ export default function FidelidadPage() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); if (isAdmin) loadSettings(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadTransactions = async (clientId: string) => {
     setLockMessage(null);
@@ -81,7 +129,21 @@ export default function FidelidadPage() {
   const clientPoints = (c: Client) => num(c.loyaltyAccount?.points);
 
   return (
-    <AppLayout title="Fidelidad" subtitle="Programa de puntos y recompensas">
+    <AppLayout
+      title="Fidelidad"
+      subtitle="Programa de puntos y recompensas"
+      actions={isAdmin ? (
+        <button onClick={openSettings} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+          <Settings size={13} /> Configurar puntos
+        </button>
+      ) : undefined}
+    >
+      {settings && (
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
+          Cada $100 en ventas suma <strong style={{ color: 'var(--text2)' }}>{Math.round(settings.pointsPerPeso * 100 * 100) / 100} pts</strong>
+          {' · '}cada punto vale <strong style={{ color: 'var(--text2)' }}>{fmtMoney(settings.pesoValuePerPoint)}</strong> al canjear
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Clientes en programa', value: String(clients.length), color: 'var(--accent)' },
@@ -216,7 +278,7 @@ export default function FidelidadPage() {
         </div>
       </div>
 
-      {modal && selectedClient && (
+      {(modal === 'redeem' || modal === 'adjust') && selectedClient && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -240,6 +302,46 @@ export default function FidelidadPage() {
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
               <button onClick={save} disabled={saving || !form.points} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : modal === 'redeem' ? 'Canjear' : 'Ajustar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal === 'settings' && (
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800 }}>Configurar puntos de fidelidad</span>
+              <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Puntos otorgados cada $100 de venta *</label>
+                <input
+                  type="number" step="0.01" min="0"
+                  value={settingsForm.pointsPer100}
+                  onChange={(e) => setSettingsForm((p) => ({ ...p, pointsPer100: e.target.value }))}
+                  placeholder="1" autoFocus
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Valor en $ de cada punto al canjear *</label>
+                <input
+                  type="number" step="0.01" min="0"
+                  value={settingsForm.pesoValuePerPoint}
+                  onChange={(e) => setSettingsForm((p) => ({ ...p, pesoValuePerPoint: e.target.value }))}
+                  placeholder="1"
+                />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                Aplica a toda venta con cliente asignado (productos y servicios por igual), al confirmarse.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={saveSettings} disabled={savingSettings || !settingsForm.pointsPer100 || !settingsForm.pesoValuePerPoint} className="btn btn-primary btn-sm">
+                {savingSettings ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Guardar'}
               </button>
             </div>
           </div>

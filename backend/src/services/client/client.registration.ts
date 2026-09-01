@@ -31,6 +31,7 @@ export async function createClient(data: {
   gmail?: string | null;
   creditLimit?: number | null;
   isAccountEnabled?: boolean;
+  priceListId?: string | null;
 } & ClientAddressData) {
   const nombre = String(data.nombre || "").trim();
   const apellido = cleanString(data.apellido);
@@ -98,6 +99,19 @@ export async function createClient(data: {
       userId = user.id;
     }
 
+    let priceListId: string | null = null;
+
+    if (data.priceListId) {
+      const priceList = await tx.priceList.findFirst({
+        where: { id: data.priceListId, ...tenantScope() },
+        select: { id: true },
+      });
+
+      if (!priceList) throw new Error("Lista de precios no encontrada");
+
+      priceListId = priceList.id;
+    }
+
     return tx.client.create({
       data: {
         nombre,
@@ -110,6 +124,7 @@ export async function createClient(data: {
         gmail,
         creditLimit: data.creditLimit ?? null,
         isAccountEnabled: data.isAccountEnabled ?? false,
+        priceListId,
         userId,
         tenantId: currentTenantId(),
         ...addressData,

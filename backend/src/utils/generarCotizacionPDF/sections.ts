@@ -1,19 +1,31 @@
 /**
  * Renderizado de las secciones del PDF de cotizacion (header, info, tabla, totales, footer).
  * Extraidos de generarCotizacionPDF.ts (modularizacion, doc seccion 4).
+ *
+ * Diseño compacto tipo planilla/documento formal (no "tarjetas" grandes con
+ * fotos de producto) - ver doc "listas de precios + descuentos multiples",
+ * pedido explicito del usuario de achicar todo y sacarle lo "tosco" despues
+ * de comparar contra varias plantillas de cotizacion de referencia.
  */
 import { PAGE, C, CotizacionPDFSale } from "./types";
 import {
   money,
   dateText,
+  dateOnlyText,
   safe,
   getBusinessName,
   getQuotationDiscountLabel,
   getClientName,
-  getClientDetails,
+  getClientDocLine,
+  getClientAddressLine,
+  titleCase,
   getProductName,
   getProductSku,
   getProductQty,
+  getItemIvaBreakdown,
+  getItemDiscountBreakdown,
+  getDiscountRowLabel,
+  getQuotationNumber,
 } from "./format";
 import { findLogoPath, getImageBuffer } from "./assets";
 import { COMARPOS_FOOTER_TEXT } from "../comarposBranding";
@@ -22,20 +34,18 @@ export function drawPageBackground(doc: PDFKit.PDFDocument) {
   doc.rect(0, 0, PAGE.width, PAGE.height).fill(C.white);
 }
 
+const LOGO_SIZE = 34;
+
 export async function drawLogo(doc: PDFKit.PDFDocument, x: number, y: number, logoUrl?: string | null) {
   doc.save();
-  doc.circle(x + 31, y + 31, 31).fill("#000000");
+  doc.circle(x + LOGO_SIZE / 2, y + LOGO_SIZE / 2, LOGO_SIZE / 2).fill("#000000");
   doc.restore();
 
   const remoteLogo = await getImageBuffer(logoUrl);
 
   if (remoteLogo) {
     try {
-      doc.image(remoteLogo, x, y, {
-        cover: [62, 62],
-        align: "center",
-        valign: "center",
-      });
+      doc.image(remoteLogo, x, y, { cover: [LOGO_SIZE, LOGO_SIZE], align: "center", valign: "center" });
       return;
     } catch {}
   }
@@ -44,11 +54,7 @@ export async function drawLogo(doc: PDFKit.PDFDocument, x: number, y: number, lo
 
   if (logoPath) {
     try {
-      doc.image(logoPath, x, y, {
-        cover: [62, 62],
-        align: "center",
-        valign: "center",
-      });
+      doc.image(logoPath, x, y, { cover: [LOGO_SIZE, LOGO_SIZE], align: "center", valign: "center" });
       return;
     } catch {}
   }
@@ -56,164 +62,267 @@ export async function drawLogo(doc: PDFKit.PDFDocument, x: number, y: number, lo
   doc
     .fillColor("#FFFFFF")
     .font("Helvetica-Bold")
-    .fontSize(20)
-    .text("VJ", x, y + 21, {
-      width: 62,
-      align: "center",
-    });
+    .fontSize(11)
+    .text("VJ", x, y + LOGO_SIZE / 2 - 5, { width: LOGO_SIZE, align: "center" });
 }
 
+/** Header compacto: logo + nombre a la izquierda, tipo de documento +
+ * numero + fecha a la derecha, todo en una franja chica (una linea de
+ * dato, no un banner gigante centrado). */
 export async function drawHeader(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale) {
   drawPageBackground(doc);
 
   const x = PAGE.marginX;
+  const right = PAGE.width - x;
   const y = PAGE.top;
 
   await drawLogo(doc, x, y, sale.logoUrl);
 
   const discountLabel = getQuotationDiscountLabel(sale);
+  const nameX = x + LOGO_SIZE + 10;
+  const nameWidth = 250;
 
   doc
     .fillColor(C.black)
     .font("Helvetica-Bold")
-    .fontSize(21)
-    .text(discountLabel ? `${getBusinessName(sale)} - ${discountLabel}` : getBusinessName(sale), x + 78, y + 13, {
-      width: 330,
+    .fontSize(13)
+    .text(discountLabel ? `${getBusinessName(sale)} - ${discountLabel}` : getBusinessName(sale), nameX, y, {
+      width: nameWidth,
+      height: 15,
       ellipsis: true,
+      lineBreak: false,
     });
 
-  doc
-    .fillColor(C.muted)
-    .font("Helvetica")
-    .fontSize(9.5)
-    .text("Cotización de productos", x + 79, y + 41);
-
-  doc
-    .fillColor(C.black)
-    .font("Helvetica")
-    .fontSize(10)
-    .text(dateText(sale.createdAt), 415, y + 12, {
-      width: 92,
-      align: "right",
-      lineGap: 1,
-    });
-
-  const contactY = y + 82;
   const contactParts = [sale.businessAddress, sale.businessPhone, sale.businessEmail]
     .map((v) => v?.trim())
     .filter((v): v is string => Boolean(v));
 
   doc
+    .fillColor(C.muted)
+    .font("Helvetica")
+    .fontSize(7.5)
+    .text(contactParts.join("  ·  "), nameX, y + 15, { width: nameWidth, ellipsis: true });
+
+  const blockX = 355;
+  const blockWidth = right - blockX;
+
+  doc
+    .fillColor(C.muted)
+    .font("Helvetica-Bold")
+    .fontSize(8.5)
+    .text("COTIZACIÓN", blockX, y, { width: blockWidth, align: "right", characterSpacing: 0.4 });
+
+  doc
     .fillColor(C.text)
     .font("Helvetica")
-    .fontSize(10.5)
-    .text(contactParts.join("   ·   "), x, contactY, {
-      width: PAGE.width - x * 2,
-      ellipsis: true,
-    });
+    .fontSize(8)
+    .text(`N° ${getQuotationNumber(sale)}`, blockX, y + 12, { width: blockWidth, align: "right" });
 
   doc
-    .moveTo(x, contactY + 23)
-    .lineTo(PAGE.width - x, contactY + 23)
-    .strokeColor(C.line)
-    .lineWidth(1)
-    .stroke();
+    .fillColor(C.muted)
+    .font("Helvetica")
+    .fontSize(7.5)
+    .text(dateText(sale.createdAt), blockX, y + 23, { width: blockWidth, align: "right" });
+
+  const dividerY = y + LOGO_SIZE + 8;
+
+  doc.moveTo(x, dividerY).lineTo(right, dividerY).strokeColor(C.line).lineWidth(1).stroke();
+
+  return dividerY + 10;
 }
 
-export function drawInfo(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale) {
-  const x = PAGE.marginX;
-  const y = 162;
+function drawFiscalPanel(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  title: string,
+  lines: string[]
+) {
+  doc
+    .fillColor(C.muted)
+    .font("Helvetica-Bold")
+    .fontSize(6.5)
+    .text(title, x, y, { characterSpacing: 0.4 });
 
-  const clientDetails = getClientDetails(sale.client);
+  let lineY = y + 10;
 
-  const rows = [
-    {
-      label: "Nombre del cliente",
-      value: getClientName(sale.client),
-      detail: clientDetails,
-    },
-    {
-      label: "Fecha de expiración",
-      value: dateText(sale.quotationExpiresAt),
-      detail: "",
-    },
-    {
-      label: "Vendedor",
-      value: safe(sale.user?.name),
-      detail: "",
-    },
-  ];
-
-  rows.forEach((row, index) => {
-    const rowY = y + index * 34;
-
+  lines.forEach((line, i) => {
     doc
-      .fillColor(C.text)
-      .font("Helvetica")
-      .fontSize(11)
-      .text(row.label, x, rowY);
+      .fillColor(i === 0 ? C.black : C.text)
+      .font(i === 0 ? "Helvetica-Bold" : "Helvetica")
+      .fontSize(i === 0 ? 9.5 : 8)
+      .text(line, x, lineY, { width, ellipsis: true });
 
-    doc
-      .fillColor(C.black)
-      .font("Helvetica-Bold")
-      .fontSize(11)
-      .text(row.value, 292, rowY, {
-        width: 216,
-        align: "right",
-      });
-
-    if (row.detail) {
-      doc
-        .fillColor(C.muted)
-        .font("Helvetica")
-        .fontSize(9.2)
-        .text(row.detail, 292, rowY + 14, {
-          width: 216,
-          align: "right",
-          lineGap: 1,
-        });
-    }
+    lineY += 10.5;
   });
 
-  doc
-    .moveTo(x, y + 105)
-    .lineTo(PAGE.width - x, y + 105)
-    .strokeColor(C.line)
-    .lineWidth(1)
-    .stroke();
+  return lineY;
 }
 
-export function drawTableHeader(doc: PDFKit.PDFDocument, y: number) {
+/** Datos fiscales del emisor (negocio) y del cliente, lado a lado - pedido
+ * explicito: "tendrian que estar todos los datos fiscales del local y del
+ * cliente". El emisor sale de ArcaConfig si el tenant configuro ARCA/AFIP
+ * (CUIT, condicion IVA, domicilio fiscal); el cliente, de sus propios
+ * datos (documento, condicion IVA, direccion). Debajo, una linea chica con
+ * vigencia y vendedor. */
+export function drawInfo(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, startY: number) {
   const x = PAGE.marginX;
+  const right = PAGE.width - x;
+  const colGap = 16;
+  const colW = (right - x - colGap) / 2;
+  const y = startY;
+
+  const emisorLines = [
+    getBusinessName(sale),
+    sale.businessCuit ? `CUIT: ${sale.businessCuit}` : null,
+    sale.businessIvaCondition ? `Cond. IVA: ${titleCase(sale.businessIvaCondition)}` : null,
+    sale.businessIibb ? `Ing. Brutos: ${sale.businessIibb}` : null,
+    sale.businessAddress || null,
+  ].filter((v): v is string => Boolean(v));
+
+  const clienteLines = [
+    getClientName(sale.client),
+    getClientDocLine(sale.client) || null,
+    sale.client?.ivaCondition ? `Cond. IVA: ${titleCase(sale.client.ivaCondition)}` : null,
+    getClientAddressLine(sale.client) || null,
+  ].filter((v): v is string => Boolean(v));
+
+  const emisorBottom = drawFiscalPanel(doc, x, y, colW, "EMISOR", emisorLines);
+  const clienteBottom = drawFiscalPanel(doc, x + colW + colGap, y, colW, "CLIENTE", clienteLines);
+
+  const metaY = Math.max(emisorBottom, clienteBottom) + 2;
 
   doc
-    .roundedRect(x, y - 8, PAGE.width - x * 2, 34, 8)
-    .fill(C.headerSoft);
+    .fillColor(C.muted)
+    .font("Helvetica")
+    .fontSize(7.5)
+    .text(
+      `Válida hasta ${dateOnlyText(sale.quotationExpiresAt)}   ·   Vendedor: ${safe(sale.user?.name)}`,
+      x,
+      metaY,
+      { width: right - x }
+    );
 
-  doc
-    .fillColor(C.black)
-    .font("Helvetica-Bold")
-    .fontSize(10.5)
-    .text("Producto", x + 12, y + 3)
-    .text("Código", 272, y + 3)
-    .text("Cant.", 364, y + 3, { width: 45, align: "right" })
-    .text("Precio unit.", 425, y + 3, { width: 70, align: "right" })
-    .text("Subtotal", 502, y + 3, { width: 48, align: "right" });
+  const bottom = metaY + 12;
 
-  return y + 45;
+  doc.moveTo(x, bottom).lineTo(right, bottom).strokeColor(C.line).lineWidth(1).stroke();
+
+  return bottom + 10;
 }
 
-export function drawNoImage(doc: PDFKit.PDFDocument, x: number, y: number) {
-  doc
-    .roundedRect(x, y, 52, 52, 7)
-    .fillAndStroke(C.soft, C.lightLine);
+type DiscountRef = { label?: string | null; type: string; value: number; applied: boolean };
+type TableColumn = { x: number; width: number };
+type TableLayout = {
+  producto: TableColumn;
+  codigo: TableColumn;
+  cant: TableColumn;
+  precioUnit: TableColumn;
+  iva: TableColumn;
+  subtotal: TableColumn;
+  discountCols: (TableColumn & { discount: DiscountRef })[];
+};
+
+/**
+ * Cuando hay 2+ descuentos condicionales (no acumulables - ej. "10% en
+ * efectivo" vs "5% con tarjeta"), cada uno se ve como su propia columna
+ * "D1"/"D2"/... en la tabla de productos, discriminado por producto (pedido
+ * explicito: "quiero que los descuentos esten en esta fila"). Si se
+ * acumulan, o hay 0-1 descuento, no suman columnas propias - el total ya
+ * refleja el combinado y no hay nada "a elegir" por linea.
+ */
+function getTableDiscountColumns(sale: CotizacionPDFSale): DiscountRef[] {
+  if (sale.discountsAccumulate) return [];
+  const active = (sale.discounts ?? []).filter((d) => d.applied);
+  return active.length >= 2 ? active : [];
+}
+
+function computeTableLayout(sale: CotizacionPDFSale): TableLayout {
+  const left = PAGE.marginX;
+  const right = PAGE.width - PAGE.marginX;
+  const gap = 6;
+
+  const codigoW = 40;
+  const cantW = 26;
+  const precioW = 46;
+  const ivaW = 30;
+  const subtotalW = 44;
+  const minProductoW = 120;
+
+  const discounts = getTableDiscountColumns(sale);
+  const reservedFixed = codigoW + cantW + precioW + ivaW + subtotalW + gap * 5;
+  const availableForDiscounts = right - left - minProductoW - reservedFixed - gap * discounts.length;
+  const discW = discounts.length > 0
+    ? Math.max(26, Math.min(46, availableForDiscounts / discounts.length))
+    : 0;
+
+  let cursorRight = right;
+  const discountCols: (TableColumn & { discount: DiscountRef })[] = [];
+
+  for (let i = discounts.length - 1; i >= 0; i -= 1) {
+    const colX = cursorRight - discW;
+    discountCols.unshift({ x: colX, width: discW, discount: discounts[i] });
+    cursorRight = colX - gap;
+  }
+
+  const subtotalX = cursorRight - subtotalW;
+  cursorRight = subtotalX - gap;
+
+  const ivaX = cursorRight - ivaW;
+  cursorRight = ivaX - gap;
+
+  const precioX = cursorRight - precioW;
+  cursorRight = precioX - gap;
+
+  const cantX = cursorRight - cantW;
+  cursorRight = cantX - gap;
+
+  const codigoX = cursorRight - codigoW;
+  cursorRight = codigoX - gap;
+
+  return {
+    producto: { x: left, width: cursorRight - left },
+    codigo: { x: codigoX, width: codigoW },
+    cant: { x: cantX, width: cantW },
+    precioUnit: { x: precioX, width: precioW },
+    iva: { x: ivaX, width: ivaW },
+    subtotal: { x: subtotalX, width: subtotalW },
+    discountCols,
+  };
+}
+
+const TABLE_HEADER_H = 20;
+const ROW_H = 22;
+
+export function drawTableHeader(doc: PDFKit.PDFDocument, y: number, sale: CotizacionPDFSale) {
+  const x = PAGE.marginX;
+  const layout = computeTableLayout(sale);
+
+  doc.rect(x, y, PAGE.width - x * 2, TABLE_HEADER_H).fill(C.headerSoft);
+  doc.moveTo(x, y + TABLE_HEADER_H).lineTo(PAGE.width - x, y + TABLE_HEADER_H).strokeColor(C.line).lineWidth(1).stroke();
+
+  const textY = y + 6;
 
   doc
-    .fillColor(C.lightMuted)
+    .fillColor(C.text)
     .font("Helvetica-Bold")
-    .fontSize(7)
-    .text("SIN", x, y + 16, { width: 52, align: "center" })
-    .text("FOTO", x, y + 27, { width: 52, align: "center" });
+    .fontSize(7.5)
+    .text("PRODUCTO", layout.producto.x, textY, { width: layout.producto.width, characterSpacing: 0.3 })
+    .text("CÓD.", layout.codigo.x, textY, { width: layout.codigo.width, characterSpacing: 0.3 })
+    .text("CANT.", layout.cant.x, textY, { width: layout.cant.width, align: "right", characterSpacing: 0.3 })
+    .text("P. UNIT.", layout.precioUnit.x, textY, { width: layout.precioUnit.width, align: "right", characterSpacing: 0.3 })
+    .text("IVA", layout.iva.x, textY, { width: layout.iva.width, align: "right", characterSpacing: 0.3 })
+    .text("SUBTOTAL", layout.subtotal.x, textY, { width: layout.subtotal.width, align: "right", characterSpacing: 0.3 });
+
+  layout.discountCols.forEach((col, i) => {
+    doc
+      .fillColor(C.text)
+      .font("Helvetica-Bold")
+      .fontSize(7.5)
+      .text(`D${i + 1}`, col.x, textY, { width: col.width, align: "right" });
+  });
+
+  return y + TABLE_HEADER_H;
 }
 
 export async function drawProductRow(
@@ -224,150 +333,267 @@ export async function drawProductRow(
   index: number
 ) {
   const x = PAGE.marginX;
-  const rowHeight = 76;
 
-  if (y + rowHeight > 704) {
+  if (y + ROW_H > PAGE.bottom - 40) {
     y = addPage(doc, sale);
   }
 
+  const layout = computeTableLayout(sale);
   const isEven = index % 2 === 0;
 
-  doc
-    .roundedRect(x, y - 8, PAGE.width - x * 2, rowHeight - 4, 10)
-    .fill(isEven ? C.white : C.rowSoft);
-
-  doc
-    .moveTo(x + 12, y + rowHeight - 12)
-    .lineTo(PAGE.width - x - 12, y + rowHeight - 12)
-    .strokeColor("#EEF1F4")
-    .lineWidth(0.8)
-    .stroke();
-
-  const imgX = x + 12;
-  const imgY = y;
-  const imageBuffer = await getImageBuffer(item.product?.imageUrl);
-
-  if (imageBuffer) {
-    try {
-      doc
-        .roundedRect(imgX, imgY, 58, 58, 8)
-        .fill(C.white);
-
-      doc.image(imageBuffer, imgX + 3, imgY + 3, {
-        fit: [52, 52],
-        align: "center",
-        valign: "center",
-      });
-    } catch {
-      drawNoImage(doc, imgX, imgY);
-    }
-  } else {
-    drawNoImage(doc, imgX, imgY);
+  if (!isEven) {
+    doc.rect(x, y, PAGE.width - x * 2, ROW_H).fill(C.rowSoft);
   }
+
+  const textY = y + 6;
 
   doc
     .fillColor(C.black)
     .font("Helvetica-Bold")
-    .fontSize(11)
-    .text(getProductName(item), x + 84, y + 13, {
-      width: 160,
-      height: 30,
+    .fontSize(8.5)
+    .text(getProductName(item), layout.producto.x, textY, {
+      width: layout.producto.width,
+      height: 11,
       ellipsis: true,
     });
 
   doc
     .fillColor(C.muted)
     .font("Helvetica")
-    .fontSize(8.5)
-    .text("Producto cotizado", x + 84, y + 34, {
-      width: 160,
-      ellipsis: true,
-    });
+    .fontSize(8)
+    .text(getProductSku(item), layout.codigo.x, textY, { width: layout.codigo.width, ellipsis: true });
 
   doc
     .fillColor(C.text)
     .font("Helvetica")
-    .fontSize(10)
-    .text(getProductSku(item), 272, y + 21, {
-      width: 74,
-      align: "left",
-      ellipsis: true,
-    });
+    .fontSize(8.5)
+    .text(String(getProductQty(item)), layout.cant.x, textY, { width: layout.cant.width, align: "right" });
 
   doc
-    .fillColor(C.black)
+    .fillColor(C.text)
     .font("Helvetica")
-    .fontSize(10.5)
-    .text(String(getProductQty(item)), 364, y + 21, {
-      width: 45,
-      align: "right",
-    });
+    .fontSize(8.5)
+    .text(money(item.price), layout.precioUnit.x, textY, { width: layout.precioUnit.width, align: "right" });
 
-  doc.text(money(item.price), 425, y + 21, {
-    width: 70,
-    align: "right",
-  });
+  const { rate: ivaRate } = getItemIvaBreakdown(item);
 
   doc
-    .font("Helvetica-Bold")
-    .text(money(item.subtotal), 502, y + 21, {
-      width: 48,
-      align: "right",
-    });
+    .fillColor(C.muted)
+    .font("Helvetica")
+    .fontSize(8)
+    .text(`${ivaRate}%`, layout.iva.x, textY, { width: layout.iva.width, align: "right" });
 
-  return y + rowHeight;
+  // Con columnas de descuento por opcion (condicionales, no acumulables):
+  // "Subtotal" queda como el bruto sin descontar, cada columna D1/D2/...
+  // muestra cuanto se lleva ESA opcion en esta linea puntual. Sin columnas
+  // (0-1 descuento, o acumulados), Subtotal ya muestra el valor final -
+  // el desglose combinado vive en el cuadro de totales, no por linea.
+  if (layout.discountCols.length > 0) {
+    doc
+      .fillColor(C.black)
+      .font("Helvetica-Bold")
+      .fontSize(8.5)
+      .text(money(item.subtotal), layout.subtotal.x, textY, { width: layout.subtotal.width, align: "right" });
+
+    const cartSubtotal = Number(sale.subtotal || 0);
+
+    layout.discountCols.forEach((col) => {
+      const d = col.discount;
+      const totalAmount = d.type === "FIXED" ? Number(d.value) : cartSubtotal * (Number(d.value) / 100);
+      const cappedTotalAmount = Math.min(Math.max(totalAmount, 0), cartSubtotal);
+      const lineAmount = cartSubtotal > 0 ? (item.subtotal || 0) * (cappedTotalAmount / cartSubtotal) : 0;
+
+      doc
+        .fillColor(C.text)
+        .font("Helvetica")
+        .fontSize(8)
+        .text(lineAmount > 0.01 ? `-${money(lineAmount)}` : "—", col.x, textY, {
+          width: col.width,
+          align: "right",
+        });
+    });
+  } else {
+    const { amount: itemDiscountAmount, finalSubtotal } = getItemDiscountBreakdown(sale, item);
+    const hasItemDiscount = Math.abs(itemDiscountAmount) > 0.01;
+
+    doc
+      .fillColor(C.black)
+      .font("Helvetica-Bold")
+      .fontSize(8.5)
+      .text(money(hasItemDiscount ? finalSubtotal : item.subtotal), layout.subtotal.x, textY, {
+        width: layout.subtotal.width,
+        align: "right",
+      });
+  }
+
+  doc.moveTo(x, y + ROW_H).lineTo(PAGE.width - x, y + ROW_H).strokeColor(C.lightLine).lineWidth(0.6).stroke();
+
+  return y + ROW_H;
 }
 
 export function addPage(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale) {
   doc.addPage({ size: "A4", margin: 0 });
   drawPageBackground(doc);
 
-  const discountLabel = getQuotationDiscountLabel(sale);
-
   doc
     .fillColor(C.black)
     .font("Helvetica-Bold")
-    .fontSize(13)
-    .text(discountLabel ? `${getBusinessName(sale)} - ${discountLabel}` : getBusinessName(sale), PAGE.marginX, 42, {
-      width: 400,
-      ellipsis: true,
-    });
+    .fontSize(11)
+    .text(getBusinessName(sale), PAGE.marginX, 38, { width: 300, height: 13, ellipsis: true, lineBreak: false });
 
   doc
     .fillColor(C.muted)
     .font("Helvetica")
-    .fontSize(9)
-    .text(`Continuación - ${dateText(sale.createdAt)}`, PAGE.marginX, 61);
+    .fontSize(8)
+    .text(`Continuación  ·  ${dateText(sale.createdAt)}`, PAGE.marginX, 52);
 
   doc
-    .moveTo(PAGE.marginX, 84)
-    .lineTo(PAGE.width - PAGE.marginX, 84)
+    .moveTo(PAGE.marginX, 68)
+    .lineTo(PAGE.width - PAGE.marginX, 68)
     .strokeColor(C.line)
     .lineWidth(1)
     .stroke();
 
-  return drawTableHeader(doc, 105);
+  return drawTableHeader(doc, 78, sale);
+}
+
+/**
+ * Detalle de los descuentos multiples de la cotizacion (pantalla de
+ * Cotizaciones - distinto del descuento unico viejo, que sigue viviendo
+ * como una etiqueta corta en el header). Si "discountsAccumulate" es
+ * false y hay 2+ descuentos, son alternativas condicionales (ej. "10%
+ * pagando en efectivo" vs "5% con tarjeta") y cada una muestra el total
+ * que le corresponde a esa opcion sola - el que terminó en sale.total es
+ * el primero (mismo criterio que sale.discounts.ts#calculateDiscountedTotal).
+ */
+export function drawDiscountOptions(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, y: number) {
+  const activeDiscounts = (sale.discounts ?? []).filter((d) => d.applied);
+
+  if (activeDiscounts.length === 0) return y;
+
+  const x = PAGE.marginX;
+  const right = PAGE.width - x;
+  const accumulate = Boolean(sale.discountsAccumulate);
+  const subtotal = Number(sale.subtotal || 0);
+
+  // Acumulados: un unico resultado combinado (ya es el Total de mas abajo),
+  // acá solo se lista que se sumo - no hace falta destacar nada porque no
+  // hay nada "a elegir".
+  if (accumulate) {
+    const rowHeight = 12;
+    const estimatedHeight = 22 + activeDiscounts.length * rowHeight;
+
+    if (y + estimatedHeight > PAGE.bottom) {
+      doc.addPage({ size: "A4", margin: 0 });
+      drawPageBackground(doc);
+      y = 50;
+    }
+
+    doc.fillColor(C.black).font("Helvetica-Bold").fontSize(9).text("Descuentos aplicados", x, y);
+    y += 14;
+
+    for (const discount of activeDiscounts) {
+      doc
+        .fillColor(C.text)
+        .font("Helvetica")
+        .fontSize(8)
+        .text(`•  ${getDiscountRowLabel(discount)}`, x, y, { width: right - x, ellipsis: true });
+      y += rowHeight;
+    }
+
+    y += 6;
+    doc.moveTo(x, y).lineTo(right, y).strokeColor(C.lightLine).lineWidth(1).stroke();
+    return y + 10;
+  }
+
+  // Condicionales (no acumulables): "el total segun como quieran pagar",
+  // una fila de fichas chicas, numeradas D1/D2/... igual que las columnas
+  // de la tabla de arriba (getTableDiscountColumns) cuando hay 2+, para
+  // poder cruzar la referencia. La opcion mas barata se marca con un borde.
+  const numbered = activeDiscounts.length >= 2;
+  const cols = Math.min(activeDiscounts.length, 4);
+  const gap = 8;
+  const cardW = (right - x - gap * (cols - 1)) / cols;
+  const cardH = 38;
+  const rowsOfCards = Math.ceil(activeDiscounts.length / cols);
+  const estimatedHeight = 22 + rowsOfCards * (cardH + gap);
+
+  if (y + estimatedHeight > PAGE.bottom) {
+    doc.addPage({ size: "A4", margin: 0 });
+    drawPageBackground(doc);
+    y = 50;
+  }
+
+  doc
+    .fillColor(C.black)
+    .font("Helvetica-Bold")
+    .fontSize(9)
+    .text("TOTAL SEGÚN FORMA DE PAGO", x, y, { characterSpacing: 0.3 });
+
+  y += 16;
+
+  const totalsPerOption = activeDiscounts.map((d) => {
+    const amount = d.type === "FIXED" ? Number(d.value) : subtotal * (Number(d.value) / 100);
+    return Math.max(0, subtotal - Math.min(Math.max(amount, 0), subtotal));
+  });
+  const bestTotal = Math.min(...totalsPerOption);
+
+  activeDiscounts.forEach((discount, index) => {
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    const cardX = x + col * (cardW + gap);
+    const cardY = y + row * (cardH + gap);
+    const resultingTotal = totalsPerOption[index];
+    const isBest = resultingTotal === bestTotal;
+    const label = getDiscountRowLabel(discount);
+
+    doc.rect(cardX, cardY, cardW, cardH).fillAndStroke(C.soft, C.lightLine);
+
+    if (isBest) {
+      doc.rect(cardX, cardY, 3, cardH).fill(C.black);
+    }
+
+    doc
+      .fillColor(C.muted)
+      .font("Helvetica-Bold")
+      .fontSize(6.5)
+      .text(numbered ? `D${index + 1}` : "OPCIÓN", cardX + 8, cardY + 6, { characterSpacing: 0.3 });
+
+    doc
+      .fillColor(C.text)
+      .font("Helvetica")
+      .fontSize(7)
+      .text(label, cardX + 8, cardY + 15, { width: cardW - 16, height: 12, ellipsis: true });
+
+    doc
+      .fillColor(C.black)
+      .font("Helvetica-Bold")
+      .fontSize(11)
+      .text(money(resultingTotal), cardX + 8, cardY + cardH - 15, { width: cardW - 16 });
+  });
+
+  y += rowsOfCards * (cardH + gap) + 4;
+
+  doc.moveTo(x, y).lineTo(right, y).strokeColor(C.lightLine).lineWidth(1).stroke();
+
+  return y + 10;
 }
 
 export function drawTotals(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, y: number) {
   const x = PAGE.marginX;
 
-  if (y + 120 > PAGE.bottom) {
+  if (y + 95 > PAGE.bottom) {
     doc.addPage({ size: "A4", margin: 0 });
     drawPageBackground(doc);
-    y = 620;
+    y = 50;
   }
 
-  doc
-    .moveTo(x, y)
-    .lineTo(PAGE.width - x, y)
-    .strokeColor(C.line)
-    .lineWidth(1)
-    .stroke();
+  doc.moveTo(x, y).lineTo(PAGE.width - x, y).strokeColor(C.line).lineWidth(1).stroke();
 
-  const boxW = 240;
+  const boxW = 200;
   const boxX = PAGE.width - x - boxW;
-  const boxY = y + 24;
+  const boxY = y + 14;
+  const rowH = 15;
 
   // El precio cargado en cada item ya incluye IVA (precio de venta final).
   // Para mostrar el desglose correcto (neto -> + IVA por alicuota -> total)
@@ -388,91 +614,75 @@ export function drawTotals(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, y: 
   doc
     .fillColor(C.muted)
     .font("Helvetica")
-    .fontSize(10.5)
-    .text("Subtotal (sin IVA)", boxX, boxY, {
-      width: 100,
-      align: "left",
-    });
+    .fontSize(9)
+    .text("Subtotal (sin IVA)", boxX, boxY, { width: 100, align: "left" });
 
   doc
     .fillColor(C.black)
     .font("Helvetica-Bold")
-    .fontSize(11)
-    .text(money(netoSum), boxX + 120, boxY, {
-      width: 120,
-      align: "right",
-    });
+    .fontSize(9.5)
+    .text(money(netoSum), boxX + 100, boxY, { width: 100, align: "right" });
 
   const ivaEntries = Object.entries(ivaByRate).filter(([, v]) => v > 0.01);
   let ivaOffsetY = 0;
+
   for (const [rateStr, ivaAmt] of ivaEntries) {
     doc
       .fillColor(C.muted)
       .font("Helvetica")
-      .fontSize(10.5)
-      .text(`IVA ${rateStr}%`, boxX, boxY + 22 + ivaOffsetY, { width: 100, align: "left" });
+      .fontSize(9)
+      .text(`IVA ${rateStr}%`, boxX, boxY + rowH + ivaOffsetY, { width: 100, align: "left" });
     doc
       .fillColor(C.black)
       .font("Helvetica-Bold")
-      .fontSize(11)
-      .text(money(ivaAmt), boxX + 120, boxY + 22 + ivaOffsetY, { width: 120, align: "right" });
-    ivaOffsetY += 20;
+      .fontSize(9.5)
+      .text(money(ivaAmt), boxX + 100, boxY + rowH + ivaOffsetY, { width: 100, align: "right" });
+    ivaOffsetY += rowH;
   }
 
   // subtotal - total > 0 -> descuento; < 0 -> recargo (ver flujo de POS).
   const adjustment = Number(sale.subtotal || 0) - Number(sale.total || 0);
   const hasAdjustment = Math.abs(adjustment) > 0.01;
 
-  let totalBoxY = boxY + 26 + ivaOffsetY;
+  let totalBoxY = boxY + rowH + ivaOffsetY + 6;
 
   if (hasAdjustment) {
     const isSurcharge = adjustment < 0;
+    const adjustmentY = boxY + rowH + ivaOffsetY;
 
     doc
       .fillColor(C.muted)
       .font("Helvetica")
-      .fontSize(10.5)
-      .text(isSurcharge ? "Recargo" : "Descuento", boxX, boxY + 22, {
-        width: 100,
-        align: "left",
-      });
+      .fontSize(9)
+      .text(isSurcharge ? "Recargo" : "Descuento", boxX, adjustmentY, { width: 100, align: "left" });
 
     doc
       .fillColor(C.black)
       .font("Helvetica-Bold")
-      .fontSize(11)
-      .text(`${isSurcharge ? "+" : "-"} ${money(Math.abs(adjustment))}`, boxX + 120, boxY + 22, {
-        width: 120,
+      .fontSize(9.5)
+      .text(`${isSurcharge ? "+" : "-"} ${money(Math.abs(adjustment))}`, boxX + 100, adjustmentY, {
+        width: 100,
         align: "right",
       });
 
-    totalBoxY = boxY + 48;
+    totalBoxY = adjustmentY + rowH + 6;
   }
 
-  doc
-    .roundedRect(boxX - 4, totalBoxY, boxW + 4, 42, 10)
-    .fill(C.black);
+  doc.roundedRect(boxX - 4, totalBoxY, boxW + 4, 28, 5).fill(C.black);
 
-  doc
-    .fillColor(C.white)
-    .font("Helvetica-Bold")
-    .fontSize(15)
-    .text("Total", boxX + 14, totalBoxY + 13);
+  doc.fillColor(C.white).font("Helvetica-Bold").fontSize(11).text("Total", boxX + 10, totalBoxY + 9);
 
   doc
     .font("Helvetica-Bold")
-    .fontSize(15)
-    .text(money(sale.total), boxX + 92, totalBoxY + 13, {
-      width: 134,
-      align: "right",
-    });
+    .fontSize(11)
+    .text(money(sale.total), boxX + 60, totalBoxY + 9, { width: 134, align: "right" });
 }
 
 export function drawFooter(doc: PDFKit.PDFDocument, page: number, totalPages: number) {
   doc
     .fillColor(C.lightMuted)
     .font("Helvetica")
-    .fontSize(7.5)
+    .fontSize(7)
     .text(`Página ${page} de ${totalPages}   ·   ${COMARPOS_FOOTER_TEXT}`, PAGE.marginX, 820, {
       width: PAGE.width - PAGE.marginX * 2,
       align: "center",

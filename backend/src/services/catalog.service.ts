@@ -85,7 +85,11 @@ function getKgStockTotal(product: any) {
   return rows.reduce((acc: number, row: any) => acc + Number(row.quantityKg || 0), 0);
 }
 
-function getProductStock(product: any) {
+// Exportada para order.service.ts: el checkout de la tienda tiene que
+// resolver disponibilidad exactamente igual que el catalogo que el
+// comprador esta mirando, para no mostrarle "disponible" y despues
+// rechazar el pedido (o al reves).
+export function getProductStock(product: any) {
   if (product.type === ProductType.COMPUESTO) {
     if (!Array.isArray(product.components) || product.components.length === 0) {
       return {
@@ -145,7 +149,11 @@ function getProductStock(product: any) {
   };
 }
 
-function resolvePrice(product: any, category: CategoryClient) {
+// Exportada para order.service.ts: el checkout tiene que cobrar exactamente
+// el mismo precio que el catalogo publico le mostro al comprador (siempre
+// categoria Price/publica en la tienda, ver doc "tienda online por tenant" -
+// un CLIENTE logueado no ve su PriceList custom ahi, decision v1).
+export function resolvePrice(product: any, category: CategoryClient) {
   const isKg = product.saleUnit === SaleUnit.KG;
 
   const publicPriceRaw = isKg ? product.pricePerKg : product.price;

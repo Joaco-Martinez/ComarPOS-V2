@@ -62,7 +62,8 @@ export type PlanFeatureKey =
   | "arca"
   | "empresa"
   | "printbox"
-  | "hoteleria";
+  | "hoteleria"
+  | "tiendaOnline";
 
 export const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
   dashboard: "Dashboard",
@@ -97,6 +98,7 @@ export const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
   empresa: "Empresa",
   printbox: "PrintBox",
   hoteleria: "Hotelería",
+  tiendaOnline: "Tienda Online",
 };
 
 const ALL_FEATURES_ON: Record<PlanFeatureKey, boolean> = Object.fromEntries(
@@ -151,12 +153,16 @@ export const PLANS: Plan[] = [
       reportes: false,
       objetivosVentas: false,
       auditoria: false,
-      // "hoteleria" no es una feature de tier de plan, es un modulo
-      // vertical (hotel/cabañas) -- apagado por defecto en los 3 planes, se
-      // prende a mano por tenant puntual (Tenant.featureOverrides, ver
-      // planFeature.service.ts#checkFeature) desde /platform-admin, sin
-      // importar el plan que tenga contratado.
+      // "hoteleria" y "tiendaOnline" no son features de tier de plan, son
+      // modulos verticales/nuevos -- apagados por defecto en los 3 planes,
+      // se prenden a mano por tenant puntual (Tenant.featureOverrides, ver
+      // planFeature.service.ts#checkFeature) o por plan entero desde
+      // /platform-admin > "Modulos por plan", sin importar el plan que
+      // tenga contratado. tiendaOnline arranca apagada a proposito (recien
+      // se termino de construir, doc "tienda online por tenant" fase 4) --
+      // prenderla es una decision de lanzamiento, no del codigo.
       hoteleria: false,
+      tiendaOnline: false,
     },
   },
   {
@@ -168,7 +174,7 @@ export const PLANS: Plan[] = [
     tagline: "El más elegido: todo lo que necesita un negocio en crecimiento.",
     highlighted: true,
     limits: { maxBusinessLocations: 3, maxProducts: null, maxUsers: null },
-    features: { ...ALL_FEATURES_ON, hoteleria: false },
+    features: { ...ALL_FEATURES_ON, hoteleria: false, tiendaOnline: false },
   },
   {
     id: "multisucursal",
@@ -179,7 +185,7 @@ export const PLANS: Plan[] = [
     tagline: "Para cadenas y negocios con varias sucursales.",
     highlighted: false,
     limits: { maxBusinessLocations: null, maxProducts: null, maxUsers: null },
-    features: { ...ALL_FEATURES_ON, hoteleria: false },
+    features: { ...ALL_FEATURES_ON, hoteleria: false, tiendaOnline: false },
   },
 ];
 

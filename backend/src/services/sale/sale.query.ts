@@ -52,6 +52,8 @@ function buildSaleInclude() {
         creditNotes: true,
       },
     },
+    priceList: true,
+    discounts: { orderBy: { order: "asc" as const } },
   };
 }
 

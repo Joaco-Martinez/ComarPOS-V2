@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { Client, ClientCategory, DocumentType } from '@/types';
+import type { Client, ClientCategory, DocumentType, PriceList } from '@/types';
 import { fmtMoney, normalizeArray, CLIENT_IVA_CONDITIONS } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
@@ -22,12 +22,14 @@ const emptyForm = {
   category: 'Cliente' as ClientCategory,
   addressStreet: '', addressNumber: '', addressCity: '', addressProvince: '',
   creditLimit: '', isAccountEnabled: 'false',
+  priceListId: '',
 };
 
 type Form = typeof emptyForm;
 
 export default function ClientesPage() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
@@ -47,6 +49,9 @@ export default function ClientesPage() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    api.get('/price-lists').then(({ data }) => setPriceLists(normalizeArray<PriceList>(data))).catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     let c = clients;
@@ -80,6 +85,7 @@ export default function ClientesPage() {
       addressCity: c.addressCity ?? '', addressProvince: c.addressProvince ?? '',
       creditLimit: String(c.creditLimit ?? ''),
       isAccountEnabled: String(c.isAccountEnabled ?? false),
+      priceListId: c.priceListId ?? '',
     });
     setModal('edit');
   };
@@ -92,6 +98,7 @@ export default function ClientesPage() {
         ...form,
         creditLimit: form.creditLimit ? Number(form.creditLimit) : undefined,
         isAccountEnabled: form.isAccountEnabled === 'true',
+        priceListId: form.priceListId || null,
       };
       if (modal === 'create') {
         await api.post('/clients', body);
@@ -257,6 +264,17 @@ export default function ClientesPage() {
               </div>
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Lista de precios</label>
+                  <select value={form.priceListId} onChange={f('priceListId')}>
+                    <option value="">Minorista (default)</option>
+                    {priceLists.filter((pl) => !pl.isDefault).map((pl) => (
+                      <option key={pl.id} value={pl.id}>{pl.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Teléfono</label>
                   <input value={form.telefono} onChange={f('telefono')} placeholder="+54 9 11 1234-5678" />
                 </div>
@@ -326,6 +344,7 @@ export default function ClientesPage() {
               <div className="grid-responsive" style={{ gap: 10 }}>
                 {[
                   ['Categoría', selected.category],
+                  ['Lista de precios', priceLists.find((pl) => pl.id === selected.priceListId)?.name ?? 'Minorista (default)'],
                   ['Condición frente al IVA', CLIENT_IVA_CONDITIONS.find((o) => o.value === selected.ivaCondition)?.label ?? 'Sin especificar'],
                   ['Teléfono', selected.telefono ?? '—'],
                   ['Email', selected.gmail ?? '—'],

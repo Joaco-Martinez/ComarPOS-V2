@@ -17,9 +17,9 @@ import { Package, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, 
 const emptyForm = {
   name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '',
   saleUnit: 'UNIT', isService: 'false', unlimitedStock: 'false',
-  price: '', wholesalePrice: '', purchasePrice: '',
+  price: '', purchasePrice: '',
   ivaRate: '21',
-  pricePerKg: '', wholesalePricePerKg: '',
+  pricePerKg: '',
 };
 
 type Form = typeof emptyForm;
@@ -82,10 +82,10 @@ export default function ProductosPage() {
       type: p.type, categoryId: p.categoryId ?? '', saleUnit: p.saleUnit,
       isService: String(p.isService ?? false),
       unlimitedStock: String(p.unlimitedStock ?? false),
-      price: String(p.price), wholesalePrice: String(p.wholesalePrice),
+      price: String(p.price),
       purchasePrice: String(p.purchasePrice ?? ''),
       ivaRate: String((p as any).ivaRate ?? 21),
-      pricePerKg: String(p.pricePerKg ?? ''), wholesalePricePerKg: String(p.wholesalePricePerKg ?? ''),
+      pricePerKg: String(p.pricePerKg ?? ''),
     });
     setImgFile(null);
     setCropSourceFile(null);
@@ -407,30 +407,26 @@ export default function ProductosPage() {
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>
                 Precios {isKg ? '(por kg)' : ''}
               </div>
-              {isKg ? (
-                <div className="form-row">
-                  {[['pricePerKg', 'Precio lista/kg'], ['wholesalePricePerKg', 'Precio mayor/kg']].map(([k, l]) => (
-                    <div key={k} className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">{l}</label>
-                      <input type="number" min="0" step="any" value={form[k as keyof Form]} onChange={f(k as keyof Form)} placeholder="0" />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="form-row">
-                  {[['price', 'Precio lista'], ['wholesalePrice', 'Precio mayor']].map(([k, l]) => (
-                    <div key={k} className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">{l}</label>
-                      <input type="number" min="0" step="any" value={form[k as keyof Form]} onChange={f(k as keyof Form)} placeholder="0" />
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: -6, marginBottom: 4 }}>
+                Este es el precio de la lista Minorista. Para mayoristas u otros precios especiales,
+                creá listas de precios adicionales en Productos → Listas de precios.
+              </div>
               <div className="form-row">
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">{isKg ? 'Precio lista/kg' : 'Precio lista'}</label>
+                  <input
+                    type="number" min="0" step="any"
+                    value={form[isKg ? 'pricePerKg' : 'price']}
+                    onChange={f(isKg ? 'pricePerKg' : 'price')}
+                    placeholder="0"
+                  />
+                </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Costo de compra</label>
                   <input type="number" min="0" step="any" value={form.purchasePrice} onChange={f('purchasePrice')} placeholder="0" />
                 </div>
+              </div>
+              <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Tasa IVA</label>
                   <select value={form.ivaRate} onChange={f('ivaRate')}>

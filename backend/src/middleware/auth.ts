@@ -70,7 +70,12 @@ function touchLastSeen(userId: string) {
   prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } }).catch(() => {});
 }
 
-function readToken(req: Request) {
+// Exportado para storefrontTenant.ts: la tienda online necesita identificar
+// a un CLIENTE logueado (para autocompletar datos en el checkout) SIN dejar
+// que el tenantId de su JWT pise el tenant de la tienda que esta navegando
+// (:tenantSlug en la URL) - por eso no puede usar optionalAuthMiddleware tal
+// cual, que via runWithAuthenticatedTenant() sí pisa el contexto de tenant.
+export function readToken(req: Request) {
   const cookieToken = req.cookies?.token;
   const authorization = req.headers.authorization;
 

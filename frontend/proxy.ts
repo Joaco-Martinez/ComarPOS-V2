@@ -140,6 +140,10 @@ export function proxy(req: NextRequest) {
   // mandamos por WhatsApp/email a un cliente que todavia no tiene cuenta,
   // tiene que poder verlo y aprobarlo sin loguearse.
   const isBudgetLink = pathname.startsWith('/presupuesto/');
+  // Tienda online publica de un tenant (/tienda/<tenantSlug>/...) - un
+  // comprador invitado tiene que poder navegarla y comprar sin cuenta (doc
+  // "tienda online por tenant"), igual que el link de presupuesto de arriba.
+  const isStorefront = pathname.startsWith('/tienda/');
   // Legales (footer del sitio, y requisito de las tiendas de apps), sus
   // alias en ingles para discoverability de agentes (/about, /contact,
   // /privacy - ver frontend/content/), y la imagen OG que genera
@@ -150,7 +154,7 @@ export function proxy(req: NextRequest) {
     || pathname === '/about' || pathname === '/contact' || pathname === '/privacy';
   const isOgImage = pathname === '/opengraph-image';
 
-  if (isInstallGuide || isSignup || isVerticalLanding || isBudgetLink || isLegal || isOgImage) {
+  if (isInstallGuide || isSignup || isVerticalLanding || isBudgetLink || isStorefront || isLegal || isOgImage) {
     return NextResponse.next();
   }
 

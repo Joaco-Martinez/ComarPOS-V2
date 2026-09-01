@@ -98,6 +98,14 @@ model Tenant {
   // falta redeployar para cambiar un precio.
   deliveryPricePerKm Float?
 
+  // Tasa del programa de fidelizacion (modulo "fidelidad", ver
+  // loyalty.service.ts) - antes hardcodeada, ahora configurable por tenant
+  // desde /loyalty/settings. loyaltyPointsPerAmount = puntos ganados por
+  // cada $1 de venta (default 0.01 = 1 punto cada $100). loyaltyPointValueArs
+  // = valor en pesos de cada punto al canjear (default 1 = 1 punto = $1).
+  loyaltyPointsPerAmount Float @default(0.01)
+  loyaltyPointValueArs   Float @default(1)
+
   // Progreso de la guia de arranque para negocios nuevos (ver /guia en el
   // frontend y onboarding.service.ts). Mapa { [stepId]: boolean }, null hasta
   // que se marca el primer paso. Es del negocio, no de un usuario puntual:
@@ -136,6 +144,9 @@ model Tenant {
   auditLogs         AuditLog[]
   notifications     Notification[]
   priceLists        PriceList[]
+  storefrontConfig  TenantStorefrontConfig?
+  mpConfig          TenantMpConfig?
+  orders            Order[]
   loyaltyAccounts   LoyaltyAccount[]
   returns           Return[]
   productStocks     ProductStock[]
@@ -210,50 +221,68 @@ model TenantPaymentLog {
 }
 
 model User {
-  id                       String                    @id @default(uuid())
-  tenantId                 String?
-  tenant                   Tenant?                   @relation(fields: [tenantId], references: [id])
-  email                    String
-  password                 String
-  name                     String
-  role                     Role
-  isActive                 Boolean                   @default(true)
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
+  id                         String                    @id @default(uuid())
+  tenantId                   String?
+  tenant                     Tenant?                   @relation(fields: [tenantId], references: [id])
+  email                      String
+  password                   String
+  name                       String
+  role                       Role
+  isActive                   Boolean                   @default(true)
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
   // Se pisa en cada login exitoso (ver auth.service.ts) - usado por
   // platform-admin para auditar si una cuenta se llego a usar o no.
-  lastLoginAt              DateTime?
-  passwordResetExpires     DateTime?
-  passwordResetToken       String?                   @unique
-  mustChangePassword       Boolean                   @default(false)
+  lastLoginAt                DateTime?
+  passwordResetExpires       DateTime?
+  passwordResetToken         String?                   @unique
+  mustChangePassword         Boolean                   @default(false)
   // Layout personal de accesos rapidos del mobile nav (BottomNav.tsx),
   // por usuario. null = sin personalizar, usa el orden default de
   // navConfig.ts (ver frontend/lib/quickAccess.ts#buildEffectiveNav).
-  quickAccessConfig        Json?
-  accountMovements         AccountMovement[]
-  client                   Client?
-  remitos                  Remito[]
-  Sale                     Sale[]
-  StockMovements           StockMovement[]
-  purchases                Purchase[]
+  quickAccessConfig          Json?
+  // Sucursal "de base" del usuario (doc "puntos de venta separados") - el
+  // POS y la Caja arrancan con esta ubicacion en vez de la default global
+  // del tenant (ver sale.stock.ts#resolveStockLocationId,
+  // cashSession.service.ts#openSession). Null = sin asignar, sigue usando
+  // el default del tenant como antes (tenants de 1 sola sucursal no
+  // necesitan tocar esto nunca).
+  defaultBusinessLocationId  String?
+  defaultBusinessLocation    BusinessLocation?         @relation(fields: [defaultBusinessLocationId], references: [id])
+  // Si esta prendido, el usuario NO puede vender ni abrir caja en otra
+  // sucursal que no sea defaultBusinessLocation - lo valida el backend
+  // (resolveStockLocationId/openSession), no es solo un default sugerido
+  // en el frontend. Solo tiene efecto si defaultBusinessLocationId esta
+  // seteado. Apagado por defecto: no cambia nada para nadie hasta que un
+  // admin lo prenda a mano para un usuario puntual.
+  restrictToDefaultLocation  Boolean                   @default(false)
+  accountMovements           AccountMovement[]
+  client                     Client?
+  remitos                    Remito[]
+  Sale                       Sale[]
+  StockMovements             StockMovement[]
+  purchases                  Purchase[]
   // new modules
-  cashSessions             CashSession[]
-  stockCounts              StockCount[]
-  purchaseOrders           PurchaseOrder[]
-  notifications            Notification[]
-  auditLogs                AuditLog[]
-  returns                  Return[]
-  pushTokens               PushToken[]
-  repairOrders             RepairOrder[]
-  vatSettlementsClosed     VatSettlement[]
-  supplierAccountMovements SupplierAccountMovement[]
-  reservations             Reservation[]
+  cashSessions               CashSession[]
+  stockCounts                StockCount[]
+  purchaseOrders             PurchaseOrder[]
+  notifications              Notification[]
+  auditLogs                  AuditLog[]
+  returns                    Return[]
+  pushTokens                 PushToken[]
+  repairOrders               RepairOrder[]
+  vatSettlementsClosed       VatSettlement[]
+  supplierAccountMovements   SupplierAccountMovement[]
+  reservations               Reservation[]
+  orders                     Order[]
+  orderTransferVerifications Order[]                   @relation("OrderTransferVerifiedBy")
 
   @@unique([email])
   @@index([role])
   @@index([isActive])
   @@index([passwordResetToken])
   @@index([tenantId])
+  @@index([defaultBusinessLocationId])
 }
 
 model Client {
@@ -306,6 +335,7 @@ model Client {
   returns           Return[]
   repairOrders      RepairOrder[]
   reservations      Reservation[]
+  orders            Order[]
 
   @@unique([tenantId, dni])
   @@unique([tenantId, gmail])
@@ -318,11 +348,11 @@ model Client {
 }
 
 model BusinessLocation {
-  id                 String               @id @default(uuid())
+  id                 String                   @id @default(uuid())
   tenantId           String?
-  tenant             Tenant?              @relation(fields: [tenantId], references: [id])
+  tenant             Tenant?                  @relation(fields: [tenantId], references: [id])
   name               String
-  type               BusinessLocationType @default(BRANCH)
+  type               BusinessLocationType     @default(BRANCH)
   addressStreet      String?
   addressNumber      String?
   addressCity        String?
@@ -331,22 +361,25 @@ model BusinessLocation {
   addressNotes       String?
   latitude           Float?
   longitude          Float?
-  isDefault          Boolean              @default(false)
-  isActive           Boolean              @default(true)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  isDefault          Boolean                  @default(false)
+  isActive           Boolean                  @default(true)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
   remitos            Remito[]
   sales              Sale[]
   cashSessions       CashSession[]
   productStocks      ProductStock[]
-  stockMovementsFrom StockMovement[]      @relation("StockMovementFrom")
-  stockMovementsTo   StockMovement[]      @relation("StockMovementTo")
+  stockMovementsFrom StockMovement[]          @relation("StockMovementFrom")
+  stockMovementsTo   StockMovement[]          @relation("StockMovementTo")
   purchases          Purchase[]
-  stockLocationSales Sale[]               @relation("SaleStockLocation")
+  stockLocationSales Sale[]                   @relation("SaleStockLocation")
   stockCounts        StockCount[]
   repairOrders       RepairOrder[]
   rooms              Room[]
   reservations       Reservation[]
+  storefrontConfigs  TenantStorefrontConfig[]
+  orders             Order[]
+  defaultForUsers    User[]
 
   @@index([type])
   @@index([isDefault])
@@ -455,6 +488,7 @@ model Product {
   returnItems         ReturnItem[]
   stock               ProductStock[]
   repairOrderItems    RepairOrderItem[]
+  orderItems          OrderItem[]
 
   @@unique([tenantId, sku])
   @@index([sku])
@@ -478,6 +512,35 @@ model ProductComponent {
 
   @@unique([compositeId, componentId])
   @@index([componentId])
+}
+
+enum TenantMpConfigStatus {
+  INACTIVE
+  ACTIVE
+  ERROR
+}
+
+// Credenciales de Mercado Pago del NEGOCIO (para que cobre a SUS clientes en
+// la tienda online) - tabla separada de ArcaConfig/billing.mercadoPago.service.ts
+// a proposito: eso es la cuenta de MP de ComarPOS (cobrarle la suscripcion
+// SaaS al tenant), esto es la cuenta de MP del tenant (cobrarle a sus
+// propios clientes). Mismo mecanismo de encriptado que ArcaConfig
+// (tenantMpCrypto.service.ts, AES-256-GCM, secret propio MP_CREDENTIALS_SECRET
+// para no acoplar el blast radius de ARCA y MP).
+model TenantMpConfig {
+  id                   String               @id @default(uuid())
+  tenantId             String               @unique
+  tenant               Tenant               @relation(fields: [tenantId], references: [id])
+  publicKey            String?
+  accessTokenEncrypted String?
+  status               TenantMpConfigStatus @default(INACTIVE)
+  lastError            String?
+  lastCheckAt          DateTime?
+  isActive             Boolean              @default(false)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([tenantId])
 }
 
 model ArcaConfig {
@@ -781,6 +844,18 @@ model Sale {
   total                   Float             @default(0)
   discountType            DiscountType?
   discountValue           Float?
+  // Lista de precios usada para resolver el precio de los items (si es null,
+  // se usa el mecanismo de precio/mayorista de siempre - ver
+  // sale.pricing.ts#resolveUnitPrice). Se precarga con Client.priceListId al
+  // armar una cotizacion, pero se puede overridear por venta.
+  priceListId             String?
+  priceList               PriceList?        @relation(fields: [priceListId], references: [id])
+  // Descuentos multiples (mecanismo nuevo, aditivo, usado por la pantalla de
+  // Cotizaciones - ver sale.discounts.ts). El descuento unico de arriba
+  // (discountType/discountValue) sigue siendo el que usa el POS normal, no
+  // se pisan entre si: solo uno de los dos mecanismos se usa por venta.
+  discountsAccumulate     Boolean           @default(false)
+  discounts               SaleDiscount[]
   isInvoiced              Boolean           @default(false)
   isNoteCredit            Boolean           @default(false)
   invoiceStatus           InvoiceStatus     @default(NONE)
@@ -838,6 +913,7 @@ model Sale {
   returns                 Return[]
   repairOrder             RepairOrder?
   reservation             Reservation?
+  order                   Order?
 
   @@index([quotationExpiresAt])
   @@index([clientId])
@@ -1660,6 +1736,7 @@ model PriceList {
 
   items   PriceListItem[]
   clients Client[]
+  sales   Sale[]
 
   @@index([tenantId])
   @@index([isActive])
@@ -1672,12 +1749,205 @@ model PriceListItem {
   productId   String
   product     Product   @relation(fields: [productId], references: [id])
   price       Float
+  // Precio override cuando el producto se vende por KG (Product.saleUnit =
+  // KG) - espeja Product.pricePerKg de la misma forma que "price" espeja
+  // Product.price. Nulo para productos que se venden por UNIT.
+  pricePerKg  Float?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@unique([priceListId, productId])
   @@index([priceListId])
   @@index([productId])
+}
+
+// Config de la tienda online publica del tenant (doc "tienda online por
+// tenant") - tabla separada de Tenant (que ya tiene ~40 columnas), mismo
+// criterio que ArcaConfig. isEnabled la prende/apaga a mano el dueño del
+// negocio (independiente de si el plan incluye el modulo, ver
+// PlanFeatureKey.tiendaOnline) - storefrontTenant.ts controla el bloqueo por
+// plan/suscripcion, esto controla si el dueño la quiere visible ahora mismo.
+model TenantStorefrontConfig {
+  id            String  @id @default(uuid())
+  tenantId      String  @unique
+  tenant        Tenant  @relation(fields: [tenantId], references: [id])
+  isEnabled     Boolean @default(false)
+  // Nombre publico de la tienda, puede diferir de Tenant.name (razon
+  // social) - si es null, se usa Tenant.name como fallback.
+  storeName     String?
+  description   String? @db.Text
+  bannerUrl     String?
+  bannerId      String?
+  // Hex simple (#RRGGBB), se aplica como variable CSS en el frontend de la
+  // tienda - no es un sistema de theming completo a proposito (doc fase 4).
+  accentColor   String?
+  // [{ day: 0-6, opens: "09:00", closes: "18:00", closed: boolean }] - forma
+  // libre, se valida/formatea en el frontend, no hace falta un modelo aparte.
+  businessHours Json?
+
+  pickupEnabled      Boolean           @default(true)
+  deliveryEnabled    Boolean           @default(false)
+  // Sucursal de origen de la tienda (retiro/envio/descuento de stock al
+  // convertir un pedido en venta) - explicito a proposito, NO se asume que
+  // sea la BusinessLocation con isDefault=true (ese flag ya se usa para otra
+  // cosa en el resto del sistema y no se audito su significado actual antes
+  // de reusarlo acá).
+  businessLocationId String?
+  businessLocation   BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+
+  transferInstructions String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+enum OrderStatus {
+  PENDING // recien creado, esperando confirmacion/pago
+  PAYMENT_PENDING_REVIEW // transferencia con comprobante subido, esperando que el negocio la verifique
+  CONFIRMED // pago verificado (o efectivo aceptado) - listo para preparar/entregar
+  CONVERTED // ya se convirtio en una Sale real (ver order.service.ts#convertToSale)
+  CANCELLED
+  EXPIRED // reservado para un barrido futuro de pedidos abandonados sin pagar - no se usa todavia
+}
+
+enum OrderPaymentMethod {
+  EFECTIVO
+  TRANSFERENCIA
+  MERCADOPAGO
+}
+
+enum OrderPaymentStatus {
+  PENDING
+  AWAITING_VERIFICATION
+  APPROVED
+  REJECTED
+}
+
+// Pedido de la tienda online publica (doc "tienda online por tenant") -
+// modelo separado de Sale a proposito: un pedido de invitado no deberia
+// descontar stock ni existir como venta "real" hasta que el negocio lo
+// procesa o el pago se confirma (Sale, en cambio, descuenta stock
+// inmediatamente al crearse, incluso en PENDING - no encaja con un carrito
+// publico sin friccion). Se convierte en una Sale real recien en
+// order.service.ts#convertToSale.
+model Order {
+  id       String @id @default(uuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  // Identificador opaco para que el comprador invitado consulte SU pedido
+  // sin poder enumerar pedidos ajenos (mismo criterio que
+  // RepairOrder.approvalToken) - nunca se expone el id interno en la URL
+  // publica.
+  publicToken String @unique @default(uuid())
+
+  status OrderStatus @default(PENDING)
+
+  // Invitado + cuenta opcional: si el comprador esta logueado como CLIENTE
+  // de este mismo tenant, se completa clientId/userId para historial: si
+  // no, queda null y los datos de contacto abajo son la unica referencia.
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id])
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id])
+
+  customerName  String
+  customerPhone String?
+  customerEmail String?
+
+  items OrderItem[]
+
+  subtotal Float
+  total    Float
+
+  deliveryMethod          DeliveryMethod @default(PICKUP)
+  deliveryCost            Float          @default(0)
+  deliveryDistanceKm      Float?
+  deliveryPricePerKm      Float?
+  deliveryAddressSnapshot String?
+  deliveryLat             Float?
+  deliveryLng             Float?
+
+  // Sucursal de origen (retiro/envio) - copiada de
+  // TenantStorefrontConfig.businessLocationId al crear el pedido, para que
+  // no cambie retroactivamente si el negocio la cambia despues.
+  businessLocationId String?
+  businessLocation   BusinessLocation? @relation(fields: [businessLocationId], references: [id])
+
+  paymentMethod OrderPaymentMethod
+  paymentStatus OrderPaymentStatus @default(PENDING)
+
+  // Mercado Pago (pago con las credenciales propias del tenant, ver
+  // storefrontMercadoPago.service.ts) - null salvo paymentMethod=MERCADOPAGO.
+  mpPreferenceId String?
+  mpPaymentId    String?
+
+  transferProofUrl         String?
+  transferProofId          String?
+  transferVerifiedAt       DateTime?
+  transferVerifiedByUserId String?
+  transferVerifiedByUser   User?     @relation("OrderTransferVerifiedBy", fields: [transferVerifiedByUserId], references: [id])
+
+  customerNotes String? @db.Text
+
+  // Se completa recien al convertir el pedido en una venta real (ver
+  // order.service.ts#convertToSale) - null hasta entonces.
+  saleId String? @unique
+  sale   Sale?   @relation(fields: [saleId], references: [id])
+
+  convertedAt  DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([tenantId, status])
+  @@index([publicToken])
+}
+
+model OrderItem {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity   Int?
+  quantityKg Float?
+
+  unitPrice Float
+  subtotal  Float
+
+  productNameSnapshot String?
+  productSkuSnapshot  String?
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+// Descuento(s) multiples de una cotizacion (pantalla de Cotizaciones, ver
+// sale.discounts.ts). Ej: "Efectivo 15%" y "Tarjeta 12%" cargados en la misma
+// cotizacion como alternativas (Sale.discountsAccumulate = false, se aplica
+// solo el de mayor prioridad por "order") o acumulados en cadena
+// (discountsAccumulate = true).
+model SaleDiscount {
+  id        String       @id @default(uuid())
+  saleId    String
+  sale      Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  label     String?
+  type      DiscountType
+  value     Float
+  applied   Boolean      @default(true)
+  order     Int          @default(0)
+  createdAt DateTime     @default(now())
+
+  @@index([saleId])
 }
 
 // Modulo de Servicios / Reparaciones tecnicas: recibir un equipo, presupuestar

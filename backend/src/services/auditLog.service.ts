@@ -2,6 +2,14 @@ import prisma from "../prisma";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 
+// Acciones de soporte/plataforma (ej. "entrar como" un tenant desde el panel
+// de super-admin, ver platformTenant.service.ts#impersonate) que SÍ quedan
+// grabadas en AuditLog para trazabilidad interna, pero nunca deben mostrarse
+// en la pantalla de Auditoría que ve el propio tenant (getAll/getEntityHistory,
+// los únicos consumidores de esta tabla desde /audit-log). No se borran de la
+// base, solo se excluyen de estas dos lecturas.
+const HIDDEN_FROM_TENANT_ACTIONS = ["IMPERSONATE_START"];
+
 export const auditLogService = {
   async log(data: {
     userId: string;
@@ -35,6 +43,7 @@ export const auditLogService = {
   }) {
     const where = {
       ...tenantScope(),
+      action: { notIn: HIDDEN_FROM_TENANT_ACTIONS },
       ...(filters?.userId ? { userId: filters.userId } : {}),
       ...(filters?.entity ? { entity: filters.entity } : {}),
       ...(filters?.entityId ? { entityId: filters.entityId } : {}),
@@ -59,7 +68,7 @@ export const auditLogService = {
 
   async getEntityHistory(entity: string, entityId: string) {
     return prisma.auditLog.findMany({
-      where: { entity, entityId, ...tenantScope() },
+      where: { entity, entityId, action: { notIn: HIDDEN_FROM_TENANT_ACTIONS }, ...tenantScope() },
       include: { user: { select: { id: true, name: true } } },
       orderBy: { createdAt: "desc" },
     });

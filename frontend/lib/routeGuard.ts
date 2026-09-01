@@ -23,11 +23,11 @@ const SINGLE_DYNAMIC_SEGMENT_PAGES = new Set(['para', 'presupuesto']);
 // segundo tramo de un posible slug de tenant no puede resolver a nada.
 const TENANT_SUBROUTES = new Set([
   'alertas', 'auditoria', 'ayuda', 'caja', 'categorias', 'clientes', 'compras',
-  'configuracion', 'conteo-stock', 'cuentas-corrientes', 'dashboard', 'devoluciones',
+  'configuracion', 'conteo-stock', 'cotizaciones', 'cuentas-corrientes', 'dashboard', 'devoluciones',
   'facturacion', 'fidelidad', 'finanzas', 'gastos-recurrentes', 'guia', 'hoteleria',
   'libro-iva-digital', 'objetivos-ventas', 'ordenes-compra', 'pos', 'productos',
   'promociones', 'proveedores', 'remitos', 'reportes', 'servicios', 'stock',
-  'tipo-cambio', 'usuarios', 'ventas',
+  'tienda-online', 'tipo-cambio', 'usuarios', 'ventas',
 ]);
 
 export function isResolvableAppPath(pathname: string): boolean {
@@ -40,6 +40,14 @@ export function isResolvableAppPath(pathname: string): boolean {
   }
   if (SINGLE_DYNAMIC_SEGMENT_PAGES.has(first)) {
     return segments.length === 2;
+  }
+  // Tienda online publica: app/tienda/[tenantSlug]/... - el segundo tramo es
+  // un slug de TENANT (dinamico, no una lista fija de nombres de carpeta como
+  // TENANT_SUBROUTES), asi que no se valida contra un set - solo que haya
+  // al menos /tienda/:slug. Los tramos siguientes (productos, carrito, etc.)
+  // son sub-rutas propias de ese segmento dinamico.
+  if (first === 'tienda') {
+    return segments.length >= 2;
   }
   // Cualquier otro primer segmento solo puede ser un slug de tenant --
   // no hay app/[tenant]/page.tsx (sin sub-ruta no resuelve), y el segundo

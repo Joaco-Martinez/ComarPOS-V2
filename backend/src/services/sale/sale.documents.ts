@@ -101,6 +101,7 @@ export async function generarCotizacion(saleId: string) {
       },
       user: { select: { id: true, name: true, email: true, role: true } },
       client: true,
+      discounts: { orderBy: { order: "asc" } },
     },
   });
 
@@ -135,6 +136,7 @@ export async function generarCotizacion(saleId: string) {
         },
         user: { select: { id: true, name: true, email: true, role: true } },
         client: true,
+        discounts: { orderBy: { order: "asc" } },
       },
     });
   }
@@ -154,12 +156,27 @@ export async function generarCotizacion(saleId: string) {
       })
     : null;
 
+  // Datos fiscales reales del negocio (CUIT, condicion IVA, ingresos
+  // brutos, domicilio fiscal) - vive en ArcaConfig, no en Tenant (que solo
+  // tiene los campos "ticket*" para imprimir tickets). Si el tenant no
+  // configuro ARCA/AFIP todavia, esto queda null y se usan los campos
+  // "ticket*" como fallback (mismo criterio que ya usaba este archivo).
+  const arcaConfig = sale.tenantId
+    ? await prisma.arcaConfig.findFirst({
+        where: { tenantId: sale.tenantId },
+        select: { businessName: true, cuit: true, ivaCondition: true, fiscalAddress: true, iibb: true },
+        orderBy: { createdAt: "desc" },
+      })
+    : null;
+
   const pdfBuffer = await generarCotizacionPDF({
     ...sale,
     logoUrl: tenant?.logoUrl ?? null,
-    businessName: tenant?.ticketBusinessName || tenant?.name || null,
-    businessCuit: tenant?.ticketCuit ?? null,
-    businessAddress: tenant?.ticketAddress ?? null,
+    businessName: arcaConfig?.businessName || tenant?.ticketBusinessName || tenant?.name || null,
+    businessCuit: arcaConfig?.cuit || tenant?.ticketCuit || null,
+    businessAddress: arcaConfig?.fiscalAddress || tenant?.ticketAddress || null,
+    businessIvaCondition: arcaConfig?.ivaCondition ?? null,
+    businessIibb: arcaConfig?.iibb ?? null,
     businessPhone: tenant?.ticketPhone ?? null,
     businessEmail: tenant?.ticketEmail ?? null,
   });

@@ -15,6 +15,7 @@ import {
   drawInfo,
   drawTableHeader,
   drawProductRow,
+  drawDiscountOptions,
   drawTotals,
   drawFooter,
 } from "./generarCotizacionPDF/sections";
@@ -43,16 +44,18 @@ export async function generarCotizacionPDF(
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
-      await drawHeader(doc, sale);
-      drawInfo(doc, sale);
+      const headerBottom = await drawHeader(doc, sale);
+      const infoBottom = drawInfo(doc, sale, headerBottom);
 
-      let y = drawTableHeader(doc, 292);
+      let y = drawTableHeader(doc, infoBottom, sale);
 
       for (let i = 0; i < sale.items.length; i++) {
         y = await drawProductRow(doc, sale, sale.items[i], y, i);
       }
 
-      drawTotals(doc, sale, y + 6);
+      y = drawDiscountOptions(doc, sale, y + 6);
+
+      drawTotals(doc, sale, y);
 
       const pages = doc.bufferedPageRange();
 

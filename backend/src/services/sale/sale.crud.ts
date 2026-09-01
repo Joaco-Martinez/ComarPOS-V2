@@ -95,6 +95,8 @@ export async function getPending() {
       },
       user: { select: { id: true, name: true, email: true, role: true } },
       client: true,
+      priceList: true,
+      discounts: { orderBy: { order: "asc" } },
     },
     orderBy: {
       createdAt: "desc",

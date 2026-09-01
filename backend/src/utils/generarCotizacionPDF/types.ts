@@ -8,6 +8,13 @@ export type CotizacionPDFSale = {
   total: number;
   discountType?: string | null;
   discountValue?: number | null;
+  discounts?: {
+    label?: string | null;
+    type: string;
+    value: number;
+    applied: boolean;
+  }[];
+  discountsAccumulate?: boolean;
   paymentMethod?: string | null;
   receiptType?: string | null;
   status?: string | null;
@@ -21,6 +28,10 @@ export type CotizacionPDFSale = {
   businessAddress?: string | null;
   businessPhone?: string | null;
   businessEmail?: string | null;
+  // Datos fiscales del negocio (ver ArcaConfig - solo estan si el tenant
+  // configuro ARCA/AFIP, ver sale.documents.ts#generarCotizacion).
+  businessIvaCondition?: string | null;
+  businessIibb?: string | null;
 
   user?: {
     name?: string | null;
@@ -30,10 +41,15 @@ export type CotizacionPDFSale = {
     nombre?: string | null;
     apellido?: string | null;
     dni?: string | null;
+    documentType?: string | null;
+    ivaCondition?: string | null;
     telefono?: string | null;
     gmail?: string | null;
     address?: string | null;
     direccion?: string | null;
+    addressStreet?: string | null;
+    addressNumber?: string | null;
+    addressCity?: string | null;
     category?: string | null;
   } | null;
 

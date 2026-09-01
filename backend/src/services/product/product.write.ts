@@ -10,6 +10,7 @@ import alertService from "../alert.service";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
 import { planLimitsService } from "../planLimits.service";
+import { priceListService } from "../priceList.service";
 import {
   normalizeSku,
   toNumberOrNull,
@@ -127,9 +128,15 @@ export async function create(data: CreateProductInput) {
             price: toNumberOrZero(data.price),
             // clientPrice ya no se pide en el form (doc "solo 2 precios") -
             // se espeja el precio de lista para que la columna, si algo
-            // viejo todavia la lee, nunca quede desincronizada.
+            // viejo todavia la lee, nunca quede desincronizada. wholesalePrice
+            // tampoco se pide mas (doc "listas de precios" - el precio
+            // mayorista pasa a ser una lista de precios mas, no un campo fijo
+            // del producto) - se espeja igual, por si algun cliente vieja
+            // sigue en CategoryClient.Mayorista, para que no le queden
+            // productos gratis.
             clientPrice: toNumberOrZero(data.price),
-            wholesalePrice: toNumberOrZero(data.wholesalePrice),
+            wholesalePrice:
+              data.wholesalePrice !== undefined ? toNumberOrZero(data.wholesalePrice) : toNumberOrZero(data.price),
             pricePerKg: null,
             clientPricePerKg: null,
             wholesalePricePerKg: null,
@@ -137,7 +144,10 @@ export async function create(data: CreateProductInput) {
         : {
             pricePerKg: toNumberOrZero(data.pricePerKg),
             clientPricePerKg: toNumberOrZero(data.pricePerKg),
-            wholesalePricePerKg: toNumberOrZero(data.wholesalePricePerKg),
+            wholesalePricePerKg:
+              data.wholesalePricePerKg !== undefined
+                ? toNumberOrZero(data.wholesalePricePerKg)
+                : toNumberOrZero(data.pricePerKg),
             price: 0,
             clientPrice: 0,
             wholesalePrice: 0,
@@ -180,6 +190,7 @@ export async function create(data: CreateProductInput) {
       });
     }
 
+    await priceListService.syncDefaultPriceListItem(currentTenantId(), created);
     await alertService.checkProductStock(created.id);
 
     return prisma.product.findUnique({ where: { id: created.id }, include: productInclude });
@@ -312,9 +323,17 @@ export async function update(id: string, data: Partial<Product> & any) {
     data.price !== undefined ? Number(data.price) : undefined
   );
 
+  // wholesalePrice ya no se edita (doc "listas de precios" - el precio
+  // mayorista pasa a ser una lista de precios mas, no un campo fijo del
+  // producto) - se espeja el precio de lista, igual que clientPrice, por si
+  // algun cliente vieja sigue en CategoryClient.Mayorista.
   setIfDefined(
     "wholesalePrice",
-    data.wholesalePrice !== undefined ? Number(data.wholesalePrice) : undefined
+    data.wholesalePrice !== undefined
+      ? Number(data.wholesalePrice)
+      : data.price !== undefined
+        ? Number(data.price)
+        : undefined
   );
 
   setIfDefined(
@@ -340,7 +359,11 @@ export async function update(id: string, data: Partial<Product> & any) {
 
   setIfDefined(
     "wholesalePricePerKg",
-    data.wholesalePricePerKg !== undefined ? Number(data.wholesalePricePerKg) : undefined
+    data.wholesalePricePerKg !== undefined
+      ? Number(data.wholesalePricePerKg)
+      : data.pricePerKg !== undefined
+        ? Number(data.pricePerKg)
+        : undefined
   );
 
   if (data.saleUnit === SaleUnit.UNIT) {
@@ -362,6 +385,7 @@ export async function update(id: string, data: Partial<Product> & any) {
       include: productInclude,
     });
 
+    await priceListService.syncDefaultPriceListItem(currentTenantId(), updated);
     await alertService.checkProductStock(updated.id);
 
     return updated;

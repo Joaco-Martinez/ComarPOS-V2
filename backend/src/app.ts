@@ -29,12 +29,16 @@ import supplierAccountRoutes from "./routes/supplierAccount.routes";
 import businessLocationRoutes from "./routes/businessLocation.routes";
 import saleRoutes from "./routes/sale.routes";
 import categoryRoutes from "./routes/category.routes";
+import priceListRoutes from "./routes/priceList.routes";
 import clientRouter from "./routes/client.routes";
 import financeRoutes from "./routes/finance.routes";
 import financeAccountRoutes from "./routes/financeAccount.routes";
 import productStatsRoutes from "./routes/productStats.routes";
-import deliveryRoutes from "./routes/delivery.routes";
 import catalogRoutes from "./routes/catalog.routes";
+import storefrontRoutes from "./routes/storefront.routes";
+import storefrontAdminRoutes from "./routes/storefrontAdmin.routes";
+import { storefrontTenantMiddleware } from "./middleware/storefrontTenant";
+import { mpWebhookController } from "./controllers/mpWebhook.controller";
 import arcaConfigRoutes from "./routes/arcaConfig.routes";
 import ticketRoutes from "./routes/ticket.routes";
 import analyticsRoutes from "./routes/analytics.routes";
@@ -126,6 +130,7 @@ app.use(cors({
       "http://localhost:3000",
       "http://localhost:3001",
       "http://localhost:3002",
+      "http://localhost:3010",
       "http://localhost:4000",
       "https://von-konig.vercel.app",
       "https://www.vonkonigerp.com.ar",
@@ -171,6 +176,18 @@ app.use("/factura-pdf", facturaPdfRoutes);
 app.use("/auth", authRoutes);
 app.use("/products", productRoutes);
 app.use("/catalog", catalogRoutes);
+// Webhook de Mercado Pago (publico, sin auth) - montado ANTES que
+// "/tienda/:tenantSlug" a proposito: si no, storefrontTenantMiddleware
+// intentaria resolver "webhooks" como si fuera un slug de tenant y
+// devolveria 404 antes de llegar acá. El tenant viene del :tenantId en la
+// URL (ver order.service.ts#handleMpWebhook), no de un slug ni del JWT.
+app.post("/tienda/webhooks/mercadopago/:tenantId", mpWebhookController.handle);
+// Tienda online publica por tenant (doc "tienda online por tenant") -
+// storefrontTenantMiddleware resuelve el tenant real desde :tenantSlug (no
+// el default de tenantMiddleware) y corre su propio chequeo de suspension.
+app.use("/tienda/:tenantSlug", storefrontTenantMiddleware, storefrontRoutes);
+// Panel de administracion de la tienda (autenticado, tenant del JWT como siempre).
+app.use("/tienda-online", storefrontAdminRoutes);
 app.use("/users", authMiddleware, requireRole("ADMIN"), requirePlanFeature("usuarios"), userRoutes);
 app.use("/sales", saleRoutes);
 app.use("/accounts", accountRoutes);
@@ -179,6 +196,7 @@ app.use("/accounts", accountRoutes);
 // para que ambas cuentas corrientes vivan bajo el mismo namespace de API.
 app.use("/accounts/suppliers", supplierAccountRoutes);
 app.use("/categories", categoryRoutes);
+app.use("/price-lists", priceListRoutes);
 app.use("/purchases", purchaseRoutes);
 app.use("/libro-iva-digital", libroIvaDigitalRoutes);
 app.use("/nota-credito-pdf", notaCreditoPdfRoutes);
@@ -190,7 +208,6 @@ app.use("/cash-close", cashClosePrintRouter);
 app.use("/business-locations", businessLocationRoutes);
 app.use("/tickets", ticketRoutes);
 app.use("/remitos", remitoRoutes);
-app.use("/delivery", deliveryRoutes);
 app.use("/arca-config", arcaConfigRoutes);
 // ⚠️ Alias deprecado: mantiene compatibilidad con clientes viejos. Usar /arca-config.
 app.use("/afip/configuracion", arcaConfigRoutes);

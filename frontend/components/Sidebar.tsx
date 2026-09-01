@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
-import { NAV, ADMIN_NAV, type NavItem } from '@/lib/navConfig';
+import { NAV, ADMIN_NAV, groupNavItems, type NavItem } from '@/lib/navConfig';
 import {
   PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, Lock,
 } from 'lucide-react';
@@ -176,24 +176,26 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         onScroll={() => navRef.current && sessionStorage.setItem(SCROLL_KEY, String(navRef.current.scrollTop))}
         style={{ flex: 1, overflowY: 'auto', padding: collapsed ? '4px 8px' : '6px 8px' }}
       >
-        {!collapsed && (
-          <div style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', fontFamily: 'var(--mono)', padding: '8px 10px 4px' }}>
-            Principal
-          </div>
-        )}
-        {NAV.map(renderItem)}
-
-        {user?.role === 'ADMIN' && (
-          <>
+        {/* Antes esto era una lista plana de ~40 items bajo dos titulos
+            ("Principal"/"Administración") - costaba encontrar algo puntual.
+            Se agrupa por tema (ver GROUP_ORDER en navConfig.ts) con un
+            subtitulo por grupo, mismo criterio que el "more sheet" mobile
+            (BottomNav.tsx). NAV+ADMIN_NAV se agrupan juntos (no en dos
+            pasadas separadas) para que un grupo que tiene items en ambos
+            arrays (ej. "Catálogo y stock": Stock es de todos, Conteo de
+            Stock es solo ADMIN) no aparezca partido en dos secciones
+            iguales no contiguas. */}
+        {groupNavItems(user?.role === 'ADMIN' ? [...NAV, ...ADMIN_NAV] : NAV).map(([groupName, items], idx) => (
+          <div key={groupName}>
             {!collapsed && (
-              <div style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', fontFamily: 'var(--mono)', padding: '14px 10px 4px', marginTop: 4 }}>
-                Administración
+              <div style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', fontFamily: 'var(--mono)', padding: idx === 0 ? '8px 10px 4px' : '14px 10px 4px' }}>
+                {groupName}
               </div>
             )}
-            {collapsed && <div style={{ height: 10 }} />}
-            {ADMIN_NAV.map(renderItem)}
-          </>
-        )}
+            {collapsed && idx > 0 && <div style={{ height: 8 }} />}
+            {items.map(renderItem)}
+          </div>
+        ))}
       </nav>
 
       {/* Footer user */}

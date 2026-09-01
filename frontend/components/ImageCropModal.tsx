@@ -19,6 +19,9 @@ interface ImageCropModalProps {
   onClose: () => void;
   onCropped: (file: File) => void;
   outputSize?: number;
+  /** Para salidas no cuadradas (ej. banners anchos) - si se pasan, pisan `outputSize` en cada eje. */
+  outputWidth?: number;
+  outputHeight?: number;
   aspect?: number;
   title?: string;
   description?: string;
@@ -34,18 +37,25 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-async function cropToFile(imageUrl: string, area: Area, originalName: string, outputSize: number, fallbackName: string): Promise<File> {
+async function cropToFile(
+  imageUrl: string,
+  area: Area,
+  originalName: string,
+  outputWidth: number,
+  outputHeight: number,
+  fallbackName: string
+): Promise<File> {
   const image = await loadImage(imageUrl);
   const canvas = document.createElement('canvas');
-  canvas.width = outputSize;
-  canvas.height = outputSize;
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('No se pudo procesar la imagen');
 
   ctx.drawImage(
     image,
     area.x, area.y, area.width, area.height,
-    0, 0, outputSize, outputSize
+    0, 0, outputWidth, outputHeight
   );
 
   const blob: Blob = await new Promise((resolve, reject) => {
@@ -59,11 +69,15 @@ async function cropToFile(imageUrl: string, area: Area, originalName: string, ou
 export default function ImageCropModal({
   open, file, onClose, onCropped,
   outputSize = PRODUCT_IMAGE_SIZE,
+  outputWidth,
+  outputHeight,
   aspect = 1,
   title = 'Ajustar imagen del producto',
   description = `Todas las fotos de producto se guardan cuadradas (${PRODUCT_IMAGE_SIZE}×${PRODUCT_IMAGE_SIZE}px), para que se vean parejas en el POS y en el listado. Arrastrá para encuadrar y usá el zoom para acercar.`,
   fileNameFallback = 'producto',
 }: ImageCropModalProps) {
+  const finalWidth = outputWidth ?? outputSize;
+  const finalHeight = outputHeight ?? outputSize;
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -93,7 +107,7 @@ export default function ImageCropModal({
     setSaving(true);
     setError('');
     try {
-      const cropped = await cropToFile(imageUrl, croppedAreaPixels, file.name, outputSize, fileNameFallback);
+      const cropped = await cropToFile(imageUrl, croppedAreaPixels, file.name, finalWidth, finalHeight, fileNameFallback);
       onCropped(cropped);
     } catch {
       setError('No se pudo procesar la imagen. Probá con otra foto.');

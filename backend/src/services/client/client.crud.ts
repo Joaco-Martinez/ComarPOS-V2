@@ -87,6 +87,7 @@ export async function updateClient(
       category: ClientCategory;
       creditLimit: number | null;
       isAccountEnabled: boolean;
+      priceListId: string | null;
 
       createUser: boolean;
       password: string;
@@ -113,6 +114,21 @@ export async function updateClient(
   if (data.category !== undefined) cleanData.category = normalizeCategory(data.category);
   if (data.creditLimit !== undefined) cleanData.creditLimit = data.creditLimit;
   if (data.isAccountEnabled !== undefined) cleanData.isAccountEnabled = data.isAccountEnabled;
+
+  if (data.priceListId !== undefined) {
+    if (data.priceListId === null) {
+      cleanData.priceListId = null;
+    } else {
+      const priceList = await prisma.priceList.findFirst({
+        where: { id: data.priceListId, ...tenantScope() },
+        select: { id: true },
+      });
+
+      if (!priceList) throw new Error("Lista de precios no encontrada");
+
+      cleanData.priceListId = priceList.id;
+    }
+  }
 
   Object.assign(cleanData, buildAddressData(data));
 

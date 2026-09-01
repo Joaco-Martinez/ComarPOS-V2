@@ -8,6 +8,8 @@ router.use(authMiddleware);
 router.use(requirePlanFeature("fidelidad"));
 
 router.get("/estimate", loyaltyController.estimatePoints);
+router.get("/settings", loyaltyController.getSettings);
+router.patch("/settings", requireAnyRole(["ADMIN"]), loyaltyController.updateSettings);
 router.get("/:clientId", loyaltyController.getAccount);
 router.post("/:clientId/earn", loyaltyController.earn);
 router.post("/:clientId/redeem", loyaltyController.redeem);
