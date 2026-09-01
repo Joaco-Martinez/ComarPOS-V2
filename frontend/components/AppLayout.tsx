@@ -10,6 +10,7 @@ import WhatsNewModal from './WhatsNewModal';
 import NotificationsBell from './NotificationsBell';
 import BottomNav from './mobile/BottomNav';
 import HelpCenter from './HelpCenter';
+import SectionIntro from './SectionIntro';
 import { Sun, Moon, Lock } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { initPushNotifications } from '@/lib/push';
@@ -197,7 +198,10 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
               <a href="/suscripcion" className="btn btn-primary btn-sm">Ver planes</a>
             </div>
           ) : (
-            children
+            <>
+              <SectionIntro afterTenantPath={afterTenantPath} />
+              {children}
+            </>
           )}
         </main>
       </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import { getLandingHref } from '@/lib/landing';
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 export default function LoginPage() {
@@ -22,7 +23,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!sessionLoading && user?.tenantSlug) {
-      router.replace(`/${user.tenantSlug}/pos`);
+      getLandingHref(user).then(router.replace);
     }
   }, [user, sessionLoading, router]);
 
@@ -47,7 +48,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.replace(`/${loggedInUser.tenantSlug}/pos`);
+      router.replace(await getLandingHref(loggedInUser));
     } catch {
       setError('Email o contraseña incorrectos.');
     } finally {

@@ -16,12 +16,30 @@ export const cashSessionService = {
   }) {
     const scope = tenantScope();
 
+    // Misma logica que sale.stock.ts#resolveStockLocationId (doc "puntos de
+    // venta separados"): la sucursal de base del usuario manda si tiene
+    // restrictToDefaultLocation prendido, y sirve de fallback si el front
+    // no mando ninguna.
+    const user = await prisma.user.findUnique({
+      where: { id: data.userId },
+      select: { defaultBusinessLocationId: true, restrictToDefaultLocation: true },
+    });
+
+    let businessLocationId = data.businessLocationId ?? user?.defaultBusinessLocationId ?? null;
+
+    if (user?.restrictToDefaultLocation && user.defaultBusinessLocationId) {
+      if (data.businessLocationId && data.businessLocationId !== user.defaultBusinessLocationId) {
+        throw new Error("Tu usuario solo puede abrir caja en su sucursal asignada.");
+      }
+      businessLocationId = user.defaultBusinessLocationId;
+    }
+
     // Prevent duplicate open sessions for the same user/location
     const existing = await prisma.cashSession.findFirst({
       where: {
         userId: data.userId,
         status: "OPEN",
-        businessLocationId: data.businessLocationId ?? null,
+        businessLocationId,
         ...scope,
       },
     });
@@ -32,7 +50,7 @@ export const cashSessionService = {
         userId: data.userId,
         openingBalance: data.openingBalance,
         expectedBalance: data.openingBalance,
-        businessLocationId: data.businessLocationId ?? null,
+        businessLocationId,
         notes: data.notes ?? null,
         status: "OPEN",
         tenantId: currentTenantId(),

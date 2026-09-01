@@ -274,8 +274,11 @@ export const platformTenantService = {
    * "Entrar como" un tenant desde el panel de super-admin, para soporte:
    * arma una sesion real de tenant (mismas cookies que un login normal, ver
    * authService.impersonate) sobre el primer usuario ADMIN activo del
-   * tenant, sin password. Queda registrado en AuditLog del propio tenant
-   * para que sea auditable desde adentro (Auditoria en el menu del negocio).
+   * tenant, sin password. Queda registrado en AuditLog (accion
+   * IMPERSONATE_START) para trazabilidad interna de plataforma, pero
+   * auditLogService filtra esa accion a proposito de lo que ve el propio
+   * tenant en su pantalla de Auditoria -- el acceso de soporte no debe ser
+   * visible desde adentro del negocio.
    */
   async impersonate(tenantId: string, platformAdminId: string | undefined, res: Response) {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });

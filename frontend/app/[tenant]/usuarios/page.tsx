@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { User } from '@/types';
+import type { BusinessLocation, User } from '@/types';
 import { fmtDate, normalizeArray } from '@/lib/helpers';
 import { UserCog, Plus, Edit2, X, ShieldCheck } from 'lucide-react';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -14,10 +14,14 @@ import FilterBar from '@/components/mobile/FilterBar';
 const roleBadge = (r: string) =>
   r === 'ADMIN' ? 'badge-blue' : r === 'EMPLEADO' ? 'badge-green' : 'badge-gray';
 
-const emptyForm = { name: '', email: '', password: '', role: 'EMPLEADO' };
+const emptyForm = {
+  name: '', email: '', password: '', role: 'EMPLEADO',
+  defaultBusinessLocationId: '', restrictToDefaultLocation: false,
+};
 
 export default function UsuariosPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [locations, setLocations] = useState<BusinessLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
@@ -28,21 +32,33 @@ export default function UsuariosPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/users');
-      setUsers(normalizeArray<User>(data));
+      const [ur, lr] = await Promise.all([
+        api.get('/users'),
+        api.get('/business-locations').catch(() => null),
+      ]);
+      setUsers(normalizeArray<User>(ur.data));
+      if (lr) setLocations(normalizeArray<BusinessLocation>(lr.data).filter((l) => l.isActive));
     } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
+  // El selector de sucursal por usuario solo tiene sentido si hay mas de
+  // una - para el 90% de los tenants (una sola sucursal) no agrega nada,
+  // solo ruido al formulario (doc "puntos de venta separados").
+  const showLocationPicker = locations.length > 1;
 
-  const f = (k: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const f = (k: 'name' | 'email' | 'password' | 'role') => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
 
   const openCreate = () => { setForm(emptyForm); setEditing(null); setModal('create'); };
   const openEdit = (u: User) => {
     setEditing(u);
-    setForm({ name: u.name, email: u.email, password: '', role: u.role });
+    setForm({
+      name: u.name, email: u.email, password: '', role: u.role,
+      defaultBusinessLocationId: u.defaultBusinessLocationId ?? '',
+      restrictToDefaultLocation: u.restrictToDefaultLocation ?? false,
+    });
     setModal('edit');
   };
 
@@ -50,7 +66,11 @@ export default function UsuariosPage() {
     if (!form.name.trim() || !form.email.trim()) return;
     setSaving(true);
     try {
-      const body: Record<string, any> = { name: form.name, email: form.email, role: form.role };
+      const body: Record<string, any> = {
+        name: form.name, email: form.email, role: form.role,
+        defaultBusinessLocationId: form.defaultBusinessLocationId || null,
+        restrictToDefaultLocation: form.restrictToDefaultLocation,
+      };
       if (form.password) body.password = form.password;
       if (modal === 'create') {
         await api.post('/users', { ...body, password: form.password });
@@ -183,6 +203,39 @@ export default function UsuariosPage() {
                   <option value="ADMIN">Administrador</option>
                 </select>
               </div>
+              {showLocationPicker && (
+                <>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Sucursal de base</label>
+                    <select
+                      value={form.defaultBusinessLocationId}
+                      onChange={(e) => setForm((p) => ({
+                        ...p,
+                        defaultBusinessLocationId: e.target.value,
+                        restrictToDefaultLocation: e.target.value ? p.restrictToDefaultLocation : false,
+                      }))}
+                    >
+                      <option value="">Sin asignar (usa la sucursal por defecto del negocio)</option>
+                      {locations.map((l) => (
+                        <option key={l.id} value={l.id}>{l.name}</option>
+                      ))}
+                    </select>
+                    <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                      El POS y la Caja le van a preseleccionar esta sucursal en vez de la default del negocio.
+                    </p>
+                  </div>
+                  {form.defaultBusinessLocationId && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text2)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.restrictToDefaultLocation}
+                        onChange={(e) => setForm((p) => ({ ...p, restrictToDefaultLocation: e.target.checked }))}
+                      />
+                      Restringir a esta sucursal — no va a poder vender ni abrir caja en otra
+                    </label>
+                  )}
+                </>
+              )}
             </div>
             <div className="modal-footer">
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>

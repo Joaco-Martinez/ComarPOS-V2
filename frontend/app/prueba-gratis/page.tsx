@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import { getLandingHref } from '@/lib/landing';
 import { CheckCircle2, CreditCard, Eye, EyeOff, Rocket } from 'lucide-react';
 
 const emptyForm = {
@@ -84,7 +85,7 @@ export default function PruebaGratisPage() {
       setUser(user);
 
       if (mode === 'trial') {
-        router.replace(`/${user.tenantSlug}/pos`);
+        router.replace(await getLandingHref(user));
         return;
       }
 

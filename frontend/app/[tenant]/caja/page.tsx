@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { CashSession } from '@/types';
+import { useAuthStore } from '@/store/auth';
+import type { BusinessLocation, CashSession } from '@/types';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { Wallet, Plus, X, Eye, Lock, Unlock, ArrowDownCircle, ArrowUpCircle, Banknote } from 'lucide-react';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
@@ -17,12 +18,14 @@ const MOVEMENT_TYPES = [
 ];
 
 export default function CajaPage() {
+  const { user } = useAuthStore();
   const [sessions, setSessions] = useState<CashSession[]>([]);
+  const [locations, setLocations] = useState<BusinessLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<'open' | 'close' | 'detail' | 'movement' | null>(null);
   const [selected, setSelected] = useState<CashSession | null>(null);
   const [sessionSummary, setSessionSummary] = useState<any>(null);
-  const [openForm, setOpenForm] = useState({ openingAmount: '', notes: '' });
+  const [openForm, setOpenForm] = useState({ openingAmount: '', notes: '', businessLocationId: '' });
   const [closeForm, setCloseForm] = useState({ closingAmount: '', notes: '' });
   const [movementForm, setMovementForm] = useState({ type: 'EXPENSE', amount: '', description: '' });
   const [saving, setSaving] = useState(false);
@@ -30,21 +33,42 @@ export default function CajaPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/cash-sessions', { params: { limit: 50 } });
-      setSessions(normalizeArray<CashSession>(data));
+      const [sr, lr] = await Promise.all([
+        api.get('/cash-sessions', { params: { limit: 50 } }),
+        api.get('/business-locations').catch(() => null),
+      ]);
+      setSessions(normalizeArray<CashSession>(sr.data));
+      if (lr) setLocations(normalizeArray<BusinessLocation>(lr.data).filter((l) => l.isActive));
     } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
+  // Igual criterio que el POS (doc "puntos de venta separados"): la
+  // sucursal de base del usuario manda por sobre la default del negocio. El
+  // selector solo se muestra si hay mas de una sucursal y el usuario no
+  // esta restringido a la suya (ahi ni se le ofrece elegir otra).
+  const showLocationPicker = locations.length > 1 && !user?.restrictToDefaultLocation;
+
+  const openOpenModal = () => {
+    const userLocationId = user?.defaultBusinessLocationId;
+    const userLocationValid = !!userLocationId && locations.some((l) => l.id === userLocationId);
+    const defaultId = locations.find((l) => l.isDefault)?.id ?? locations[0]?.id ?? '';
+    setOpenForm({ openingAmount: '', notes: '', businessLocationId: userLocationValid ? userLocationId! : defaultId });
+    setModal('open');
+  };
 
   const openSession = async () => {
     setSaving(true);
     try {
-      await api.post('/cash-sessions/open', { openingBalance: Number(openForm.openingAmount), notes: openForm.notes || undefined });
+      await api.post('/cash-sessions/open', {
+        openingBalance: Number(openForm.openingAmount),
+        notes: openForm.notes || undefined,
+        businessLocationId: openForm.businessLocationId || undefined,
+      });
       toast.success('Caja abierta');
       setModal(null);
-      setOpenForm({ openingAmount: '', notes: '' });
+      setOpenForm({ openingAmount: '', notes: '', businessLocationId: '' });
       load();
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? 'Error al abrir caja');
@@ -102,7 +126,7 @@ export default function CajaPage() {
       subtitle={openSession_ ? 'Hay una caja abierta' : 'Sin caja abierta'}
       actions={
         !openSession_ ? (
-          <button onClick={() => { setOpenForm({ openingAmount: '', notes: '' }); setModal('open'); }} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+          <button onClick={openOpenModal} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
             <Unlock size={13} /> Abrir caja
           </button>
         ) : (
@@ -124,6 +148,7 @@ export default function CajaPage() {
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--success)' }}>Caja abierta</div>
             <div style={{ fontSize: 12, color: 'var(--text3)' }}>
               Apertura: {fmtMoney(openSession_.openingBalance)} · Abierta el {fmtDate(openSession_.openedAt)}
+              {openSession_.businessLocation && <> · {openSession_.businessLocation.name}</>}
             </div>
           </div>
         </div>
@@ -190,6 +215,14 @@ export default function CajaPage() {
               <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {showLocationPicker && (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Sucursal</label>
+                  <select value={openForm.businessLocationId} onChange={(e) => setOpenForm((p) => ({ ...p, businessLocationId: e.target.value }))}>
+                    {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Monto de apertura</label>
                 <input type="number" min="0" step="any" value={openForm.openingAmount} onChange={(e) => setOpenForm((p) => ({ ...p, openingAmount: e.target.value }))} placeholder="0" autoFocus />

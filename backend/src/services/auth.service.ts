@@ -39,6 +39,11 @@ function sanitizeUser(user: any) {
     tenantSlug: user.tenant?.slug ?? null,
     tenantName: user.tenant?.name ?? null,
     quickAccessConfig: user.quickAccessConfig ?? null,
+    // Sucursal de base (doc "puntos de venta separados") - el frontend la
+    // usa para preseleccionar la ubicacion en POS/Caja sin tener que pedirla
+    // aparte (ver sale.stock.ts#resolveStockLocationId).
+    defaultBusinessLocationId: user.defaultBusinessLocationId ?? null,
+    restrictToDefaultLocation: user.restrictToDefaultLocation ?? false,
   };
 }
 

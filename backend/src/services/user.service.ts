@@ -190,7 +190,24 @@ const userSelect = {
   createdAt: true,
   updatedAt: true,
   client: true,
+  defaultBusinessLocationId: true,
+  restrictToDefaultLocation: true,
+  defaultBusinessLocation: { select: { id: true, name: true } },
 };
+
+/** Valida que la sucursal exista y pertenezca al tenant actual. Tira si no. */
+async function requireLocationOrNull(businessLocationId: string | null | undefined) {
+  if (businessLocationId === undefined) return undefined;
+  if (businessLocationId === null || businessLocationId === "") return null;
+
+  const location = await prisma.businessLocation.findFirst({
+    where: { id: businessLocationId, ...tenantScope() },
+    select: { id: true },
+  });
+  if (!location) throw new Error("La sucursal indicada no existe");
+
+  return location.id;
+}
 
 export const userService = {
   async getAll() {
@@ -434,6 +451,8 @@ export const userService = {
     name: string;
     role: Role | string;
     isActive?: boolean;
+    defaultBusinessLocationId?: string | null;
+    restrictToDefaultLocation?: boolean;
 
     nombre?: string;
     apellido?: string;
@@ -466,6 +485,11 @@ export const userService = {
       const limitCheck = await planLimitsService.checkLimit(currentTenantId(), "users");
       if (!limitCheck.ok) throw new AppError("PLAN_LIMIT_REACHED", limitCheck.message, 403);
 
+      const defaultBusinessLocationId = await requireLocationOrNull(data.defaultBusinessLocationId);
+      if (data.restrictToDefaultLocation && !defaultBusinessLocationId) {
+        throw new Error("Para restringir a una sucursal primero tenés que asignarle una");
+      }
+
       return prisma.user.create({
         data: {
           email,
@@ -474,6 +498,8 @@ export const userService = {
           role,
           isActive: data.isActive ?? true,
           tenantId: currentTenantId(),
+          defaultBusinessLocationId: defaultBusinessLocationId ?? null,
+          restrictToDefaultLocation: data.restrictToDefaultLocation ?? false,
         },
         select: userSelect,
       });
@@ -531,6 +557,8 @@ export const userService = {
       name: string;
       role: Role | string;
       isActive: boolean;
+      defaultBusinessLocationId: string | null;
+      restrictToDefaultLocation: boolean;
     }>
   ) {
     const cleanData: any = {};
@@ -561,10 +589,25 @@ export const userService = {
 
     const existing = await prisma.user.findFirst({
       where: { id, ...tenantScope() },
-      select: { id: true },
+      select: { id: true, defaultBusinessLocationId: true },
     });
 
     if (!existing) throw new Error("Usuario no encontrado");
+
+    if (data.defaultBusinessLocationId !== undefined) {
+      cleanData.defaultBusinessLocationId = await requireLocationOrNull(data.defaultBusinessLocationId);
+    }
+
+    if (data.restrictToDefaultLocation !== undefined) {
+      const willHaveLocation =
+        cleanData.defaultBusinessLocationId !== undefined
+          ? cleanData.defaultBusinessLocationId
+          : existing.defaultBusinessLocationId;
+      if (data.restrictToDefaultLocation && !willHaveLocation) {
+        throw new Error("Para restringir a una sucursal primero tenés que asignarle una");
+      }
+      cleanData.restrictToDefaultLocation = data.restrictToDefaultLocation;
+    }
 
     return prisma.user.update({
       where: { id },

@@ -89,6 +89,7 @@ export const userController = {
         creditLimit: toNumberOrNull(req.body.creditLimit),
         isAccountEnabled: toBoolean(req.body.isAccountEnabled),
         isActive: toBoolean(req.body.isActive),
+        restrictToDefaultLocation: toBoolean(req.body.restrictToDefaultLocation),
       });
       logAudit(req, "CREATE", "User", newUser.id, { email: newUser.email, role: newUser.role });
       res.status(201).json(safeJson(newUser));
@@ -103,6 +104,10 @@ export const userController = {
 
       if (body.isActive !== undefined) {
         body.isActive = toBoolean(body.isActive);
+      }
+
+      if (body.restrictToDefaultLocation !== undefined) {
+        body.restrictToDefaultLocation = toBoolean(body.restrictToDefaultLocation);
       }
 
       const updated = await userService.update(

@@ -58,6 +58,9 @@ export interface User {
   updatedAt?: string;
   lastLoginAt?: string | null;
   quickAccessConfig?: QuickAccessConfig | null;
+  defaultBusinessLocationId?: string | null;
+  defaultBusinessLocation?: { id: string; name: string } | null;
+  restrictToDefaultLocation?: boolean;
 }
 
 export interface ProductCategory {
@@ -164,9 +167,41 @@ export interface Client {
   creditLimit?: number | null;
   isAccountEnabled?: boolean;
   loyaltyAccount?: { points: number; transactions?: LoyaltyTransaction[] } | null;
+  priceListId?: string | null;
+  priceList?: PriceList | null;
   createdAt?: string;
   updatedAt?: string;
   _count?: { sales?: number; accountMovements?: number };
+}
+
+export interface PriceList {
+  id: string;
+  name: string;
+  description?: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+  items?: PriceListItem[];
+  _count?: { items?: number; clients?: number };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PriceListItem {
+  id: string;
+  priceListId: string;
+  productId: string;
+  product?: Product;
+  price: number;
+  pricePerKg?: number | null;
+}
+
+export interface SaleDiscount {
+  id?: string;
+  label?: string | null;
+  type: DiscountType;
+  value: number;
+  applied: boolean;
+  order?: number;
 }
 
 export interface LoyaltyTransaction {
@@ -188,6 +223,7 @@ export interface SaleItem {
   quantityKg?: number | null;
   price: number;
   subtotal?: number;
+  ivaRate?: number | null;
   purchasePriceSnapshot?: number | null;
   profit?: number | null;
   productNameSnapshot?: string | null;
@@ -224,6 +260,10 @@ export interface Sale {
   status: SaleStatus;
   discountType?: DiscountType | null;
   discountValue?: number | null;
+  priceListId?: string | null;
+  priceList?: PriceList | null;
+  discountsAccumulate?: boolean;
+  discounts?: SaleDiscount[];
   promotionId?: string | null;
   promotionDiscount?: number | null;
   isAccountSale?: boolean;
@@ -235,6 +275,9 @@ export interface Sale {
   userId?: string | null;
   user?: User | null;
   createdAt: string;
+  quotationExpiresAt?: string | null;
+  quotationExpiredAt?: string | null;
+  quotationPdfUrl?: string | null;
   invoiceAfip?: {
     id?: string;
     cae?: string;
@@ -686,7 +729,7 @@ export type PlanFeatureKey =
   | 'caja' | 'servicios' | 'remitos' | 'facturacion' | 'devoluciones' | 'compras' | 'ordenesCompra' | 'proveedores'
   | 'conteoStock' | 'finanzas' | 'gastosRecurrentes' | 'tipoCambio' | 'cuentasCorrientes' | 'reportes'
   | 'objetivosVentas' | 'promociones' | 'fidelidad' | 'usuarios' | 'auditoria' | 'sucursales'
-  | 'arca' | 'empresa' | 'printbox' | 'hoteleria';
+  | 'arca' | 'empresa' | 'printbox' | 'hoteleria' | 'tiendaOnline';
 
 export interface BillingPlan {
   id: string;
