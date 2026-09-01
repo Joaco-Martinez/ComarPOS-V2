@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import type { Tenant, TenantSubscriptionStatus, BillingPlan, PlanFeatureKey } from '@/types';
 import { fmtDate, daysRemaining, normalizeArray, fmtMoney } from '@/lib/helpers';
 import { FEATURE_LABELS, FEATURE_GROUPS } from '@/lib/planFeatureGroups';
-import { ArrowLeft, History, Save, Users, LogIn, Activity, SlidersHorizontal, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ArrowLeft, History, Save, Users, LogIn, Activity, SlidersHorizontal, ToggleLeft, ToggleRight, Trash2, X, AlertTriangle } from 'lucide-react';
 
 const statusBadge = (s: TenantSubscriptionStatus) =>
   s === 'TRIAL' ? 'badge-blue' : s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
@@ -31,6 +31,9 @@ export default function PlatformAdminTenantDetailPage() {
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [impersonating, setImpersonating] = useState(false);
   const [togglingFeature, setTogglingFeature] = useState<PlanFeatureKey | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -90,6 +93,19 @@ export default function PlatformAdminTenantDetailPage() {
     }
   };
 
+  const deleteTenant = async () => {
+    if (!tenant || deleteConfirmText.trim() !== tenant.name) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/platform-admin/tenants/${id}`);
+      toast.success('Tenant eliminado');
+      router.push('/platform-admin');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'No se pudo eliminar el tenant');
+      setDeleting(false);
+    }
+  };
+
   const toggleTenantFeature = async (feature: PlanFeatureKey, enabled: boolean) => {
     setTogglingFeature(feature);
     try {
@@ -123,6 +139,13 @@ export default function PlatformAdminTenantDetailPage() {
           </button>
           <button onClick={() => router.push('/platform-admin')} className="btn btn-ghost btn-sm" style={{ gap: 6 }}>
             <ArrowLeft size={13} /> Volver
+          </button>
+          <button
+            onClick={() => { setDeleteConfirmText(''); setDeleteOpen(true); }}
+            className="btn btn-ghost btn-sm"
+            style={{ gap: 6, color: 'var(--danger)' }}
+          >
+            <Trash2 size={13} /> Eliminar tenant
           </button>
         </div>
       }
@@ -323,6 +346,40 @@ export default function PlatformAdminTenantDetailPage() {
           </div>
         )}
       </div>
+
+      {deleteOpen && (
+        <div className="modal-overlay" onClick={() => !deleting && setDeleteOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800, fontSize: 15, color: 'var(--danger)' }}>Eliminar tenant</span>
+              <button onClick={() => setDeleteOpen(false)} className="btn btn-ghost btn-xs" disabled={deleting}><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ background: 'var(--danger-dim)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: 'var(--danger)', display: 'flex', gap: 8 }}>
+                <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+                <span>
+                  Esto borra <strong>todo</strong> lo de &quot;{tenant.name}&quot; para siempre: ventas, productos, clientes, facturas, usuarios — no se puede deshacer. Usá &quot;Suspendido&quot; en vez de esto si solo querés bloquearlo.
+                </span>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Escribí <strong>{tenant.name}</strong> para confirmar</label>
+                <input value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} placeholder={tenant.name} disabled={deleting} autoFocus />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setDeleteOpen(false)} className="btn btn-secondary btn-sm" disabled={deleting}>Cancelar</button>
+              <button
+                onClick={deleteTenant}
+                disabled={deleting || deleteConfirmText.trim() !== tenant.name}
+                className="btn btn-sm"
+                style={{ background: 'var(--danger)', color: '#fff', gap: 6 }}
+              >
+                {deleting ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><Trash2 size={13} /> Eliminar para siempre</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PlatformAdminLayout>
   );
 }

@@ -2,12 +2,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
+import DemoTenantModal from '@/components/DemoTenantModal';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { SalesLead, SalesLeadStatus, SalesLeadContactRole } from '@/types';
 import { fmtDate, normalizeArray } from '@/lib/helpers';
-import { Plus, X, Edit2, Trash2, Phone, MapPin, Store, UserCheck, AlertTriangle } from 'lucide-react';
+import { Plus, X, Edit2, Trash2, Phone, MapPin, Store, UserCheck, AlertTriangle, Gift, ExternalLink } from 'lucide-react';
 
 const CONTACT_ROLE_LABEL: Record<SalesLeadContactRole, string> = {
   DUENO: 'Dueño',
@@ -44,6 +46,7 @@ export default function PlatformAdminCrmPage() {
   const [editing, setEditing] = useState<SalesLead | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [demoLead, setDemoLead] = useState<SalesLead | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -184,10 +187,25 @@ export default function PlatformAdminCrmPage() {
                         )}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text3)', maxWidth: 260, whiteSpace: 'pre-wrap' }}>{l.notes || '—'}</td>
-                      <td><span className={`badge ${badge.className}`}>{badge.label}</span></td>
+                      <td>
+                        <span className={`badge ${badge.className}`}>{badge.label}</span>
+                        {l.convertedTenantId && (
+                          <Link
+                            href={`/platform-admin/tenants/${l.convertedTenantId}`}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--accent)', marginTop: 4 }}
+                          >
+                            <ExternalLink size={11} /> Ver cuenta
+                          </Link>
+                        )}
+                      </td>
                       <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)' }}>{fmtDate(l.createdAt)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
+                          {!l.convertedTenantId && (
+                            <button onClick={() => setDemoLead(l)} className="btn btn-ghost btn-xs" style={{ color: 'var(--success)' }} title="Crear cuenta demo">
+                              <Gift size={12} />
+                            </button>
+                          )}
                           <button onClick={() => openEdit(l)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
                           <button onClick={() => remove(l)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                         </div>
@@ -268,6 +286,13 @@ export default function PlatformAdminCrmPage() {
           </div>
         </div>
       )}
+
+      <DemoTenantModal
+        open={!!demoLead}
+        onClose={() => setDemoLead(null)}
+        onCreated={load}
+        initial={demoLead ? { businessName: demoLead.businessName, adminName: demoLead.contactName ?? '', phone: demoLead.phone ?? '', leadId: demoLead.id } : undefined}
+      />
     </PlatformAdminLayout>
   );
 }

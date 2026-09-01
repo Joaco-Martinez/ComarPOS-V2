@@ -4,6 +4,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
+import DemoTenantModal from '@/components/DemoTenantModal';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { Tenant, TenantSubscriptionStatus, BillingPlan, PlanFeatureKey } from '@/types';
@@ -33,6 +34,7 @@ export default function PlatformAdminTenantsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
 
@@ -203,6 +205,9 @@ export default function PlatformAdminTenantsPage() {
           <button onClick={syncMpPlans} disabled={syncingMpPlans} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
             {syncingMpPlans ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <CreditCard size={13} />}
             {mpPlans.length >= 3 ? 'Re-sincronizar planes MP' : 'Crear planes en Mercado Pago'}
+          </button>
+          <button onClick={() => setDemoOpen(true)} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+            <Gift size={13} /> Cuenta demo (7 días)
           </button>
           <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
             <Plus size={13} /> Nuevo tenant
@@ -453,6 +458,8 @@ export default function PlatformAdminTenantsPage() {
           </div>
         </div>
       )}
+
+      <DemoTenantModal open={demoOpen} onClose={() => setDemoOpen(false)} onCreated={load} />
     </PlatformAdminLayout>
   );
 }

@@ -18,6 +18,14 @@ router.patch(
   platformAdminController.updateSubscription
 );
 router.post("/tenants", platformAuthMiddleware, platformAdminController.createTenant);
+// Cuenta demo de 7 dias (distinta de POST /tenants, que crea gratis pero
+// ACTIVA sin trial) - ver platformTenant.service.ts#createDemoTenant. Sin
+// rate limiter propio: lo llama un super-admin autenticado, no un visitante
+// anonimo (a diferencia de /trial-signup).
+router.post("/tenants/demo", platformAuthMiddleware, platformAdminController.createDemoTenant);
+// Borrado REAL en cascada, no reversible - ver
+// platformTenant.service.ts#deleteTenant.
+router.delete("/tenants/:id", platformAuthMiddleware, platformAdminController.deleteTenant);
 router.post(
   "/tenants/:id/impersonate",
   platformAuthMiddleware,

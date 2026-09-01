@@ -739,6 +739,9 @@ export interface SalesLead {
   // esto, no es un campo aparte).
   contactRole?: SalesLeadContactRole | null;
   createdByAdmin?: { id: string; name: string } | null;
+  // Tenant real creado a partir de este prospecto (ver "Crear cuenta demo"
+  // en el CRM) - se completa junto con status='CLIENTE'.
+  convertedTenantId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

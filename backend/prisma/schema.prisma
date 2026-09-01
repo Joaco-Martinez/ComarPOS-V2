@@ -74,6 +74,15 @@ model Tenant {
   // los topes de sucursales/productos/usuarios (planLimits.service.ts).
   planId               String  @default("profesional")
 
+  // Rubro elegido en /trial-signup (slug de BUSINESS_PRESETS, ver
+  // data/businessPresets.ts) - dispara la precarga de categorias/productos de
+  // ejemplo al crear el tenant (businessPreset.service.ts#apply). Se guarda
+  // aunque el usuario haya destildado todo el preset, solo como dato
+  // informativo de que rubro dijo tener; no vuelve a aplicarse despues del
+  // alta. Null para tenants creados a mano (createTenant.ts) o que eligieron
+  // "prefiero configurarlo yo".
+  businessType         String?
+
   // Override de modulos por TENANT puntual, no por plan (a diferencia de
   // PlanFeatureConfig, que pisa el default de un plan entero -- ver
   // planFeature.service.ts#checkFeature y billing.service.ts#getStatus,
@@ -155,6 +164,7 @@ model Tenant {
   roomTypes         RoomType[]
   rooms             Room[]
   reservations      Reservation[]
+  convertedFromLead SalesLead?
 }
 
 // === Platform admin (super-admin de SaaS, fuera de cualquier tenant) ===
@@ -196,6 +206,15 @@ model SalesLead {
   createdByAdmin   PlatformAdmin?        @relation(fields: [createdByAdminId], references: [id])
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
+
+  // Tenant real creado a partir de este prospecto (ver
+  // platformAdmin.controller.ts#createDemoTenant, boton "Crear cuenta demo"
+  // del CRM) - se completa junto con status=CLIENTE, nunca por separado. Si
+  // ese tenant se borra despues (ver platformTenant.service.ts#deleteTenant),
+  // queda null de nuevo (onDelete: SetNull) para no dejar el prospecto
+  // roto/inaccesible, pero el status=CLIENTE no se revierte solo.
+  convertedTenantId String? @unique
+  convertedTenant   Tenant? @relation(fields: [convertedTenantId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([createdByAdminId])

@@ -13,6 +13,8 @@ import { Role } from "@prisma/client";
 import { invalidateTenantCache } from "../middleware/tenant";
 import { PLANS, DEFAULT_PLAN_ID } from "../config/billing";
 import { LEGACY_CATEGORY_ACCOUNTS } from "../utils/legacyFinanceCategories";
+import { businessPresetService, type BusinessPresetSelection } from "./businessPreset.service";
+import { priceListService } from "./priceList.service";
 
 export const TRIAL_DAYS = 7;
 
@@ -47,12 +49,26 @@ export const trialSignupService = {
     adminPassword: string;
     phone: string;
     planId?: string;
+    // Rubro elegido en el paso "¿qué tipo de negocio tenés?" del wizard (ver
+    // frontend/app/prueba-gratis/page.tsx) + qué categorias/productos de ese
+    // preset dejó tildados. businessType ausente/invalido = no precarga nada
+    // (igual que antes de este wizard).
+    businessType?: string;
+    presetSelection?: BusinessPresetSelection;
+    // Presente solo cuando el alta la dispara un super-admin desde
+    // /platform-admin (ver platformAdmin.controller.ts#createDemoTenant), no
+    // el propio visitante de la landing - deja un TenantPaymentLog con quien
+    // la creó, mismo patron que platformTenant.service.ts#createTenant.
+    createdByPlatformAdminId?: string;
   }) {
     const businessName = String(data.businessName || "").trim();
     const adminName = String(data.adminName || "").trim();
     const adminEmail = String(data.adminEmail || "").trim().toLowerCase();
     const adminPassword = String(data.adminPassword || "");
     const phone = String(data.phone || "").trim();
+    const businessType = data.businessType && businessPresetService.getBySlug(data.businessType)
+      ? data.businessType
+      : undefined;
     // Plan invalido/ausente -> el recomendado, nunca rechaza el alta por esto.
     const planId = PLANS.some((p) => p.id === data.planId) ? (data.planId as string) : DEFAULT_PLAN_ID;
 
@@ -74,7 +90,7 @@ export const trialSignupService = {
     const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 
     const result = await prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({
+      let tenant = await tx.tenant.create({
         data: {
           name: businessName,
           slug,
@@ -121,10 +137,79 @@ export const trialSignupService = {
         })),
       });
 
-      return { tenant, admin, location };
+      // Lista de precios default (doc "listas de precios"), igual que en
+      // scripts/createTenant.ts -- faltaba acá (ver comentario historico),
+      // ahora hace falta si el wizard de rubro crea productos abajo.
+      await tx.priceList.create({
+        data: {
+          tenantId: tenant.id,
+          name: "Minorista",
+          description: "Lista principal (venta al público) - se sincroniza con el precio del producto",
+          isDefault: true,
+          isActive: true,
+        },
+      });
+
+      // Categorias/productos de ejemplo del rubro elegido (doc "wizard tipo
+      // Treinta") - ver businessPreset.service.ts#apply. Vacio si el usuario
+      // no eligió rubro o prefirió "configurarlo yo".
+      const presetProducts = businessType
+        ? await businessPresetService.apply(tx, tenant.id, businessType, data.presetSelection)
+        : [];
+
+      if (presetProducts.length > 0) {
+        // Arranca con stock en 0 en la sucursal default, igual que un alta
+        // manual de producto (ver product.write.ts#create) - así las
+        // pantallas de stock encuentran la fila en vez de tratarlo como
+        // "sin ubicación".
+        await tx.productStock.createMany({
+          data: presetProducts.map((p) => ({
+            productId: p.id,
+            businessLocationId: location.id,
+            tenantId: tenant.id,
+          })),
+        });
+      }
+
+      if (businessType) {
+        // Pisa el `tenant` de más abajo (no solo la fila en la DB): si no,
+        // el objeto que devuelve signup() queda con businessType=null hasta
+        // el proximo GET, aunque la DB ya lo tenga bien guardado.
+        tenant = await tx.tenant.update({ where: { id: tenant.id }, data: { businessType } });
+      }
+
+      if (data.createdByPlatformAdminId) {
+        await tx.tenantPaymentLog.create({
+          data: {
+            tenantId: tenant.id,
+            platformAdminId: data.createdByPlatformAdminId,
+            previousStatus: "TRIAL",
+            newStatus: "TRIAL",
+            note: "Cuenta demo (7 días) creada desde Platform Admin.",
+          },
+        });
+      }
+
+      return { tenant, admin, location, presetProducts };
+    }, {
+      // maxWait/timeout mayores al default (2s/5s): con un preset de rubro
+      // completo (varias categorias + productos, cada uno con su propio
+      // chequeo de slug/SKU unico) la cantidad de round-trips a la DB supera
+      // el timeout default y Prisma corta la transaccion (P2028) antes de
+      // terminar - visto en la práctica al aplicar un preset sin selección
+      // parcial.
+      maxWait: 10000,
+      timeout: 30000,
     });
 
     invalidateTenantCache(result.tenant.slug, result.tenant.id);
+
+    // Fuera de la transaccion (mismo patron que product.write.ts#create):
+    // sincroniza cada producto de ejemplo con la lista de precios default
+    // recien creada.
+    for (const product of result.presetProducts) {
+      await priceListService.syncDefaultPriceListItem(result.tenant.id, product);
+    }
 
     return result;
   },

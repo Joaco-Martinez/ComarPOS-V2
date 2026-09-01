@@ -119,6 +119,39 @@ export const platformAdminController = {
     }
   },
 
+  async createDemoTenant(req: Request, res: Response, next: NextFunction) {
+    try {
+      const platformAdminId = (req as any).platformAdmin?.id;
+      const tenant = await platformTenantService.createDemoTenant(
+        {
+          businessName: req.body.businessName,
+          adminName: req.body.adminName,
+          adminEmail: req.body.adminEmail,
+          adminPassword: req.body.adminPassword,
+          phone: req.body.phone,
+          businessType: req.body.businessType,
+          presetSelection: req.body.presetSelection,
+          leadId: req.body.leadId,
+        },
+        platformAdminId
+      );
+
+      res.status(201).json({ ok: true, content: tenant });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async deleteTenant(req: Request, res: Response, next: NextFunction) {
+    try {
+      await platformTenantService.deleteTenant(getParamAsString(req.params.id, "id"));
+
+      res.json({ ok: true, content: { deleted: true } });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async impersonateTenant(req: Request, res: Response, next: NextFunction) {
     try {
       const platformAdminId = (req as any).platformAdmin?.id;

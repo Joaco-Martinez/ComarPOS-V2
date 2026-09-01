@@ -6,7 +6,7 @@ import Link from 'next/link';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { getLandingHref } from '@/lib/landing';
-import { CheckCircle2, CreditCard, Eye, EyeOff, Rocket } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, CreditCard, Eye, EyeOff, Rocket } from 'lucide-react';
 
 const emptyForm = {
   businessName: '',
@@ -15,6 +15,10 @@ const emptyForm = {
   adminPassword: '',
   phone: '',
 };
+
+type PresetProduct = { name: string; price: number };
+type PresetCategory = { name: string; products: PresetProduct[] };
+type BusinessPreset = { slug: string; label: string; categories: PresetCategory[] };
 
 const PERKS = [
   '7 días gratis, sin tarjeta',
@@ -40,6 +44,16 @@ export default function PruebaGratisPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Wizard "que configuren el sistema segun el rubro" (tipo Treinta): al
+  // elegir un rubro se sugieren categorias/productos de ejemplo (ver
+  // backend GET /business-presets) que el usuario puede destildar antes de
+  // crear la cuenta - selection guarda, por categoria, que productos quedaron
+  // tildados (una categoria sin ningun producto tildado no se manda).
+  const [presets, setPresets] = useState<BusinessPreset[]>([]);
+  const [businessType, setBusinessType] = useState('');
+  const [selection, setSelection] = useState<Record<string, string[]>>({});
+  const [presetOpen, setPresetOpen] = useState(true);
+
   useEffect(() => {
     let selectedPlanId = DEFAULT_PLAN_ID;
     if (typeof window !== 'undefined') {
@@ -55,10 +69,46 @@ export default function PruebaGratisPage() {
       setPlan(plans.find((p) => p.id === selectedPlanId) ?? plans.find((p) => p.id === DEFAULT_PLAN_ID) ?? null);
       if (typeof content?.launchPriceActive === 'boolean') setLaunchActive(content.launchPriceActive);
     }).catch(() => {});
+    api.get('/business-presets').then(({ data }) => {
+      setPresets((data.content ?? data) ?? []);
+    }).catch(() => {});
   }, []);
 
   const f = (k: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const selectedPreset = presets.find((p) => p.slug === businessType) ?? null;
+
+  const handleBusinessTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const slug = e.target.value;
+    setBusinessType(slug);
+    setPresetOpen(true);
+    const preset = presets.find((p) => p.slug === slug);
+    if (!preset) {
+      setSelection({});
+      return;
+    }
+    const initial: Record<string, string[]> = {};
+    preset.categories.forEach((c) => { initial[c.name] = c.products.map((p) => p.name); });
+    setSelection(initial);
+  };
+
+  const toggleCategory = (cat: PresetCategory) => {
+    setSelection((prev) => {
+      const allChecked = (prev[cat.name]?.length ?? 0) === cat.products.length;
+      return { ...prev, [cat.name]: allChecked ? [] : cat.products.map((p) => p.name) };
+    });
+  };
+
+  const toggleProduct = (categoryName: string, productName: string) => {
+    setSelection((prev) => {
+      const current = prev[categoryName] ?? [];
+      const next = current.includes(productName)
+        ? current.filter((n) => n !== productName)
+        : [...current, productName];
+      return { ...prev, [categoryName]: next };
+    });
+  };
 
   const valid =
     form.businessName.trim() &&
@@ -75,7 +125,15 @@ export default function PruebaGratisPage() {
     setError('');
 
     try {
-      await api.post('/trial-signup', { ...form, planId });
+      const presetSelection = businessType
+        ? {
+            categories: Object.entries(selection)
+              .filter(([, products]) => products.length > 0)
+              .map(([name, products]) => ({ name, products })),
+          }
+        : undefined;
+
+      await api.post('/trial-signup', { ...form, planId, businessType: businessType || undefined, presetSelection });
 
       const { data } = await api.post('/auth/login', {
         email: form.adminEmail.trim().toLowerCase(),
@@ -188,6 +246,67 @@ export default function PruebaGratisPage() {
                 <label className="form-label">Nombre de tu negocio *</label>
                 <input value={form.businessName} onChange={f('businessName')} placeholder="Ej: Almacén Don José" autoFocus disabled={loading} />
               </div>
+              <div className="form-group">
+                <label className="form-label">Rubro de tu negocio</label>
+                <select value={businessType} onChange={handleBusinessTypeChange} disabled={loading}>
+                  <option value="">Prefiero configurarlo yo mismo</option>
+                  {presets.filter((p) => p.slug !== 'otro').map((p) => (
+                    <option key={p.slug} value={p.slug}>{p.label}</option>
+                  ))}
+                  {presets.some((p) => p.slug === 'otro') && <option value="otro">Otro rubro</option>}
+                </select>
+              </div>
+
+              {selectedPreset && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPresetOpen((o) => !o)}
+                    disabled={loading}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 12px', background: 'var(--surface2)', border: 'none', cursor: 'pointer',
+                      fontSize: 12.5, fontWeight: 700, color: 'var(--text2)',
+                    }}
+                  >
+                    <span>Vamos a crear estas categorías y productos de ejemplo</span>
+                    {presetOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                  </button>
+                  {presetOpen && (
+                    <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 260, overflowY: 'auto' }}>
+                      <p style={{ fontSize: 11.5, color: 'var(--text3)', margin: 0 }}>
+                        Destildá lo que no quieras crear. Después podés editar, agregar o borrar lo que sea desde el sistema.
+                      </p>
+                      {selectedPreset.categories.map((cat) => {
+                        const checkedProducts = selection[cat.name] ?? [];
+                        const allChecked = checkedProducts.length === cat.products.length;
+                        return (
+                          <div key={cat.name}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                              <input type="checkbox" checked={allChecked} onChange={() => toggleCategory(cat)} disabled={loading} />
+                              {cat.name}
+                            </label>
+                            <div style={{ marginLeft: 24, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {cat.products.map((prod) => (
+                                <label key={prod.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)', cursor: 'pointer' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checkedProducts.includes(prod.name)}
+                                    onChange={() => toggleProduct(cat.name, prod.name)}
+                                    disabled={loading}
+                                  />
+                                  {prod.name}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="form-group">
                 <label className="form-label">Tu nombre *</label>
                 <input value={form.adminName} onChange={f('adminName')} placeholder="Ej: José Pérez" disabled={loading} />
