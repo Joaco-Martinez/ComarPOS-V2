@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import { usePlatformAuthStore } from '@/store/platformAuth';
 import { getLandingHref } from '@/lib/landing';
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 export default function LoginPage() {
   const { user, loading: sessionLoading, me, login } = useAuthStore();
+  const { login: platformLogin } = usePlatformAuthStore();
   const router = useRouter();
 
   const [email, setEmail] = useState('');
@@ -50,7 +52,16 @@ export default function LoginPage() {
 
       router.replace(await getLandingHref(loggedInUser));
     } catch {
-      setError('Email o contraseña incorrectos.');
+      // No es un usuario de negocio (User) - antes de mostrar el error,
+      // probamos si es la cuenta de super-admin de la plataforma
+      // (PlatformAdmin, login completamente aparte, ver store/platformAuth.ts)
+      // para no obligar a entrar por /platform-admin/login a mano.
+      try {
+        await platformLogin(email.trim(), password);
+        router.replace('/platform-admin');
+      } catch {
+        setError('Email o contraseña incorrectos.');
+      }
     } finally {
       setLoading(false);
     }
