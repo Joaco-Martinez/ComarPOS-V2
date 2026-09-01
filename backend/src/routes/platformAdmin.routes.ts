@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { platformAdminController } from "../controllers/platformAdmin.controller";
+import { salesLeadController } from "../controllers/salesLead.controller";
 import { platformAuthMiddleware } from "../middleware/platformAuth";
 import { loginRateLimiter } from "../middleware/rateLimit";
 
@@ -42,5 +43,11 @@ router.patch(
   platformAuthMiddleware,
   platformAdminController.updatePlanPrice
 );
+
+// CRM de prospeccion (doc: visitas a locales en persona) - ver salesLead.service.ts.
+router.get("/sales-leads", platformAuthMiddleware, salesLeadController.list);
+router.post("/sales-leads", platformAuthMiddleware, salesLeadController.create);
+router.patch("/sales-leads/:id", platformAuthMiddleware, salesLeadController.update);
+router.delete("/sales-leads/:id", platformAuthMiddleware, salesLeadController.remove);
 
 export default router;

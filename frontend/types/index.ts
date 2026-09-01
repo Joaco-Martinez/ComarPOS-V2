@@ -721,6 +721,28 @@ export interface Tenant {
   productsCount?: number;
 }
 
+export type SalesLeadStatus = 'PENDIENTE' | 'VISITADO' | 'INTERESADO' | 'NO_INTERESADO' | 'CLIENTE';
+export type SalesLeadContactRole = 'DUENO' | 'EMPLEADO';
+
+// CRM chico de prospeccion en persona (platform-admin > CRM) - ver
+// backend salesLead.service.ts. Nada de esto pertenece a un Tenant todavia.
+export interface SalesLead {
+  id: string;
+  businessName: string;
+  address?: string | null;
+  contactName?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  status: SalesLeadStatus;
+  // Con quien se hablo - null = todavia no se cargo/no se sabe. Si es
+  // EMPLEADO, el frontend resalta "preguntar por el dueño" (derivado de
+  // esto, no es un campo aparte).
+  contactRole?: SalesLeadContactRole | null;
+  createdByAdmin?: { id: string; name: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Debe matchear PlanFeatureKey en backend/src/config/billing.ts -- un modulo
 // por item de navConfig.ts (salvo guia/ayuda, que no son "features" de
 // negocio). Ver store/planFeatures.ts y components/AppLayout.tsx.

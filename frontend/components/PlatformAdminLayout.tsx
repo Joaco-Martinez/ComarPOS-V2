@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePlatformAuthStore } from '@/store/platformAuth';
-import { Building2, LogOut, ShieldCheck } from 'lucide-react';
+import { Building2, LogOut, ShieldCheck, Store } from 'lucide-react';
 
 interface PlatformAdminLayoutProps {
   children: React.ReactNode;
@@ -61,6 +61,9 @@ export default function PlatformAdminLayout({ children, title, subtitle, actions
         <div className="app-header-actions">
           <Link href="/platform-admin" className="btn btn-ghost btn-sm" style={{ gap: 6 }}>
             <Building2 size={13} /> Tenants
+          </Link>
+          <Link href="/platform-admin/crm" className="btn btn-ghost btn-sm" style={{ gap: 6 }}>
+            <Store size={13} /> CRM
           </Link>
           <span style={{ fontSize: 12, color: 'var(--text3)' }}>{admin.name}</span>
           <button onClick={() => logout()} className="btn btn-ghost btn-sm" style={{ gap: 6 }}>

@@ -168,6 +168,50 @@ model PlatformAdmin {
   updatedAt    DateTime @updatedAt
 
   paymentLogs TenantPaymentLog[]
+  salesLeads  SalesLead[]
+}
+
+// CRM chico de prospeccion "puerta a puerta" (doc: Joaco visita locales en
+// persona para vender ComarPOS) - deliberadamente afuera de cualquier
+// Tenant, porque un prospecto todavia NO es un negocio dado de alta en el
+// sistema, es una visita comercial que puede o no convertirse en un tenant
+// mas adelante (createTenant.ts sigue siendo el alta real, esto no la
+// reemplaza).
+model SalesLead {
+  id               String                @id @default(uuid())
+  businessName     String
+  address          String?
+  contactName      String?
+  phone            String?
+  // Con quien se hablo en el local - si fue un empleado (no el dueño), el
+  // frontend resalta un recordatorio de "preguntar por el dueño" en la
+  // proxima visita (derivado de este campo, no un campo aparte). Null =
+  // todavia no se cargo/no se sabe.
+  contactRole      SalesLeadContactRole?
+  // Requerimiento especial / algo puntual que pidio probar - texto libre a
+  // proposito, cada local pide algo distinto.
+  notes            String?               @db.Text
+  status           SalesLeadStatus       @default(PENDIENTE)
+  createdByAdminId String?
+  createdByAdmin   PlatformAdmin?        @relation(fields: [createdByAdminId], references: [id])
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([status])
+  @@index([createdByAdminId])
+}
+
+enum SalesLeadStatus {
+  PENDIENTE
+  VISITADO
+  INTERESADO
+  NO_INTERESADO
+  CLIENTE
+}
+
+enum SalesLeadContactRole {
+  DUENO
+  EMPLEADO
 }
 
 // Espejo de los "preapproval_plan" creados del lado de Mercado Pago para
