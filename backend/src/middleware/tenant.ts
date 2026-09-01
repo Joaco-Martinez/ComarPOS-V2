@@ -25,7 +25,10 @@ type TenantRecord = {
   paidUntil: Date | null;
 };
 
-const DEFAULT_TENANT_SLUG = process.env.DEFAULT_TENANT_SLUG || "grupo-vj";
+// "grupo-vj" (tenant original, epoca pre-multi-tenant) ya no existe en la
+// base - "demo-qwq" (tenant de demo "Demo1") es el fallback de codigo si
+// DEFAULT_TENANT_SLUG no esta seteado en el entorno.
+const DEFAULT_TENANT_SLUG = process.env.DEFAULT_TENANT_SLUG || "demo-qwq";
 
 // Cache en memoria: los tenants cambian con muy poca frecuencia y esto evita
 // una query extra por request (el pedido explicito de "que los endpoints
@@ -35,7 +38,10 @@ const DEFAULT_TENANT_SLUG = process.env.DEFAULT_TENANT_SLUG || "grupo-vj";
 const tenantCache = new Map<string, TenantRecord | null>();
 const tenantByIdCache = new Map<string, TenantRecord | null>();
 
-async function resolveTenantBySlug(slug: string): Promise<TenantRecord | null> {
+// Exportado ademas de para uso interno acá: storefrontTenant.ts (tienda
+// online publica por :tenantSlug) lo reusa para resolver el tenant REAL de
+// la URL en vez de depender del default (ver doc "tienda online por tenant").
+export async function resolveTenantBySlug(slug: string): Promise<TenantRecord | null> {
   if (tenantCache.has(slug)) {
     return tenantCache.get(slug) ?? null;
   }
@@ -80,14 +86,18 @@ export async function resolveTenantById(id: string): Promise<TenantRecord | null
 // directo sin sesion). /auth/login NO se exime a proposito: asi el 403 de
 // suspension se ve ahi en vez de un generico "credenciales invalidas".
 // /auth/logout si se exime para poder cerrar sesion limpio con un tenant
-// recien suspendido.
+// recien suspendido. /tienda tambien se exime del chequeo basado en el
+// tenant DEFAULT: esas rutas resuelven su propio tenant real por
+// :tenantSlug (ver storefrontTenant.ts) y hacen su propio chequeo de
+// suspension sobre ESE tenant, no sobre el default.
 export function isSuspensionExempt(path: string): boolean {
   return (
     path === "/" ||
     path.startsWith("/platform-admin") ||
     path === "/auth/logout" ||
     path.startsWith("/trial-signup") ||
-    path.startsWith("/billing")
+    path.startsWith("/billing") ||
+    path.startsWith("/tienda")
   );
 }
 

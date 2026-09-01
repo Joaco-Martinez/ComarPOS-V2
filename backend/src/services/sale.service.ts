@@ -21,6 +21,7 @@ import { updateItems } from "./sale/sale.update";
 import { updateStatus, expirePendingQuotations } from "./sale/sale.lifecycle";
 import { generarNotaPedido, generarCotizacion } from "./sale/sale.documents";
 import { updatePaymentMethod, updatePayments } from "./sale/sale.payments-api";
+import { ensureDeliveryProduct } from "./sale/sale.stock";
 
 export const saleService = {
   getAll,
@@ -35,4 +36,5 @@ export const saleService = {
   expirePendingQuotations,
   updatePaymentMethod,
   updatePayments,
+  ensureDeliveryProduct,
 };

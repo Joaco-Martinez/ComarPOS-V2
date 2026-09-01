@@ -25,7 +25,6 @@ router.get("/sales/by-employee", ac.getSalesByEmployee);
 router.get("/sales/by-location", ac.getSalesByLocation);
 router.get("/sales/by-price-type", ac.getSalesByPriceType);
 router.get("/sales/discounts", ac.getSalesDiscounts);
-router.get("/sales/delivery", ac.getSalesDelivery);
 
 // Profitability
 router.get("/profitability/summary", ac.getProfitabilitySummary);

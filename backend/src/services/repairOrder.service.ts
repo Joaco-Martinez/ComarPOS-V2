@@ -93,7 +93,7 @@ async function recalcTotal(id: string) {
 }
 
 // El item "mano de obra / texto libre" se carga en la Sale final como un
-// Product mas (igual patron que DELIVERY_SKU en delivery.service.ts) con
+// Product mas (mismo patron que DELIVERY_SKU en sale.types.ts) con
 // precio manual = suma de esas lineas. Un producto por alicuota de IVA
 // distinta (21/10.5/27/0...) porque saleService.create() resuelve el
 // ivaRate de cada SaleItem desde el Product, no desde un override por item

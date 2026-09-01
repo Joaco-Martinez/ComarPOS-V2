@@ -6,29 +6,23 @@ import AppLayout from '@/components/AppLayout';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import ClientFormModal from '@/components/ClientFormModal';
 import api from '@/lib/api';
-import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, Product, ProductCategory, SalePayment } from '@/types';
+import { useAuthStore } from '@/store/auth';
+import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, PriceList, Product, ProductCategory, SalePayment } from '@/types';
 import { categoryName, clientName, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
 import {
   AlertTriangle, Check, ChevronLeft, Minus, Package, Plus, RefreshCcw,
   ScanBarcode, Search, ShoppingCart, Trash2, X, User, Percent,
-  DollarSign, CreditCard, Banknote, Smartphone, Truck, MapPin, Warehouse,
+  DollarSign, CreditCard, Banknote, Smartphone, Warehouse,
 } from 'lucide-react';
 
-const DELIVERY_SKU = 'ENVIO-FLETE2';
 const PAGE_SIZE = 60;
 const SKU_SCANNER_ELEMENT_ID = 'comarpos-pos-sku-scanner';
+// Producto especial "Costo de envío" (ver backend GET /sales/delivery-product)
+// que representa un monto de envío cargado a mano, opcional - no hay calculo
+// automatico por distancia.
+const DELIVERY_SKU = 'ENVIO-FLETE2';
 
 type QuickPriceType = 'price' | 'wholesalePrice';
-
-type DeliveryMethod = 'PICKUP' | 'LOCAL_DELIVERY';
-
-type DeliveryCalc = {
-  distanceKm: number;
-  deliveryCost: number;
-  pricePerKm: number;
-  destinationAddress: string;
-  deliveryProduct: Product;
-};
 
 type PaymentMode = PaymentMethod;
 
@@ -44,6 +38,7 @@ const ALL_METHODS: { method: PaymentMode; label: string; icon: React.ReactNode }
 type KgModal = { product: Product; qty: string; priceType: QuickPriceType } | null;
 
 export default function PosPage() {
+  const { user } = useAuthStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -70,7 +65,6 @@ export default function PosPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [mobileCartStep, setMobileCartStep] = useState<'items' | 'checkout'>('items');
-  const [mobilePriceMode, setMobilePriceMode] = useState<QuickPriceType>('price');
 
   const [skuScannerOpen, setSkuScannerOpen] = useState(false);
   const [scannerLoading, setScannerLoading] = useState(false);
@@ -79,35 +73,45 @@ export default function PosPage() {
   const scannerHandledRef = useRef(false);
 
   const [businessLocations, setBusinessLocations] = useState<BusinessLocation[]>([]);
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('PICKUP');
-  const [deliveryLocationId, setDeliveryLocationId] = useState('');
-  const [deliveryCalc, setDeliveryCalc] = useState<DeliveryCalc | null>(null);
-  const [calculatingDelivery, setCalculatingDelivery] = useState(false);
-  const [deliveryError, setDeliveryError] = useState('');
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
+  const [priceListId, setPriceListId] = useState('');
+  const [priceOverrides, setPriceOverrides] = useState<Record<string, { price: number; pricePerKg: number | null }>>({});
+
+  // Costo de envío manual y opcional - el vendedor lo tipea si el cliente
+  // pide que se lo cobren aparte, no hay calculo automatico por distancia.
+  const [deliveryAmountInput, setDeliveryAmountInput] = useState('');
+  const deliveryProductRef = useRef<Product | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [pr, cr, clr, blr] = await Promise.all([
+        const [pr, cr, clr, blr, plr] = await Promise.all([
           api.get('/products', { params: { isActive: true, limit: 500 } }).catch(() => null),
           api.get('/categories').catch(() => null),
           api.get('/clients', { params: { limit: 200 } }).catch(() => null),
           api.get('/business-locations').catch(() => null),
+          api.get('/price-lists').catch(() => null),
         ]);
         if (pr) setProducts(normalizeArray<Product>(pr.data));
         if (cr) setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
         if (clr) setClients(normalizeArray<Client>(clr.data));
+        if (plr) setPriceLists(normalizeArray<PriceList>(plr.data));
         if (!pr || !cr || !clr) {
           alert('Algunos datos no se pudieron cargar (productos, categorías o clientes). Actualizá la página para reintentar.');
         }
         if (blr) {
           const locations = normalizeArray<BusinessLocation>(blr.data).filter((l) => l.isActive);
           setBusinessLocations(locations);
+          // La sucursal de base del usuario (Usuarios > Sucursal de base)
+          // manda por sobre la default del negocio si esta asignada y sigue
+          // activa (doc "puntos de venta separados") - evita que cada
+          // vendedor tenga que acordarse de tocar el switcher cada vez.
+          const userLocationId = user?.defaultBusinessLocationId;
+          const userLocationValid = !!userLocationId && locations.some((l) => l.id === userLocationId);
           const defaultId = locations.find((l) => l.isDefault)?.id ?? locations[0]?.id ?? '';
-          setDeliveryLocationId(defaultId);
-          setStockLocationId(defaultId);
+          setStockLocationId(userLocationValid ? userLocationId! : defaultId);
         }
       } finally {
         setLoading(false);
@@ -115,6 +119,54 @@ export default function PosPage() {
     };
     load();
   }, []);
+
+  // Si este effect corrio antes de que useAuthStore ya tuviera el usuario
+  // resuelto (ej. F5 directo en /pos: me() y este fetch salen en paralelo),
+  // corrige la sucursal preseleccionada apenas el usuario esta disponible -
+  // sin pisar una eleccion manual ya hecha a mano en el switcher de stock.
+  useEffect(() => {
+    const userLocationId = user?.defaultBusinessLocationId;
+    if (!userLocationId || businessLocations.length === 0) return;
+    if (!businessLocations.some((l) => l.id === userLocationId)) return;
+
+    const stillOnTenantDefault = !stockLocationId || stockLocationId === businessLocations.find((l) => l.isDefault)?.id;
+    if (stillOnTenantDefault && stockLocationId !== userLocationId) setStockLocationId(userLocationId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.defaultBusinessLocationId, businessLocations]);
+
+  // Al elegir un cliente, precarga la lista de precios que tiene asignada
+  // (si tiene) - se puede overridear a mano con el selector de al lado.
+  useEffect(() => {
+    setPriceListId(selectedClient?.priceListId ?? '');
+  }, [selectedClient]);
+
+  // Trae los precios override de la lista elegida (si no es la default, que
+  // ya coincide con el precio del producto - ver Product.price).
+  useEffect(() => {
+    const list = priceLists.find((pl) => pl.id === priceListId);
+    if (!priceListId || list?.isDefault) {
+      setPriceOverrides({});
+      return;
+    }
+    api
+      .get(`/price-lists/${priceListId}`)
+      .then(({ data }) => {
+        const map: Record<string, { price: number; pricePerKg: number | null }> = {};
+        for (const item of data.items ?? []) {
+          map[item.productId] = { price: item.price, pricePerKg: item.pricePerKg ?? null };
+        }
+        setPriceOverrides(map);
+      })
+      .catch(() => setPriceOverrides({}));
+  }, [priceListId, priceLists]);
+
+  const resolvedPrice = (product: Product) => {
+    const override = priceOverrides[product.id];
+    if (product.saleUnit === 'KG') {
+      return override?.pricePerKg ?? productPrice(product, 'price');
+    }
+    return override?.price ?? productPrice(product, 'price');
+  };
 
   const filtered = useMemo(() => {
     let p = products.filter((x) => x.isActive !== false);
@@ -154,6 +206,11 @@ export default function PosPage() {
       setKgModal({ product, qty: '', priceType });
       return;
     }
+    // Si hay una lista de precios elegida con override para este producto,
+    // se fija ese precio al agregarlo (mismo mecanismo que ya usaba el
+    // envío para su costo calculado) - así no depende de que el producto
+    // "sepa" de listas de precios en cada render.
+    const override = priceOverrides[product.id]?.price;
     setCart((prev) => {
       const idx = prev.findIndex((i) => i.product.id === product.id && i.priceType === priceType);
       if (idx >= 0) {
@@ -161,18 +218,15 @@ export default function PosPage() {
         next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
         return next;
       }
-      return [...prev, { product, quantity: 1, priceType }];
+      return [...prev, { product, quantity: 1, priceType, ...(override !== undefined ? { manualPrice: override } : {}) }];
     });
-  };
-
-  const setCartItemPriceType = (idx: number, priceType: QuickPriceType) => {
-    setCart((prev) => prev.map((item, i) => i === idx ? { ...item, priceType } : item));
   };
 
   const confirmKgAdd = () => {
     if (!kgModal) return;
     const qty = parseFloat(kgModal.qty);
     if (!qty || qty <= 0) { setKgModal(null); return; }
+    const override = priceOverrides[kgModal.product.id]?.pricePerKg ?? undefined;
     setCart((prev) => {
       const idx = prev.findIndex((i) => i.product.id === kgModal.product.id && i.priceType === kgModal.priceType);
       if (idx >= 0) {
@@ -180,7 +234,7 @@ export default function PosPage() {
         next[idx] = { ...next[idx], quantityKg: num(next[idx].quantityKg) + qty };
         return next;
       }
-      return [...prev, { product: kgModal.product, quantity: 1, quantityKg: qty, priceType: kgModal.priceType }];
+      return [...prev, { product: kgModal.product, quantity: 1, quantityKg: qty, priceType: kgModal.priceType, ...(override !== undefined ? { manualPrice: override } : {}) }];
     });
     setKgModal(null);
   };
@@ -229,9 +283,9 @@ export default function PosPage() {
       setScannerError(`No encontré ningún producto con SKU: ${sku}`);
       return;
     }
-    if (product.isService || product.sku === DELIVERY_SKU) {
+    if (product.isService) {
       scannerHandledRef.current = false;
-      setScannerError('Ese SKU pertenece a un servicio/envío y no se agrega desde el scanner.');
+      setScannerError('Ese SKU pertenece a un servicio y no se agrega desde el scanner.');
       return;
     }
 
@@ -306,47 +360,40 @@ export default function PosPage() {
 
   const removeFromCart = (idx: number) => {
     setCart((prev) => {
-      if (prev[idx]?.product.sku === DELIVERY_SKU) setDeliveryCalc(null);
+      if (prev[idx]?.product.sku === DELIVERY_SKU) setDeliveryAmountInput('');
       return prev.filter((_, i) => i !== idx);
     });
   };
 
-  const calculateDelivery = async () => {
-    if (!selectedClient || !deliveryLocationId) return;
-    setCalculatingDelivery(true);
-    setDeliveryError('');
-    try {
-      const { data } = await api.post('/delivery/calculate', {
-        businessLocationId: deliveryLocationId,
-        clientId: selectedClient.id,
-      });
-      const calc: DeliveryCalc = {
-        distanceKm: data.distanceKm,
-        deliveryCost: data.deliveryCost,
-        pricePerKm: data.pricePerKm,
-        destinationAddress: data.destinationAddress,
-        deliveryProduct: data.deliveryProduct,
-      };
-      setDeliveryCalc(calc);
-      setCart((prev) => {
-        const withoutDelivery = prev.filter((i) => i.product.sku !== DELIVERY_SKU);
-        return [...withoutDelivery, { product: calc.deliveryProduct, quantity: 1, manualPrice: calc.deliveryCost, priceType: 'price' }];
-      });
-    } catch (err: any) {
-      setDeliveryError(err?.response?.data?.message ?? 'No se pudo calcular el envío');
-      setDeliveryCalc(null);
-    } finally {
-      setCalculatingDelivery(false);
-    }
-  };
+  // Agrega/actualiza (o saca) la linea de "Costo de envío" del carrito segun
+  // lo que tipeo el vendedor - el producto especial se pide una sola vez y
+  // se cachea (deliveryProductRef), no hace falta pedirlo en cada tecla.
+  const applyDeliveryAmount = async (value: string) => {
+    setDeliveryAmountInput(value);
+    const amount = num(value);
 
-  const setDeliveryMethodAndSync = (method: DeliveryMethod) => {
-    setDeliveryMethod(method);
-    if (method === 'PICKUP') {
-      setDeliveryCalc(null);
-      setDeliveryError('');
+    if (!amount || amount <= 0) {
       setCart((prev) => prev.filter((i) => i.product.sku !== DELIVERY_SKU));
+      return;
     }
+
+    if (!deliveryProductRef.current) {
+      try {
+        const { data } = await api.get('/sales/delivery-product');
+        deliveryProductRef.current = data;
+      } catch {
+        alert('No se pudo cargar el producto de envío. Probá de nuevo.');
+        return;
+      }
+    }
+
+    const deliveryProduct = deliveryProductRef.current;
+    if (!deliveryProduct) return;
+
+    setCart((prev) => {
+      const withoutDelivery = prev.filter((i) => i.product.sku !== DELIVERY_SKU);
+      return [...withoutDelivery, { product: deliveryProduct, quantity: 1, manualPrice: amount, priceType: 'price' }];
+    });
   };
 
   const subtotal = cart.reduce((acc, item) => {
@@ -405,10 +452,9 @@ export default function PosPage() {
     setPaymentMethod('EFECTIVO');
     setPayments([{ method: 'EFECTIVO', amount: 0 }]);
     setSearch('');
-    setDeliveryMethod('PICKUP');
-    setDeliveryCalc(null);
-    setDeliveryError('');
     setMobileCartStep('items');
+    setPriceListId('');
+    setDeliveryAmountInput('');
     searchRef.current?.focus();
   };
 
@@ -428,10 +474,6 @@ export default function PosPage() {
         return;
       }
     }
-    if (deliveryMethod === 'LOCAL_DELIVERY' && !deliveryCalc) {
-      alert('Calculá el costo de envío antes de confirmar la venta.');
-      return;
-    }
     setSubmitting(true);
     try {
       const items = cart.map((i) => ({
@@ -446,6 +488,7 @@ export default function PosPage() {
         receiptType: 'TICKET',
         status,
         stockLocationId,
+        ...(priceListId && { priceListId }),
         paymentMethod: paymentMode === 'single' ? paymentMethod : payments[0].method,
         ...(paymentMode === 'multi' && {
           payments: payments.filter((p) => num(p.amount) > 0).map((p) => ({ method: p.method, amount: num(p.amount) })),
@@ -454,14 +497,6 @@ export default function PosPage() {
         ...(discountValue && {
           discountType,
           discountValue: discountMode === 'SURCHARGE' ? -num(discountValue) : num(discountValue),
-        }),
-        ...(deliveryMethod === 'LOCAL_DELIVERY' && deliveryCalc && {
-          deliveryMethod: 'LOCAL_DELIVERY',
-          businessLocationId: deliveryLocationId,
-          deliveryCost: deliveryCalc.deliveryCost,
-          deliveryDistanceKm: deliveryCalc.distanceKm,
-          deliveryPricePerKm: deliveryCalc.pricePerKm,
-          deliveryAddressSnapshot: deliveryCalc.destinationAddress,
         }),
       };
 
@@ -534,6 +569,13 @@ export default function PosPage() {
             <div style={{ fontSize: 11, color: 'var(--danger)', flexShrink: 0 }}>
               No hay ubicaciones de stock configuradas — creá una en Sucursales antes de vender.
             </div>
+          ) : user?.restrictToDefaultLocation ? (
+            // Usuario restringido a su sucursal de base (Usuarios > "Restringir
+            // a esta sucursal") - no se le ofrece el switcher, ni el backend le
+            // va a aceptar vender desde otra aunque se arme el request a mano.
+            <div style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Warehouse size={11} /> Stock: {businessLocations.find((l) => l.id === stockLocationId)?.name ?? '—'}
+            </div>
           ) : (
             <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flexShrink: 0, paddingBottom: 2 }}>
               {businessLocations.map((loc) => (
@@ -569,22 +611,6 @@ export default function PosPage() {
             ))}
           </div>
 
-          {/* Price mode toggle — mobile only; reemplaza los 2 botones de precio por tarjeta por un único selector global */}
-          <div className="pos-price-seg">
-            <button
-              onClick={() => setMobilePriceMode('price')}
-              className={`pos-price-seg-btn ${mobilePriceMode === 'price' ? 'active' : ''}`}
-            >
-              Vendiendo Minorista
-            </button>
-            <button
-              onClick={() => setMobilePriceMode('wholesalePrice')}
-              className={`pos-price-seg-btn ${mobilePriceMode === 'wholesalePrice' ? 'active' : ''}`}
-            >
-              Vendiendo Mayorista
-            </button>
-          </div>
-
           {/* Product grid */}
           <div className="pos-products-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8, alignContent: 'start' }}>
             {filtered.length === 0 ? (
@@ -599,8 +625,7 @@ export default function PosPage() {
                 const minStock = num(p.saleUnit === 'KG' ? stockRow?.minQuantityKg : stockRow?.minQuantity);
                 const lowStock = stock <= minStock && minStock > 0 && !p.unlimitedStock;
                 const noStock = p.saleUnit !== 'KG' && stock <= 0 && !p.isService && !p.unlimitedStock;
-                const retailPrice = productPrice(p, 'price');
-                const wholesalePrice = productPrice(p, 'wholesalePrice');
+                const retailPrice = resolvedPrice(p);
 
                 return (
                   <div
@@ -647,50 +672,17 @@ export default function PosPage() {
                         quedaban tan comprimidos que se superponian/pisaban
                         -- apilados, cada uno usa el ancho completo de la
                         tarjeta y el precio entra comodo. */}
-                    <div className="pos-price-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 5 }}>
-                      <button
-                        onClick={() => addToCart(p, 'price')}
-                        disabled={noStock}
-                        className="btn btn-secondary pos-price-btn"
-                        style={{ flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
-                        title="Agregar con precio minorista"
-                      >
-                        <span style={{ fontSize: 9, color: 'var(--text3)' }}>Minorista</span>
-                        <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--text)' }}>
-                          {fmtMoney(retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => addToCart(p, 'wholesalePrice')}
-                        disabled={noStock}
-                        className="btn btn-cyan pos-price-btn"
-                        style={{ flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
-                        title="Agregar con precio mayorista"
-                      >
-                        <span style={{ fontSize: 9, opacity: 0.8 }}>Mayorista</span>
-                        <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--mono)' }}>
-                          {fmtMoney(wholesalePrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* Mobile: un solo botón de precio, según el toggle Minorista/Mayorista de arriba */}
-                    <div className="pos-price-mobile">
-                      <button
-                        onClick={() => addToCart(p, mobilePriceMode)}
-                        disabled={noStock}
-                        className={`btn ${mobilePriceMode === 'wholesalePrice' ? 'btn-cyan' : 'btn-secondary'} pos-price-btn`}
-                        style={{ width: '100%', flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
-                        title={mobilePriceMode === 'wholesalePrice' ? 'Agregar con precio mayorista' : 'Agregar con precio minorista'}
-                      >
-                        <span style={{ fontSize: 9, opacity: mobilePriceMode === 'wholesalePrice' ? 0.8 : 1, color: mobilePriceMode === 'wholesalePrice' ? undefined : 'var(--text3)' }}>
-                          {mobilePriceMode === 'wholesalePrice' ? 'Mayorista' : 'Minorista'}
-                        </span>
-                        <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--mono)' }}>
-                          {fmtMoney(mobilePriceMode === 'wholesalePrice' ? wholesalePrice : retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
-                        </span>
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => addToCart(p, 'price')}
+                      disabled={noStock}
+                      className="btn btn-secondary pos-price-btn"
+                      style={{ width: '100%', flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
+                      title="Agregar al carrito"
+                    >
+                      <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--text)' }}>
+                        {fmtMoney(retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                      </span>
+                    </button>
                   </div>
                 );
               })
@@ -811,51 +803,32 @@ export default function PosPage() {
             )}
           </div>
 
-          {/* Delivery */}
-          <div className="step-checkout-only" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button
-                onClick={() => setDeliveryMethodAndSync('PICKUP')}
-                className={`btn btn-xs ${deliveryMethod === 'PICKUP' ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: 1, gap: 4 }}
-              >
-                <Package size={11} /> Retiro en local
-              </button>
-              <button
-                onClick={() => setDeliveryMethodAndSync('LOCAL_DELIVERY')}
-                className={`btn btn-xs ${deliveryMethod === 'LOCAL_DELIVERY' ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: 1, gap: 4 }}
-                disabled={businessLocations.length === 0}
-              >
-                <Truck size={11} /> Envío a domicilio
-              </button>
+          {/* Lista de precios */}
+          {priceLists.some((pl) => !pl.isDefault) && (
+            <div className="step-items-only" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+              <select value={priceListId} onChange={(e) => setPriceListId(e.target.value)} style={{ padding: '5px 9px', fontSize: 12 }}>
+                <option value="">Lista: Minorista (default)</option>
+                {priceLists.filter((pl) => !pl.isDefault).map((pl) => (
+                  <option key={pl.id} value={pl.id}>Lista: {pl.name}</option>
+                ))}
+              </select>
             </div>
-            {deliveryMethod === 'LOCAL_DELIVERY' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <select
-                  value={deliveryLocationId}
-                  onChange={(e) => { setDeliveryLocationId(e.target.value); setDeliveryCalc(null); }}
-                  style={{ padding: '4px 6px' }}
-                >
-                  {businessLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
-                {!selectedClient ? (
-                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>Elegí un cliente con dirección cargada para calcular el envío.</div>
-                ) : (
-                  <button onClick={calculateDelivery} disabled={calculatingDelivery} className="btn btn-secondary btn-xs" style={{ gap: 5 }}>
-                    {calculatingDelivery ? <span className="spinner" style={{ width: 11, height: 11 }} /> : <MapPin size={11} />}
-                    {deliveryCalc ? 'Recalcular envío' : 'Calcular envío'}
-                  </button>
-                )}
-                {deliveryError && <div style={{ fontSize: 11, color: 'var(--danger)' }}>{deliveryError}</div>}
-                {deliveryCalc && (
-                  <div style={{ fontSize: 11, color: 'var(--text2)', background: 'var(--surface2)', borderRadius: 5, padding: '5px 8px' }}>
-                    {deliveryCalc.distanceKm.toFixed(1)} km · <strong style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(deliveryCalc.deliveryCost)}</strong>
-                    <div style={{ color: 'var(--text3)', marginTop: 2 }}>{deliveryCalc.destinationAddress}</div>
-                  </div>
-                )}
-              </div>
-            )}
+          )}
+
+          {/* Costo de envío (manual, opcional) */}
+          <div className="step-checkout-only" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text3)' }}>
+              Costo de envío (opcional)
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={deliveryAmountInput}
+                onChange={(e) => applyDeliveryAmount(e.target.value)}
+                placeholder="0"
+                style={{ width: 100, padding: '4px 8px', fontSize: 12 }}
+              />
+            </label>
           </div>
 
           {/* Cart items */}
@@ -880,24 +853,6 @@ export default function PosPage() {
                         {' = '}
                         <span style={{ color: 'var(--text2)', fontWeight: 600 }}>{fmtMoney(price * qty)}</span>
                       </div>
-                      {item.manualPrice == null && (
-                        <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
-                          <button
-                            onClick={() => setCartItemPriceType(idx, 'price')}
-                            className={`btn btn-xs ${item.priceType === 'price' ? 'btn-primary' : 'btn-secondary'}`}
-                            style={{ padding: '1px 6px', fontSize: 9 }}
-                          >
-                            Minorista
-                          </button>
-                          <button
-                            onClick={() => setCartItemPriceType(idx, 'wholesalePrice')}
-                            className={`btn btn-xs ${item.priceType === 'wholesalePrice' ? 'btn-primary' : 'btn-secondary'}`}
-                            style={{ padding: '1px 6px', fontSize: 9 }}
-                          >
-                            Mayorista
-                          </button>
-                        </div>
-                      )}
                     </div>
                     {item.product.saleUnit !== 'KG' ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1099,7 +1054,7 @@ export default function PosPage() {
             <div style={{ display: 'flex', gap: 6 }}>
               <button
                 onClick={() => submitSale('PENDING')}
-                disabled={cart.length === 0 || submitting || (deliveryMethod === 'LOCAL_DELIVERY' && !deliveryCalc)}
+                disabled={cart.length === 0 || submitting}
                 className="btn btn-secondary"
                 title="Guarda la venta sin confirmarla — queda pendiente para completarla después desde Historial de Ventas"
                 style={{ fontSize: 13, padding: '11px 12px', flexShrink: 0 }}
@@ -1111,8 +1066,7 @@ export default function PosPage() {
                 disabled={
                   cart.length === 0 || submitting ||
                   (paymentMode === 'single' && paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient) ||
-                  (paymentMode === 'multi' && totalPaid < total && !selectedClient) ||
-                  (deliveryMethod === 'LOCAL_DELIVERY' && !deliveryCalc)
+                  (paymentMode === 'multi' && totalPaid < total && !selectedClient)
                 }
                 className="btn btn-primary"
                 style={{ flex: 1, fontSize: 14, padding: '11px 16px' }}

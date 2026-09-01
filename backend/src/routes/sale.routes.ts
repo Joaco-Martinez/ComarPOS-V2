@@ -4,6 +4,7 @@ import { authMiddleware } from "../middleware/auth";
 
 const router = Router();
 
+router.get("/delivery-product", authMiddleware, saleController.getDeliveryProduct);
 router.get("/", authMiddleware, saleController.getAll);
 router.get("/pending", authMiddleware, saleController.getPending);
 

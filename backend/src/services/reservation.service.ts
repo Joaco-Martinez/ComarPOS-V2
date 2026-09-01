@@ -51,7 +51,7 @@ async function findOrThrow(id: string) {
 }
 
 // El "hospedaje" se carga en la Sale final como un Product mas (igual
-// patron que DELIVERY_SKU en delivery.service.ts / SERVICIO-TECNICO en
+// patron que DELIVERY_SKU en sale.types.ts / SERVICIO-TECNICO en
 // repairOrder.service.ts): precio manual = tarifa por noche, cantidad =
 // noches. Un solo producto (no por alicuota) porque la tarifa de hospedaje
 // usa siempre el IVA por defecto del producto.

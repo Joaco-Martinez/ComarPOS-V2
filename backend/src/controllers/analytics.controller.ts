@@ -79,11 +79,6 @@ export const analyticsController = {
     return analyticsService.getSalesDiscounts(start, end);
   }),
 
-  getSalesDelivery: wrap(async (req) => {
-    const { start, end } = parseRange(req);
-    return analyticsService.getSalesDelivery(start, end);
-  }),
-
   // ── Profitability ──────────────────────────────────────────────────────────
   getProfitabilitySummary: wrap(async (req) => {
     const { start, end } = parseRange(req);

@@ -20,7 +20,6 @@ export const tenantController = {
         ticketAddress: req.body.ticketAddress,
         ticketPhone: req.body.ticketPhone,
         ticketEmail: req.body.ticketEmail,
-        deliveryPricePerKm: req.body.deliveryPricePerKm,
       });
 
       res.json({ ok: true, tenant });

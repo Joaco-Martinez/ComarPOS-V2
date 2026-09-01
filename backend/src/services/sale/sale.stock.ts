@@ -9,7 +9,7 @@ import { MovementType, SaleUnit, ProductType } from "@prisma/client";
 import alertService from "../alert.service";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
-import { ResolvedSaleItem, StockLine } from "./sale.types";
+import { ResolvedSaleItem, StockLine, DELIVERY_SKU } from "./sale.types";
 import { shouldDiscountStock } from "./sale.pricing";
 
 function addStockLine(map: Map<string, StockLine>, line: StockLine) {
@@ -77,6 +77,42 @@ async function requireStockLocationId(stockLocationId: unknown): Promise<string>
   });
   if (!location) throw new Error("La ubicación de stock indicada no existe");
   return location.id;
+}
+
+/**
+ * Resuelve de que sucursal sale el stock de la venta, cruzando lo que mando
+ * el front (data.stockLocationId) con la sucursal de base del usuario que
+ * vende (doc "puntos de venta separados", User.defaultBusinessLocationId).
+ *
+ * - Si el usuario tiene restrictToDefaultLocation prendido, su sucursal de
+ *   base MANDA siempre - si ademas mando un stockLocationId distinto, se
+ *   rechaza en vez de pisarlo en silencio (separacion real, no un default
+ *   sugerido que se puede saltear con un click en el POS).
+ * - Si no esta restringido, lo que mando el front sigue mandando como
+ *   siempre; su sucursal de base solo se usa como fallback si no mando nada
+ *   (por si el frontend todavia no la preselecciono).
+ */
+async function resolveStockLocationId(
+  userId: string | null | undefined,
+  stockLocationId: unknown
+): Promise<string> {
+  const user = userId
+    ? await prisma.user.findUnique({
+        where: { id: userId },
+        select: { defaultBusinessLocationId: true, restrictToDefaultLocation: true },
+      })
+    : null;
+
+  const requested = typeof stockLocationId === "string" && stockLocationId ? stockLocationId : null;
+
+  if (user?.restrictToDefaultLocation && user.defaultBusinessLocationId) {
+    if (requested && requested !== user.defaultBusinessLocationId) {
+      throw new Error("Tu usuario solo puede vender desde su sucursal asignada");
+    }
+    return requireStockLocationId(user.defaultBusinessLocationId);
+  }
+
+  return requireStockLocationId(requested ?? user?.defaultBusinessLocationId);
 }
 
 async function getStockRowsByProduct(tx: any, productIds: string[], businessLocationId: string) {
@@ -228,6 +264,34 @@ async function restoreStockLines(
   }
 }
 
+/**
+ * Producto "Costo de envío" (SKU fijo DELIVERY_SKU) que representa un cargo
+ * de envío cargado a mano por el vendedor -- no hay calculo automatico por
+ * distancia (eso se saco, doc remocion del modulo "envio"), es un monto
+ * libre que el vendedor tipea si el cliente pide que se lo cobren aparte.
+ * Se auto-crea la primera vez que hace falta, mismo patron que el producto
+ * "mano de obra" de servicios (repairOrder.service.ts).
+ */
+async function ensureDeliveryProduct() {
+  const scope = tenantScope();
+  const existing = await prisma.product.findFirst({ where: { sku: DELIVERY_SKU, ...scope } });
+  if (existing) return existing;
+
+  return prisma.product.create({
+    data: {
+      name: "Costo de envío",
+      sku: DELIVERY_SKU,
+      type: "SIMPLE",
+      saleUnit: "UNIT",
+      isService: true,
+      price: 0,
+      clientPrice: 0,
+      wholesalePrice: 0,
+      tenantId: currentTenantId(),
+    },
+  });
+}
+
 function queueStockAlerts(productIds: string[]) {
   const uniqueProductIds = [...new Set(productIds)];
 
@@ -248,8 +312,10 @@ export {
   addStockLine,
   buildStockLines,
   requireStockLocationId,
+  resolveStockLocationId,
   validateStockAvailability,
   discountStockLines,
   restoreStockLines,
   queueStockAlerts,
+  ensureDeliveryProduct,
 };

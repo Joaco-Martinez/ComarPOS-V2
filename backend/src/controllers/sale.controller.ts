@@ -76,12 +76,26 @@ function normalizeSaleBody(body: any) {
     };
   }
 
+  const discounts = Array.isArray(body.discounts)
+    ? body.discounts
+        .filter((d: any) => d && (d.type === "PERCENTAGE" || d.type === "FIXED"))
+        .map((d: any) => ({
+          label: d.label ?? null,
+          type: d.type,
+          value: toNumber(d.value) ?? 0,
+          applied: d.applied !== false,
+        }))
+    : undefined;
+
   return {
     payload: {
       ...body,
       stockLocationId,
       quotationHours: toNumber(body.quotationHours),
       discountValue: toNumber(body.discountValue),
+      priceListId: body.priceListId ?? undefined,
+      discounts,
+      discountsAccumulate: body.discountsAccumulate === true || body.discountsAccumulate === "true",
       businessLocationId: body.businessLocationId ?? null,
       deliveryMethod,
       deliveryStatus,
@@ -131,6 +145,18 @@ function getAuthUserId(req: Request) {
 }
 
 export const saleController = {
+  // Producto "Costo de envío" (ver sale.stock.ts#ensureDeliveryProduct) - el
+  // POS lo pide para agregar un monto de envío manual y opcional al
+  // carrito, no hay calculo automatico por distancia.
+  async getDeliveryProduct(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const product = await saleService.ensureDeliveryProduct();
+      res.json(safeJson(product));
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getAll(req: Request, res: Response, next: NextFunction) {
     try {
       const page = toIntOrNull(req.query.page) ?? 1;

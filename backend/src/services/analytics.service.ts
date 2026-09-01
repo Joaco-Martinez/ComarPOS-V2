@@ -173,7 +173,7 @@ async function getSalesSummary(from: Date, to: Date) {
       select: {
         total: true, subtotal: true, grossProfit: true,
         discountType: true, discountValue: true,
-        deliveryCost: true, isAccountSale: true, paymentMethod: true,
+        isAccountSale: true, paymentMethod: true,
       },
     }),
     prisma.salePayment.findMany({
@@ -184,7 +184,6 @@ async function getSalesSummary(from: Date, to: Date) {
 
   const revenue = sales.reduce((s, x) => s + x.total, 0);
   const grossProfit = sales.reduce((s, x) => s + x.grossProfit, 0);
-  const deliveryRevenue = sales.reduce((s, x) => s + (x.deliveryCost ?? 0), 0);
 
   // discountValue negativo = recargo (ver POS), no un descuento -- se excluye
   // acá para no restarle a totalDiscountGiven.
@@ -209,7 +208,6 @@ async function getSalesSummary(from: Date, to: Date) {
     grossProfit: round2(grossProfit),
     grossMarginPercent: safeMargin(revenue, revenue - grossProfit),
     avgTicket: sales.length > 0 ? round2(revenue / sales.length) : 0,
-    deliveryRevenue: round2(deliveryRevenue),
     totalDiscountGiven: round2(totalDiscount),
     salesWithDiscount: sales.filter((s) => s.discountValue && s.discountValue > 0).length,
     accountSales: sales.filter((s) => s.isAccountSale).length,
@@ -465,44 +463,6 @@ async function getSalesDiscounts(from: Date, to: Date) {
       PERCENTAGE: withDiscount.filter((s) => s.discountType === "PERCENTAGE").length,
       FIXED: withDiscount.filter((s) => s.discountType === "FIXED").length,
     },
-  };
-}
-
-async function getSalesDelivery(from: Date, to: Date) {
-  const scope = tenantScope();
-  const sales = await prisma.sale.findMany({
-    where: { status: "COMPLETED", createdAt: { gte: from, lte: to }, ...scope },
-    select: { total: true, deliveryCost: true, deliveryMethod: true, deliveryStatus: true, deliveryDistanceKm: true },
-  });
-
-  const byMethod: Record<string, { count: number; revenue: number; deliveryRevenue: number }> = {};
-  for (const s of sales) {
-    if (!byMethod[s.deliveryMethod]) byMethod[s.deliveryMethod] = { count: 0, revenue: 0, deliveryRevenue: 0 };
-    byMethod[s.deliveryMethod].count++;
-    byMethod[s.deliveryMethod].revenue += s.total;
-    byMethod[s.deliveryMethod].deliveryRevenue += s.deliveryCost ?? 0;
-  }
-
-  const deliverySales = sales.filter((s) => s.deliveryMethod !== "PICKUP");
-  const totalDeliveryRevenue = deliverySales.reduce((s, x) => s + (x.deliveryCost ?? 0), 0);
-  const distanceSales = deliverySales.filter((s) => s.deliveryDistanceKm);
-  const avgDistance = distanceSales.length > 0
-    ? distanceSales.reduce((s, x) => s + (x.deliveryDistanceKm ?? 0), 0) / distanceSales.length
-    : 0;
-
-  return {
-    totalSales: sales.length,
-    deliverySales: deliverySales.length,
-    pickupSales: sales.length - deliverySales.length,
-    totalDeliveryRevenue: round2(totalDeliveryRevenue),
-    avgDeliveryRevenue: deliverySales.length > 0 ? round2(totalDeliveryRevenue / deliverySales.length) : 0,
-    avgDistanceKm: round2(avgDistance),
-    byMethod: Object.entries(byMethod).map(([method, d]) => ({
-      method,
-      count: d.count,
-      revenue: round2(d.revenue),
-      deliveryRevenue: round2(d.deliveryRevenue),
-    })),
   };
 }
 
@@ -1926,7 +1886,6 @@ export const analyticsService = {
   getSalesByLocation,
   getSalesByPriceType,
   getSalesDiscounts,
-  getSalesDelivery,
   getProfitabilitySummary,
   getProfitabilityByProduct,
   getProfitabilityByCategory,

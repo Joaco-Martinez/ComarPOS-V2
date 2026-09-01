@@ -24,6 +24,22 @@ export type CreateSaleInput = {
   discountType?: "PERCENTAGE" | "FIXED";
   discountValue?: number;
 
+  // Lista de precios a usar para resolver el precio de los items (ver
+  // sale.pricing.ts#resolveUnitPrice). Si no se manda, se usa la lista
+  // asignada al cliente (Client.priceListId) o el mecanismo de siempre.
+  priceListId?: string | null;
+
+  // Descuentos multiples (pantalla de Cotizaciones, ver sale.discounts.ts).
+  // Mutuamente excluyente con discountType/discountValue: si se manda
+  // "discounts", ese es el mecanismo que se usa para esta venta.
+  discounts?: {
+    label?: string | null;
+    type: "PERCENTAGE" | "FIXED";
+    value: number;
+    applied?: boolean;
+  }[];
+  discountsAccumulate?: boolean;
+
   gmailSend?: string;
 
   paymentMethod: PaymentMethod;
@@ -69,6 +85,7 @@ export type CreateSaleInput = {
 
 export type ClientMini = {
   category: CategoryClient;
+  priceListId?: string | null;
 } | null;
 
 export type ResolvedSaleItem = {

@@ -3,7 +3,7 @@
  * Extraido de sale.service.ts (doc seccion 4.1 - modularizacion).
  */
 import prisma from "../../prisma";
-import { DeliveryMethod, DeliveryStatus, SaleStatus } from "@prisma/client";
+import { DeliveryMethod, DeliveryStatus, SaleStatus, SaleUnit } from "@prisma/client";
 import { CreateSaleInput, ClientMini, DELIVERY_SKU } from "./sale.types";
 import {
   round2,
@@ -12,9 +12,10 @@ import {
   buildSaleItemCreateData,
   applyDiscountAndProfitToItems,
 } from "./sale.pricing";
+import { calculateDiscountedTotal } from "./sale.discounts";
 import {
   buildStockLines,
-  requireStockLocationId,
+  resolveStockLocationId,
   validateStockAvailability,
   discountStockLines,
   queueStockAlerts,
@@ -25,6 +26,9 @@ import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
 import { promotionService } from "../promotion.service";
 import { planFeatureService } from "../planFeature.service";
+import { financeService } from "../finance.service";
+import { loyaltyService } from "../loyalty.service";
+import { productStatsService } from "../productStats.service";
 
 export async function create(data: CreateSaleInput) {
   if (!Array.isArray(data.items) || data.items.length === 0) {
@@ -41,6 +45,7 @@ export async function create(data: CreateSaleInput) {
       },
       select: {
         category: true,
+        priceListId: true,
       },
     });
 
@@ -48,6 +53,12 @@ export async function create(data: CreateSaleInput) {
       throw new Error("Cliente no encontrado");
     }
   }
+
+  // priceListId explicito (armado desde la pantalla de Cotizaciones) pisa la
+  // lista asignada al cliente; si no se manda ninguno de los dos, se usa el
+  // mecanismo de precio/mayorista de siempre (ver sale.pricing.ts).
+  const priceListId =
+    data.priceListId !== undefined ? data.priceListId : client?.priceListId ?? null;
 
   if (data.businessLocationId) {
     const location = await prisma.businessLocation.findFirst({
@@ -70,7 +81,7 @@ export async function create(data: CreateSaleInput) {
     }
   }
 
-  const itemsWithPrices = await resolveSaleItems(data.items, client);
+  const itemsWithPrices = await resolveSaleItems(data.items, client, priceListId);
 
   const subtotal = round2(
     itemsWithPrices.reduce((acc, item) => acc + item.subtotal, 0)
@@ -94,7 +105,19 @@ export async function create(data: CreateSaleInput) {
   let appliedPromotionId: string | null = null;
   let appliedPromotionDiscount: number | null = null;
 
-  if (data.discountType && typeof data.discountValue === "number") {
+  // Descuentos multiples (pantalla de Cotizaciones) - mutuamente excluyente
+  // con discountType/discountValue y con promociones automaticas: si vienen
+  // "discounts", ese es el mecanismo que manda para esta venta.
+  const normalizedDiscounts =
+    Array.isArray(data.discounts) && data.discounts.length > 0 ? data.discounts : null;
+
+  if (normalizedDiscounts) {
+    discountAmount = calculateDiscountedTotal(
+      discountBaseSubtotal,
+      normalizedDiscounts,
+      !!data.discountsAccumulate
+    ).discountAmount;
+  } else if (data.discountType && typeof data.discountValue === "number") {
     // Manual discount from the client — skip promotion lookup
     discountAmount =
       data.discountType === "PERCENTAGE"
@@ -178,7 +201,7 @@ export async function create(data: CreateSaleInput) {
     if (!featureCheck.ok) throw new Error(featureCheck.message);
   }
 
-  const stockLocationId = await requireStockLocationId(data.stockLocationId);
+  const stockLocationId = await resolveStockLocationId(data.userId, data.stockLocationId);
   const stockLines = buildStockLines(itemsWithProfit);
 
   const pendingAlerts: string[] = [];
@@ -198,7 +221,12 @@ export async function create(data: CreateSaleInput) {
         data: {
           userId: data.userId,
           clientId: data.clientId ?? null,
-          businessLocationId: data.businessLocationId ?? null,
+          // Unificado con stockLocationId (doc "puntos de venta separados"):
+          // no tiene sentido que la sucursal "oficial" de la venta sea
+          // distinta de la sucursal de donde salio el stock. Solo se
+          // respeta un businessLocationId explicito si vino distinto a
+          // proposito (ej. flujo de envio a domicilio armado a mano).
+          businessLocationId: data.businessLocationId ?? stockLocationId,
 
           subtotal,
           total,
@@ -211,6 +239,20 @@ export async function create(data: CreateSaleInput) {
           discountValue: data.discountValue ?? (appliedPromotionDiscount ?? null),
           promotionId: appliedPromotionId,
           promotionDiscount: appliedPromotionDiscount,
+
+          priceListId,
+          discountsAccumulate: !!data.discountsAccumulate,
+          discounts: normalizedDiscounts
+            ? {
+                create: normalizedDiscounts.map((discount, index) => ({
+                  label: discount.label ?? null,
+                  type: discount.type,
+                  value: discount.value,
+                  applied: discount.applied !== false,
+                  order: index,
+                })),
+              }
+            : undefined,
 
           paymentMethod: data.paymentMethod,
           receiptType: data.receiptType,
@@ -266,6 +308,7 @@ export async function create(data: CreateSaleInput) {
           },
           user: { select: { id: true, name: true, email: true, role: true } },
           client: true,
+          discounts: true,
         },
       });
 
@@ -297,6 +340,34 @@ export async function create(data: CreateSaleInput) {
 
   queueStockAlerts(pendingAlerts);
   queueSalePdfGeneration(result.id);
+
+  // Una venta puede crearse ya como COMPLETED (venta directa desde el POS,
+  // sin pasar por PENDING -> updateStatus) - en ese caso hay que disparar acá
+  // mismo lo que updateStatus() dispara al confirmar una cotización pendiente
+  // (ver sale.lifecycle.ts), porque este flujo nunca pasa por ahí.
+  if (saleStatus === SaleStatus.COMPLETED) {
+    await financeService.registerIncomeFromSale(result.id);
+
+    if (result.clientId) {
+      void loyaltyService
+        .earnPoints({ clientId: result.clientId, saleId: result.id, totalAmount: result.total })
+        .catch((err) => console.error("loyalty.earnPoints error:", err));
+    }
+
+    await productStatsService.createStatsFromSale(
+      result.items
+        .filter((item) => !item.product?.isService)
+        .map((item) => {
+          const saleUnit = item.product?.saleUnit as SaleUnit;
+
+          return {
+            productId: item.productId,
+            quantity: saleUnit === SaleUnit.KG ? 0 : item.quantity,
+            quantityKg: saleUnit === SaleUnit.KG ? item.quantityKg ?? 0 : undefined,
+          };
+        })
+    );
+  }
 
   return {
     sale: result,
