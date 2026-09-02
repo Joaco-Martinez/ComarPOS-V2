@@ -53,6 +53,8 @@ export default function ComprasPage() {
   const [showFiscalExtra, setShowFiscalExtra] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickedIds, setPickedIds] = useState<Set<string>>(new Set());
 
   const load = async () => {
     setLoading(true);
@@ -79,10 +81,55 @@ export default function ComprasPage() {
   const removeItem = (i: number) => setItems((p) => p.filter((_, idx) => idx !== i));
   const updateItem = (i: number, k: string, v: string) => setItems((p) => { const n = [...p]; n[i] = { ...n[i], [k]: v }; return n; });
 
+  // Elegir un producto en la fila precarga el costo de compra con el último
+  // costo cargado en el producto (Product.purchasePrice) — el usuario lo
+  // puede pisar a mano si el proveedor se lo aumentó desde la última compra.
+  const selectItemProduct = (i: number, productId: string) => {
+    const p = products.find((x) => x.id === productId);
+    setItems((prev) => { const n = [...prev]; n[i] = { ...n[i], productId, unitCost: p ? String(p.purchasePrice ?? 0) : '' }; return n; });
+  };
+
   const selectSupplier = (supplierId: string) => {
     setForm((p) => ({ ...p, supplierId }));
+    setPickerOpen(false);
+    setPickedIds(new Set());
     const supplier = suppliers.find((s) => s.id === supplierId);
     if (supplier?.cuit) setFiscalForm((p) => ({ ...p, providerCuit: supplier.cuit ?? '' }));
+  };
+
+  // Productos que se ofrecen para agregar a la compra: si hay proveedor
+  // elegido, solo los suyos (Product.supplierId) — pedido explicito: no
+  // buscar entre todo el catálogo cuando ya se sabe a quién se le compra.
+  // Sin proveedor elegido, se puede elegir cualquier producto (compra suelta).
+  const supplierProducts = useMemo(
+    () => (form.supplierId ? products.filter((p) => p.supplierId === form.supplierId) : products),
+    [products, form.supplierId]
+  );
+
+  const togglePicked = (productId: string) => setPickedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(productId)) next.delete(productId); else next.add(productId);
+    return next;
+  });
+
+  const toggleAllPicked = () => setPickedIds((prev) =>
+    prev.size === supplierProducts.length ? new Set() : new Set(supplierProducts.map((p) => p.id))
+  );
+
+  // Agrega a la compra los productos tildados en el selector (o todos, si se
+  // tildó "Seleccionar todos") que todavía no están en la lista, con el
+  // costo de compra precargado desde cada producto.
+  const addPickedProducts = () => {
+    setItems((prev) => {
+      const already = new Set(prev.map((i) => i.productId).filter(Boolean));
+      const toAdd = supplierProducts
+        .filter((p) => pickedIds.has(p.id) && !already.has(p.id))
+        .map((p) => ({ productId: p.id, quantity: '1', quantityKg: p.saleUnit === 'KG' ? '1' : '', unitCost: String(p.purchasePrice ?? 0), ivaRate: String(p.ivaRate ?? 21) }));
+      const base = prev.filter((i) => i.productId);
+      return [...base, ...toAdd];
+    });
+    setPickerOpen(false);
+    setPickedIds(new Set());
   };
 
   const save = async () => {
@@ -145,7 +192,7 @@ export default function ComprasPage() {
       title="Compras"
       subtitle={`${purchases.length} registros`}
       actions={
-        <button onClick={() => { setForm((p) => ({ supplierId: '', date: todayInputAR(), notes: '', invoiceNumber: '', businessLocationId: p.businessLocationId, paymentMethod: 'TRANSFERENCIA' })); setItems([{ productId: '', quantity: '1', quantityKg: '', unitCost: '', ivaRate: '21' }]); setFiscalForm(emptyFiscalForm); setShowFiscalExtra(false); setModal('create'); }}
+        <button onClick={() => { setForm((p) => ({ supplierId: '', date: todayInputAR(), notes: '', invoiceNumber: '', businessLocationId: p.businessLocationId, paymentMethod: 'TRANSFERENCIA' })); setItems([{ productId: '', quantity: '1', quantityKg: '', unitCost: '', ivaRate: '21' }]); setFiscalForm(emptyFiscalForm); setShowFiscalExtra(false); setPickerOpen(false); setPickedIds(new Set()); setModal('create'); }}
           className="btn btn-primary btn-sm" style={{ gap: 6 }}>
           <Plus size={13} /> Registrar compra
         </button>
@@ -320,7 +367,9 @@ export default function ComprasPage() {
                 </>
               )}
 
-              <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Productos</div>
+              <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                Productos {form.supplierId ? '(solo los de este proveedor)' : ''}
+              </div>
               <div className="line-item-scroll">
                 {items.map((item, idx) => {
                   const prod = products.find((x) => x.id === item.productId);
@@ -328,9 +377,9 @@ export default function ComprasPage() {
                     <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 8 }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">Producto</label>
-                        <select value={item.productId} onChange={(e) => updateItem(idx, 'productId', e.target.value)}>
+                        <select value={item.productId} onChange={(e) => selectItemProduct(idx, e.target.value)}>
                           <option value="">Seleccionar...</option>
-                          {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          {supplierProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
@@ -353,9 +402,53 @@ export default function ComprasPage() {
                   );
                 })}
               </div>
-              <button onClick={addItem} className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start', gap: 6 }}>
-                <Plus size={13} /> Agregar producto
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={addItem} className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start', gap: 6 }}>
+                  <Plus size={13} /> Agregar producto
+                </button>
+                {form.supplierId && (
+                  <button
+                    onClick={() => setPickerOpen((v) => !v)}
+                    disabled={supplierProducts.length === 0}
+                    className="btn btn-secondary btn-sm"
+                    style={{ alignSelf: 'flex-start', gap: 6 }}
+                    title="Elegir uno, varios o todos los productos de este proveedor de una sola vez"
+                  >
+                    <Plus size={13} /> Elegir productos de {suppliers.find((s) => s.id === form.supplierId)?.name ?? 'este proveedor'}
+                  </button>
+                )}
+              </div>
+
+              {pickerOpen && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, marginBottom: 8, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={supplierProducts.length > 0 && pickedIds.size === supplierProducts.length}
+                      onChange={toggleAllPicked}
+                      style={{ width: 14, height: 14 }}
+                    />
+                    Seleccionar todos ({supplierProducts.length})
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto', marginBottom: 10 }}>
+                    {supplierProducts.map((p) => (
+                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer', padding: '3px 2px' }}>
+                        <input type="checkbox" checked={pickedIds.has(p.id)} onChange={() => togglePicked(p.id)} style={{ width: 14, height: 14, flexShrink: 0 }} />
+                        <span style={{ flex: 1 }}>{p.name}</span>
+                        <span style={{ color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                          Costo: {fmtMoney(p.purchasePrice ?? 0)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={addPickedProducts} disabled={pickedIds.size === 0} className="btn btn-primary btn-xs">
+                      Agregar seleccionados ({pickedIds.size})
+                    </button>
+                    <button onClick={() => { setPickerOpen(false); setPickedIds(new Set()); }} className="btn btn-ghost btn-xs">Cancelar</button>
+                  </div>
+                </div>
+              )}
 
               <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 800, color: 'var(--accent)' }}>
                 Total: {fmtMoney(items.reduce((a, i) => a + num(i.unitCost) * (i.quantityKg ? num(i.quantityKg) : num(i.quantity)), 0))}

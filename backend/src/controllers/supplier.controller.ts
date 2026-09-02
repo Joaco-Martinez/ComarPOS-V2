@@ -46,9 +46,10 @@ export const supplierController = {
 
   async bulkPriceUpdate(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await supplierService.bulkPriceUpdate(req.params.id as string, Number(req.body.percentage));
+      const target = req.body.target === "cost" || req.body.target === "both" ? req.body.target : "sale";
+      const result = await supplierService.bulkPriceUpdate(req.params.id as string, Number(req.body.percentage), target);
       if (!(result as any)?.statusCode) {
-        logAudit(req, "UPDATE", "Supplier", req.params.id as string, { bulkPriceUpdate: req.body.percentage });
+        logAudit(req, "UPDATE", "Supplier", req.params.id as string, { bulkPriceUpdate: req.body.percentage, target });
       }
       return sendServiceResponse(res, result);
     } catch (err) {

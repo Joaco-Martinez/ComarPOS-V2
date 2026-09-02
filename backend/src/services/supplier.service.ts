@@ -55,17 +55,18 @@ export const supplierService = {
   },
 
   /**
-   * Aumento (o descuento) masivo del precio de venta (Minorista) de TODOS
-   * los productos activos vinculados a este proveedor - pedido explicito:
-   * cuando el proveedor sube un %, poder trasladarlo a los precios de venta
-   * de un solo saque en vez de producto por producto. Sigue el mismo patron
-   * que priceListService.bulkApply: factor = 1 + percentage/100 sobre el
-   * precio actual, nunca acumulativo sobre un aumento previo. Solo toca
-   * price/pricePerKg (y sus espejos clientPrice/wholesalePrice) del
-   * producto - no toca purchasePrice (costo) ni overrides en otras listas
-   * de precios, que se cargan aparte.
+   * Aumento (o descuento) masivo de precios de TODOS los productos activos
+   * vinculados a este proveedor - pedido explicito: cuando el proveedor sube
+   * un %, poder trasladarlo (al costo, a la venta, o a ambos) de un solo
+   * saque en vez de producto por producto. Sigue el mismo patron que
+   * priceListService.bulkApply: factor = 1 + percentage/100 sobre el valor
+   * actual de cada producto, nunca acumulativo sobre un aumento previo.
+   * `target` controla que campos toca:
+   *  - "sale": price/pricePerKg (y espejos clientPrice/wholesalePrice) - default, compat con el comportamiento previo.
+   *  - "cost": purchasePrice (costo de compra).
+   *  - "both": ambos a la vez, mismo porcentaje.
    */
-  async bulkPriceUpdate(supplierId: string, percentage: number) {
+  async bulkPriceUpdate(supplierId: string, percentage: number, target: "sale" | "cost" | "both" = "sale") {
     const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, ...tenantScope() } });
     if (!supplier) {
       return { statusCode: 404, message: "Proveedor no encontrado" };
@@ -75,9 +76,16 @@ export const supplierService = {
       return { statusCode: 400, message: "Porcentaje inválido" };
     }
 
+    if (target !== "sale" && target !== "cost" && target !== "both") {
+      return { statusCode: 400, message: "target inválido (usar sale, cost o both)" };
+    }
+
+    const applySale = target === "sale" || target === "both";
+    const applyCost = target === "cost" || target === "both";
+
     const products = await prisma.product.findMany({
       where: { supplierId, isActive: true, ...tenantScope() },
-      select: { id: true, saleUnit: true, price: true, pricePerKg: true },
+      select: { id: true, saleUnit: true, price: true, pricePerKg: true, purchasePrice: true },
     });
 
     if (products.length === 0) {
@@ -89,26 +97,35 @@ export const supplierService = {
     const updated = await prisma.$transaction(
       products.map((product) => {
         const isKg = product.saleUnit === SaleUnit.KG;
-        const nextPrice = isKg ? 0 : round2(product.price * factor);
-        const nextPricePerKg = !isKg ? null : product.pricePerKg != null ? round2(product.pricePerKg * factor) : 0;
+        const data: Record<string, number | null> = {};
+
+        if (applySale) {
+          const nextPrice = isKg ? 0 : round2(product.price * factor);
+          const nextPricePerKg = !isKg ? null : product.pricePerKg != null ? round2(product.pricePerKg * factor) : 0;
+          data.price = nextPrice;
+          data.clientPrice = nextPrice;
+          data.wholesalePrice = nextPrice;
+          data.pricePerKg = nextPricePerKg;
+          data.clientPricePerKg = nextPricePerKg;
+          data.wholesalePricePerKg = nextPricePerKg;
+        }
+
+        if (applyCost) {
+          data.purchasePrice = round2(product.purchasePrice * factor);
+        }
 
         return prisma.product.update({
           where: { id: product.id },
-          data: {
-            price: nextPrice,
-            clientPrice: nextPrice,
-            wholesalePrice: nextPrice,
-            pricePerKg: nextPricePerKg,
-            clientPricePerKg: nextPricePerKg,
-            wholesalePricePerKg: nextPricePerKg,
-          },
+          data,
           select: { id: true, price: true, pricePerKg: true },
         });
       })
     );
 
-    for (const product of updated) {
-      await priceListService.syncDefaultPriceListItem(currentTenantId(), product);
+    if (applySale) {
+      for (const product of updated) {
+        await priceListService.syncDefaultPriceListItem(currentTenantId(), product);
+      }
     }
 
     return { ok: true, count: updated.length };

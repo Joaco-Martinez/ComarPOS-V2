@@ -37,8 +37,20 @@ export const purchaseOrderController = {
   ),
 
   receiveItems: wrap(async (req) =>
-    purchaseOrderService.receiveItems(req.params.id as string, req.body)
+    purchaseOrderService.receiveFull(req.params.id as string, req.body, userId(req))
   ),
 
   remove: wrap(async (req) => purchaseOrderService.remove(req.params.id as string)),
+
+  getPdf: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { buffer, filename } = await purchaseOrderService.generatePdf(req.params.id as string);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", buffer.length);
+      res.send(buffer);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

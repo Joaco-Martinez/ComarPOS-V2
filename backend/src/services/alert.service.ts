@@ -35,11 +35,17 @@ class AlertService {
       data: { productId, message },
     });
 
-    try {
-      await this.sendEmailToAllUsers(productName, stock, minStock, unit, location);
-    } catch (error) {
+    // Sin esperar: mandar el mail es "best effort" -- antes este await
+    // bloqueaba a quien llamó createAlert() (una venta, una compra, la
+    // recepcion de una orden de compra, un conteo de stock, etc.) hasta que
+    // el intento de SMTP contra Gmail terminara. Con GMAIL_USER/GMAIL_PASS
+    // vencidas o mal configuradas (ver log: "Invalid login: 535-5.7.8"),
+    // ese intento fallaba en cada alerta nueva y sumaba latencia real a
+    // flujos que no tienen nada que ver con el email. El try/catch ya
+    // existía porque una falla acá nunca debe romper la alerta en si.
+    this.sendEmailToAllUsers(productName, stock, minStock, unit, location).catch((error) => {
       console.error("Error enviando alerta por email:", error);
-    }
+    });
 
     return alert;
   }

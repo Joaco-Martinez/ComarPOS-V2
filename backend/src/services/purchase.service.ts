@@ -102,6 +102,7 @@ export const purchaseService = {
       orderBy: { date: "desc" },
       include: {
         user: { select: { id: true, name: true, email: true } },
+        supplier: { select: { id: true, name: true, cuit: true } },
         finance: true,
         businessLocation: true,
         items: {
@@ -118,6 +119,7 @@ export const purchaseService = {
       where: { id, ...tenantScope() },
       include: {
         user: { select: { id: true, name: true, email: true } },
+        supplier: { select: { id: true, name: true, cuit: true } },
         finance: true,
         businessLocation: true,
         items: { include: { product: true } },
@@ -173,10 +175,36 @@ export const purchaseService = {
 
       let totalAmount = 0;
 
+      // Un solo round-trip para traer todos los productos de la compra, en
+      // vez de un findFirst por item -- con muchos items (ej. recepcion de
+      // una orden de compra grande) esto era el mayor generador de latencia
+      // acumulada contra una DB remota (ver receiveFull en
+      // purchaseOrder.service.ts, que llama a este create() con todos los
+      // items de la orden de una).
+      const productIds = [...new Set(data.items.map((i) => i.productId).filter(Boolean))];
+      const productsById = new Map(
+        (await tx.product.findMany({ where: { id: { in: productIds }, ...tenantScope() } })).map((p) => [p.id, p])
+      );
+
+      // stockMovement y purchaseItem no dependen de una respuesta previa por
+      // fila (a diferencia de product.update/productStock.upsert, que sí
+      // necesitan resolver por producto) -- se acumulan acá y se insertan
+      // con createMany al final del loop: 2 round-trips en vez de 2 por item.
+      const stockMovementRows: Array<{
+        productId: string; userId: string; purchaseId: string; type: MovementType;
+        toLocationId: string; quantity?: number | null; quantityKg?: number | null;
+        reason: string; reference: string; tenantId: string | null | undefined;
+      }> = [];
+      const purchaseItemRows: Array<{
+        purchaseId: string; productId: string; quantity: number | null; quantityKg: number | null;
+        unitCost: number; subtotal: number; ivaRate: number;
+        productNameSnapshot: string; productSkuSnapshot: string | null;
+      }> = [];
+
       for (const item of data.items) {
         if (!item.productId) throw new Error("Cada item debe tener productId");
 
-        const product = await tx.product.findFirst({ where: { id: item.productId, ...tenantScope() } });
+        const product = productsById.get(item.productId);
         if (!product) throw new Error(`Producto no encontrado: ${item.productId}`);
         if (!product.isActive) throw new Error(`El producto "${product.name}" está inactivo`);
         if ((product as any).isService) throw new Error(`"${product.name}" es un servicio, no puede ingresar stock`);
@@ -221,18 +249,16 @@ export const purchaseService = {
             create: { productId: product.id, businessLocationId, quantity, tenantId: currentTenantId() },
           });
 
-          await tx.stockMovement.create({
-            data: {
-              productId: product.id,
-              userId,
-              purchaseId: purchase.id,
-              type: MovementType.INGRESS,
-              toLocationId: businessLocationId,
-              quantity,
-              reason: "Compra de mercadería",
-              reference: `[purchase:${purchase.id}]`,
-              tenantId: currentTenantId(),
-            },
+          stockMovementRows.push({
+            productId: product.id,
+            userId,
+            purchaseId: purchase.id,
+            type: MovementType.INGRESS,
+            toLocationId: businessLocationId,
+            quantity,
+            reason: "Compra de mercadería",
+            reference: `[purchase:${purchase.id}]`,
+            tenantId: currentTenantId(),
           });
         }
 
@@ -250,37 +276,36 @@ export const purchaseService = {
             create: { productId: product.id, businessLocationId, quantityKg, tenantId: currentTenantId() },
           });
 
-          await tx.stockMovement.create({
-            data: {
-              productId: product.id,
-              userId,
-              purchaseId: purchase.id,
-              type: MovementType.INGRESS,
-              toLocationId: businessLocationId,
-              quantityKg,
-              reason: "Compra de mercadería",
-              reference: `[purchase:${purchase.id}]`,
-              tenantId: currentTenantId(),
-            },
+          stockMovementRows.push({
+            productId: product.id,
+            userId,
+            purchaseId: purchase.id,
+            type: MovementType.INGRESS,
+            toLocationId: businessLocationId,
+            quantityKg,
+            reason: "Compra de mercadería",
+            reference: `[purchase:${purchase.id}]`,
+            tenantId: currentTenantId(),
           });
         }
 
         totalAmount += subtotal;
 
-        await tx.purchaseItem.create({
-          data: {
-            purchaseId: purchase.id,
-            productId: product.id,
-            quantity,
-            quantityKg,
-            unitCost,
-            subtotal,
-            ivaRate,
-            productNameSnapshot: product.name,
-            productSkuSnapshot: product.sku,
-          },
+        purchaseItemRows.push({
+          purchaseId: purchase.id,
+          productId: product.id,
+          quantity,
+          quantityKg,
+          unitCost,
+          subtotal,
+          ivaRate,
+          productNameSnapshot: product.name,
+          productSkuSnapshot: product.sku,
         });
       }
+
+      if (stockMovementRows.length) await tx.stockMovement.createMany({ data: stockMovementRows });
+      if (purchaseItemRows.length) await tx.purchaseItem.createMany({ data: purchaseItemRows });
 
       const total = roundMoney(totalAmount);
 
@@ -320,15 +345,20 @@ export const purchaseService = {
         include: {
           finance: true,
           businessLocation: true,
+          supplier: { select: { id: true, name: true, cuit: true } },
           items: { include: { product: purchaseItemProductInclude } },
           stockMovements: true,
         },
       });
     }, { timeout: 20000, maxWait: 20000 });
 
-    for (const item of createdPurchase.items) {
-      await alertService.checkProductStock(item.productId).catch(() => undefined);
-    }
+    // Cada chequeo es independiente (producto propio, sin estado
+    // compartido) y ya corre fuera de la transacción -- en paralelo en vez
+    // de uno por uno, para no sumar otra tanda de round-trips secuenciales
+    // por item contra la DB.
+    await Promise.all(
+      createdPurchase.items.map((item) => alertService.checkProductStock(item.productId).catch(() => undefined))
+    );
 
     // Igual que un egreso de Finanzas: solo descuenta de la caja abierta si
     // se pago en EFECTIVO. Compras por transferencia/tarjeta no tocan la caja.
@@ -446,7 +476,12 @@ export const purchaseService = {
       return tx.purchase.update({
         where: { id: purchase.id },
         data: { status: PurchaseStatus.CANCELLED },
-        include: { finance: true, items: { include: { product: true } }, stockMovements: true },
+        include: {
+          finance: true,
+          supplier: { select: { id: true, name: true, cuit: true } },
+          items: { include: { product: true } },
+          stockMovements: true,
+        },
       });
     }, { timeout: 20000, maxWait: 20000 });
 

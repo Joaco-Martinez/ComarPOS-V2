@@ -29,8 +29,11 @@ export default function ProveedoresPage() {
   const [detail, setDetail] = useState<Supplier | null>(null);
   const [detailSearch, setDetailSearch] = useState('');
   const [bulkPct, setBulkPct] = useState('');
+  const [bulkTarget, setBulkTarget] = useState<'sale' | 'cost' | 'both'>('sale');
   const [applyingBulk, setApplyingBulk] = useState(false);
   const [linking, setLinking] = useState<string | null>(null);
+  const [rowPct, setRowPct] = useState<Record<string, string>>({});
+  const [applyingRow, setApplyingRow] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -46,7 +49,7 @@ export default function ProveedoresPage() {
 
   useEffect(() => { load(); }, []);
 
-  const openDetail = (s: Supplier) => { setDetail(s); setDetailSearch(''); setBulkPct(''); };
+  const openDetail = (s: Supplier) => { setDetail(s); setDetailSearch(''); setBulkPct(''); setBulkTarget('sale'); setRowPct({}); };
 
   const linkedProducts = products.filter((p) => p.supplierId === detail?.id);
   const searchResults = detailSearch.trim()
@@ -82,7 +85,7 @@ export default function ProveedoresPage() {
     if (!detail || bulkPct === '') return;
     setApplyingBulk(true);
     try {
-      const { data } = await api.post(`/suppliers/${detail.id}/bulk-price-update`, { percentage: num(bulkPct) });
+      const { data } = await api.post(`/suppliers/${detail.id}/bulk-price-update`, { percentage: num(bulkPct), target: bulkTarget });
       toast.success(`${data.count} productos actualizados con ${num(bulkPct) >= 0 ? '+' : ''}${bulkPct}%`);
       const { data: pr } = await api.get('/products', { params: { limit: 500 } });
       setProducts(normalizeArray<Product>(pr));
@@ -90,6 +93,46 @@ export default function ProveedoresPage() {
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? 'No se pudo aplicar el aumento');
     } finally { setApplyingBulk(false); }
+  };
+
+  // Mismo % que el aumento en bloque, pero para un solo producto — así el
+  // dueño puede corregir puntualmente un producto que aumentó distinto al
+  // resto del proveedor, sin tener que ir a Productos y tipear el precio
+  // final a mano.
+  const applyRowPct = async (p: Product) => {
+    const pctStr = rowPct[p.id];
+    if (pctStr === undefined || pctStr === '') return;
+    const pct = num(pctStr);
+    if (!Number.isFinite(pct) || pct <= -100) { toast.error('Porcentaje inválido'); return; }
+    const factor = 1 + pct / 100;
+    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const isKg = p.saleUnit === 'KG';
+    const body: Record<string, number> = {};
+    if (bulkTarget === 'sale' || bulkTarget === 'both') {
+      const nextPrice = isKg ? 0 : round2(p.price * factor);
+      const nextPricePerKg = !isKg ? 0 : round2((p.pricePerKg ?? 0) * factor);
+      body.price = nextPrice;
+      body.clientPrice = nextPrice;
+      body.wholesalePrice = nextPrice;
+      if (isKg) {
+        body.pricePerKg = nextPricePerKg;
+        body.clientPricePerKg = nextPricePerKg;
+        body.wholesalePricePerKg = nextPricePerKg;
+      }
+    }
+    if (bulkTarget === 'cost' || bulkTarget === 'both') {
+      body.purchasePrice = round2((p.purchasePrice ?? 0) * factor);
+    }
+    setApplyingRow(p.id);
+    try {
+      await api.put(`/products/${p.id}`, body);
+      toast.success(`"${p.name}" actualizado ${pct >= 0 ? '+' : ''}${pct}%`);
+      const { data: pr } = await api.get('/products', { params: { limit: 500 } });
+      setProducts(normalizeArray<Product>(pr));
+      setRowPct((prev) => ({ ...prev, [p.id]: '' }));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'No se pudo actualizar el producto');
+    } finally { setApplyingRow(null); }
   };
 
 
@@ -294,10 +337,15 @@ export default function ProveedoresPage() {
               <div style={{ padding: 10, background: 'var(--bg2)', borderRadius: 8, marginBottom: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Aumentar (o bajar) precios en bloque</div>
                 <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
-                  Aplica el % sobre el precio de venta actual de los {linkedProducts.length} productos de este proveedor.
-                  Positivo = aumento (ej. 10), negativo = descuento (ej. -10). No toca el costo de compra.
+                  Aplica el % sobre {linkedProducts.length} productos de este proveedor. Positivo = aumento (ej. 10), negativo = descuento (ej. -10).
+                  Elegí si el % se aplica al costo de compra, al precio de venta, o a ambos — el mismo criterio se usa después para aplicar un % a un producto individual, más abajo.
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select value={bulkTarget} onChange={(e) => setBulkTarget(e.target.value as 'sale' | 'cost' | 'both')} style={{ width: 170 }}>
+                    <option value="sale">Precio de venta</option>
+                    <option value="cost">Costo de compra</option>
+                    <option value="both">Costo y venta</option>
+                  </select>
                   <input
                     type="number" step="any"
                     value={bulkPct}
@@ -317,16 +365,34 @@ export default function ProveedoresPage() {
               </div>
 
               <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Productos vinculados ({linkedProducts.length})</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto', marginBottom: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto', marginBottom: 14 }}>
                 {linkedProducts.length === 0 && (
                   <div style={{ fontSize: 12, color: 'var(--text3)', padding: '10px 0' }}>Todavía no hay productos vinculados a este proveedor.</div>
                 )}
                 {linkedProducts.map((p) => (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 140 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{fmtMoney(p.saleUnit === 'KG' ? (p.pricePerKg ?? 0) : p.price)}{p.saleUnit === 'KG' ? '/kg' : ''}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        Costo: {fmtMoney(p.purchasePrice ?? 0)} · Venta: {fmtMoney(p.saleUnit === 'KG' ? (p.pricePerKg ?? 0) : p.price)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                      </div>
                     </div>
+                    <input
+                      type="number" step="any"
+                      value={rowPct[p.id] ?? ''}
+                      onChange={(e) => setRowPct((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                      placeholder="%"
+                      title="Aplicar % solo a este producto"
+                      style={{ width: 64, fontSize: 12 }}
+                    />
+                    <button
+                      onClick={() => applyRowPct(p)}
+                      disabled={applyingRow === p.id || !rowPct[p.id]}
+                      className="btn btn-secondary btn-xs"
+                      title="Aplicar % a este producto"
+                    >
+                      {applyingRow === p.id ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Aplicar'}
+                    </button>
                     <button onClick={() => unlinkProduct(p)} disabled={linking === p.id} className="btn btn-ghost btn-xs" title="Quitar del proveedor"><X size={12} /></button>
                   </div>
                 ))}

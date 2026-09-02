@@ -9,6 +9,7 @@ router.use(requirePlanFeature("ordenesCompra"));
 
 router.get("/", purchaseOrderController.getAll);
 router.get("/:id", purchaseOrderController.getById);
+router.get("/:id/pdf", purchaseOrderController.getPdf);
 router.post("/", requireAnyRole(["ADMIN", "EMPLEADO"]), purchaseOrderController.create);
 router.patch("/:id/status", requireAnyRole(["ADMIN"]), purchaseOrderController.updateStatus);
 router.post("/:id/receive", requireAnyRole(["ADMIN", "EMPLEADO"]), purchaseOrderController.receiveItems);

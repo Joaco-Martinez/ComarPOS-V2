@@ -1688,6 +1688,11 @@ model PurchaseOrderItem {
   quantityOrdered     Int?
   quantityKgOrdered   Float?
   unitCost            Float
+  // Alicuota de IVA de este item -- se muestra en la orden y en el PDF que
+  // se le manda al proveedor, mismo criterio que Purchase/PurchaseItem
+  // (unitCost es el precio final con IVA incluido, ivaRate es metadata para
+  // el desglose Neto/IVA/Total del PDF, ver generarOrdenCompraPDF.ts).
+  ivaRate             Float         @default(21)
   subtotal            Float
   productNameSnapshot String?
   createdAt           DateTime      @default(now())
