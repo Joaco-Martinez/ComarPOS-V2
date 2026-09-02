@@ -108,9 +108,12 @@ export default function TiendaPedidoPage() {
   }
 
   const isMpPending = order.paymentMethod === 'MERCADOPAGO' && order.status === 'PENDING';
+  const isWhatsappPending = order.paymentMethod === 'WHATSAPP' && order.status === 'PENDING';
   const statusInfo = isMpPending
     ? { label: 'Esperando la confirmación del pago', icon: Clock, color: '#F79009' }
-    : STATUS_LABEL[order.status] ?? STATUS_LABEL.PENDING;
+    : isWhatsappPending
+      ? { label: 'Pendiente — coordinando por WhatsApp con el local', icon: Clock, color: '#F79009' }
+      : STATUS_LABEL[order.status] ?? STATUS_LABEL.PENDING;
   const StatusIcon = statusInfo.icon;
   const needsProof = order.paymentMethod === 'TRANSFERENCIA' && order.status === 'PENDING';
 

@@ -50,7 +50,12 @@ api.interceptors.response.use(
     // /auth/me que dispara /login al montar puede resolver *después* del
     // login exitoso y mandarte de vuelta con un location.href duro.
     const isMeCheck = typeof error.config?.url === 'string' && error.config.url.includes('/auth/me');
-    if (error.response?.status === 401 && !isMeCheck && typeof window !== 'undefined') {
+    // La tienda online publica (/tienda/...) maneja sus propios 401 (cuenta
+    // obligatoria para comprar, login de cliente distinto del de
+    // empleados/admin) - un 401 ahí NUNCA debe mandar a /login, que es la
+    // pantalla de acceso interna del sistema.
+    const isStorefront = typeof window !== 'undefined' && window.location.pathname.startsWith('/tienda/');
+    if (error.response?.status === 401 && !isMeCheck && !isStorefront && typeof window !== 'undefined') {
       const isPlatform = window.location.pathname.startsWith('/platform-admin');
       const loginPath = isPlatform ? '/platform-admin/login' : '/login';
       if (!window.location.pathname.includes('/login')) {

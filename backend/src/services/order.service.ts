@@ -21,6 +21,7 @@ import { storefrontConfigService } from "./storefrontConfig.service";
 import { saleService } from "./sale.service";
 import { tenantMpConfigService } from "./tenantMpConfig.service";
 import { storefrontMercadoPagoService } from "./storefrontMercadoPago.service";
+import { whatsappService } from "./whatsapp.service";
 import cloudinary from "../config/cloudinary";
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
@@ -98,6 +99,50 @@ async function resolveAndValidateItems(
   });
 }
 
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+/**
+ * Mensaje pre-armado para el pedido "Coordinar por WhatsApp" (doc "tienda
+ * online - checkout por WhatsApp"): el pedido ya quedo creado en PENDING con
+ * el detalle real (ver create() abajo) - este mensaje es solo para que el
+ * negocio vea de entrada que quiere el comprador sin tener que abrir el
+ * panel admin primero. Distinto de buildWhatsappMessage en catalog.service.ts
+ * (flujo legado sobre una Sale ya creada, no reusado aca a proposito: los
+ * shapes de item difieren).
+ */
+function buildWhatsappOrderMessage(params: {
+  order: { publicToken: string; customerName: string; total: number; customerNotes?: string | null };
+  items: { productNameSnapshot: string; quantity: number | null; quantityKg: number | null; subtotal: number }[];
+  storeUrl: string;
+}) {
+  const { order, items, storeUrl } = params;
+
+  const lines = items.map((item) => {
+    const qty = item.quantityKg != null ? `${item.quantityKg} kg` : `x${item.quantity}`;
+    return `- ${item.productNameSnapshot} ${qty} — ${formatMoney(item.subtotal)}`;
+  });
+
+  return [
+    `Hola! Quiero coordinar este pedido de la tienda online:`,
+    "",
+    ...lines,
+    "",
+    `Total: ${formatMoney(order.total)}`,
+    `A nombre de: ${order.customerName}`,
+    order.customerNotes ? `Notas: ${order.customerNotes}` : null,
+    "",
+    `Seguimiento: ${storeUrl}`,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+}
+
 export const orderService = {
   async create(input: {
     items: { productId: string; quantity?: number; quantityKg?: number }[];
@@ -112,8 +157,28 @@ export const orderService = {
     const tenantId = currentTenantId();
     if (!tenantId) throw new AppError("TENANT_NOT_RESOLVED", "No se pudo resolver la tienda", 400);
 
+    // Cuenta obligatoria para comprar (doc "tienda online - checkout por
+    // WhatsApp"): antes se aceptaba invitado + cuenta opcional, ahora toda
+    // venta necesita un userId real (CLIENTE logueado de ESTE tenant - ver
+    // optionalStorefrontAuth, que ya filtra tokens de otro tenant). El
+    // controller resuelve input.userId desde el JWT, nunca desde el body.
+    if (!input.userId) {
+      throw new AppError("LOGIN_REQUIRED", "Necesitás una cuenta para completar la compra", 401);
+    }
+
     if (!input.customerName?.trim()) {
       throw new AppError("CUSTOMER_NAME_REQUIRED", "Falta el nombre del comprador", 400);
+    }
+
+    if (input.paymentMethod === OrderPaymentMethod.WHATSAPP) {
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { ticketPhone: true } });
+      if (!whatsappService.normalizePhone(tenant?.ticketPhone)) {
+        throw new AppError(
+          "WHATSAPP_NOT_CONFIGURED",
+          "Esta tienda todavía no configuró un WhatsApp de contacto",
+          400
+        );
+      }
     }
 
     let mpAccessToken: string | null = null;
@@ -152,7 +217,9 @@ export const orderService = {
 
     // EFECTIVO: se confirma directo (se paga en persona al retirar/recibir).
     // TRANSFERENCIA/MERCADOPAGO: queda PENDING hasta confirmar el pago
-    // (comprobante verificado a mano, o el webhook de MP).
+    // (comprobante verificado a mano, o el webhook de MP). WHATSAPP: queda
+    // PENDING tambien - es una venta pendiente que el negocio coordina y
+    // confirma a mano por chat (ver convertToSale), no hay pago online.
     const initialStatus =
       input.paymentMethod === OrderPaymentMethod.EFECTIVO ? OrderStatus.CONFIRMED : OrderStatus.PENDING;
 
@@ -206,17 +273,33 @@ export const orderService = {
           include: { items: true },
         });
 
-        return { ...updated, mpInitPoint: preference.init_point || preference.sandbox_init_point || null };
+        return { ...updated, mpInitPoint: preference.init_point || preference.sandbox_init_point || null, whatsappUrl: null };
       } catch (err) {
         // El pedido ya existe (no perder el carrito del comprador) pero sin
         // link de pago - el frontend puede ofrecer reintentar o cambiar de
         // metodo de pago.
         console.error("Error creando preferencia de Mercado Pago:", err);
-        return { ...order, mpInitPoint: null };
+        return { ...order, mpInitPoint: null, whatsappUrl: null };
       }
     }
 
-    return { ...order, mpInitPoint: null };
+    if (input.paymentMethod === OrderPaymentMethod.WHATSAPP) {
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true, ticketPhone: true } });
+      const phone = whatsappService.normalizePhone(tenant?.ticketPhone);
+      const storeUrl = `${FRONTEND_URL}/tienda/${tenant?.slug}/pedido/${order.publicToken}`;
+
+      const message = buildWhatsappOrderMessage({
+        order: { publicToken: order.publicToken, customerName: order.customerName, total: order.total, customerNotes: order.customerNotes },
+        items: resolvedItems,
+        storeUrl,
+      });
+
+      const whatsappUrl = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
+
+      return { ...order, mpInitPoint: null, whatsappUrl };
+    }
+
+    return { ...order, mpInitPoint: null, whatsappUrl: null };
   },
 
   async getPublicByToken(publicToken: string) {
@@ -460,6 +543,10 @@ export const orderService = {
       EFECTIVO: PaymentMethod.EFECTIVO,
       TRANSFERENCIA: PaymentMethod.TRANSFERENCIA,
       MERCADOPAGO: PaymentMethod.QR_MERCADOPAGO,
+      // El pago real se coordina por chat (efectivo/transferencia/etc. segun
+      // lo que acuerden) - EFECTIVO como default razonable, igual que un
+      // pedido EFECTIVO comun, ya que se termina de resolver en persona.
+      WHATSAPP: PaymentMethod.EFECTIVO,
     };
 
     const items: any[] = order.items.map((i) => ({

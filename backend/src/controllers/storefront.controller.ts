@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { storefrontConfigService } from "../services/storefrontConfig.service";
 import { orderService } from "../services/order.service";
 import { catalogService } from "../services/catalog.service";
+import { authService } from "../services/auth.service";
 import { getParamAsString } from "../utils/params";
 
 function toNumber(value: unknown) {
@@ -77,6 +78,41 @@ export const storefrontController = {
       const order = await orderService.uploadTransferProof(publicToken, req.file);
 
       res.json({ ok: true, content: order });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /**
+   * Alta de cuenta CLIENTE para ESTA tienda puntual (cuenta obligatoria para
+   * comprar, doc "tienda online - checkout por WhatsApp"). A diferencia de
+   * POST /auth/register (montado suelto, sin tenant de la URL), acá el
+   * tenantId sale de storefrontTenantMiddleware - así el cliente queda
+   * vinculado al negocio cuya tienda esta navegando, no al tenant default.
+   * Registra y loguea en el mismo paso (misma cookie que /auth/login) para
+   * no obligar a un segundo submit.
+   */
+  async registerCustomer(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = (req as any).tenantId;
+      const email = req.body.email;
+      const password = req.body.password;
+
+      await authService.register(
+        {
+          email,
+          password,
+          nombre: req.body.nombre,
+          apellido: req.body.apellido,
+          dni: req.body.dni,
+          telefono: req.body.telefono,
+        },
+        tenantId
+      );
+
+      const user = await authService.login(email, password, res);
+
+      res.status(201).json({ ok: true, content: user });
     } catch (err) {
       next(err);
     }

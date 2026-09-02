@@ -1,13 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useStore } from '../StoreContext';
 import { useCartContext } from '../CartContext';
-import { Package, Banknote, Landmark, Wallet } from 'lucide-react';
+import { useAccount } from '../AccountContext';
+import { Package, Banknote, Landmark, Wallet, MessageCircle, UserCircle2 } from 'lucide-react';
 
 const money = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0);
@@ -15,6 +17,7 @@ const money = (n: number) =>
 export default function TiendaCheckoutPage() {
   const { store, tenantSlug } = useStore();
   const { cart, total, clear } = useCartContext();
+  const { account, loading: accountLoading } = useAccount();
   const router = useRouter();
 
   const [customerName, setCustomerName] = useState('');
@@ -22,10 +25,17 @@ export default function TiendaCheckoutPage() {
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
 
-  const [paymentMethod, setPaymentMethod] = useState<'EFECTIVO' | 'TRANSFERENCIA' | 'MERCADOPAGO'>('EFECTIVO');
+  const [paymentMethod, setPaymentMethod] = useState<'EFECTIVO' | 'TRANSFERENCIA' | 'MERCADOPAGO' | 'WHATSAPP'>('EFECTIVO');
   const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit = cart.length > 0 && customerName.trim().length > 0 && !submitting;
+  // Cuenta obligatoria: precarga nombre/email de la cuenta apenas se resuelve
+  // (no pisa lo que el comprador ya haya tipeado a mano).
+  useEffect(() => {
+    if (account && !customerName) setCustomerName(account.name);
+    if (account && !customerEmail) setCustomerEmail(account.email);
+  }, [account]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const canSubmit = cart.length > 0 && !!account && customerName.trim().length > 0 && !submitting;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -50,8 +60,16 @@ export default function TiendaCheckoutPage() {
         window.location.href = data.content.mpInitPoint;
         return;
       }
+      if (paymentMethod === 'WHATSAPP' && data.content.whatsappUrl) {
+        window.location.href = data.content.whatsappUrl;
+        return;
+      }
       router.push(`/tienda/${tenantSlug}/pedido/${data.content.publicToken}`);
     } catch (err: any) {
+      if (err?.response?.status === 401) {
+        router.push(`/tienda/${tenantSlug}/cuenta?next=/tienda/${tenantSlug}/checkout`);
+        return;
+      }
       toast.error(err?.response?.data?.message ?? 'No se pudo confirmar el pedido');
     } finally {
       setSubmitting(false);
@@ -63,6 +81,29 @@ export default function TiendaCheckoutPage() {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 0', color: '#98A2B3' }}>
         <Package size={36} />
         <span style={{ fontSize: 14 }}>Tu carrito está vacío</span>
+      </div>
+    );
+  }
+
+  if (!accountLoading && !account) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '60px 0', textAlign: 'center' }}>
+        <UserCircle2 size={40} style={{ color: '#98A2B3' }} />
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#172033', marginBottom: 4 }}>Necesitás una cuenta para comprar</div>
+          <p style={{ fontSize: 13, color: '#667085', maxWidth: 320 }}>
+            Creá una cuenta o ingresá con la que ya tenés en {store.storeName} para completar tu pedido.
+          </p>
+        </div>
+        <Link
+          href={`/tienda/${tenantSlug}/cuenta?next=/tienda/${tenantSlug}/checkout`}
+          style={{
+            padding: '10px 20px', borderRadius: 8, border: 'none', background: 'var(--store-accent)',
+            color: '#fff', fontSize: 13, fontWeight: 700, textDecoration: 'none',
+          }}
+        >
+          Ingresar o crear cuenta
+        </Link>
       </div>
     );
   }
@@ -117,6 +158,11 @@ export default function TiendaCheckoutPage() {
               <Wallet size={14} /> Mercado Pago
             </button>
           )}
+          {store.contactPhone && (
+            <button onClick={() => setPaymentMethod('WHATSAPP')} style={segButtonStyle(paymentMethod === 'WHATSAPP')}>
+              <MessageCircle size={14} /> WhatsApp
+            </button>
+          )}
         </div>
         {paymentMethod === 'MERCADOPAGO' && (
           <div style={{ marginTop: 10, padding: 12, borderRadius: 8, background: '#F7F8FA', fontSize: 12, color: '#344054' }}>
@@ -126,6 +172,11 @@ export default function TiendaCheckoutPage() {
         {paymentMethod === 'TRANSFERENCIA' && store.transferInstructions && (
           <div style={{ marginTop: 10, padding: 12, borderRadius: 8, background: '#F7F8FA', fontSize: 12, color: '#344054', whiteSpace: 'pre-wrap' }}>
             {store.transferInstructions}
+          </div>
+        )}
+        {paymentMethod === 'WHATSAPP' && (
+          <div style={{ marginTop: 10, padding: 12, borderRadius: 8, background: '#F7F8FA', fontSize: 12, color: '#344054' }}>
+            Dejamos tu pedido como pendiente y te vamos a redirigir al WhatsApp del local con el detalle, para coordinar el pago y la entrega.
           </div>
         )}
       </section>

@@ -9,7 +9,8 @@ import api from '@/lib/api';
 import { StoreContext, type StoreInfo } from './StoreContext';
 import { CartContext } from './CartContext';
 import { useCart } from './useCart';
-import { Store as StoreIcon, MapPin, Phone, Mail, ShoppingCart, Clock } from 'lucide-react';
+import { AccountContext, useAccountState } from './AccountContext';
+import { Store as StoreIcon, MapPin, Phone, Mail, ShoppingCart, Clock, UserCircle2 } from 'lucide-react';
 import { getOpenStatus, normalizeBusinessHours } from './businessHours';
 
 export default function TiendaLayout({ children }: { children: React.ReactNode }) {
@@ -18,10 +19,12 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
   const [notFound, setNotFound] = useState(false);
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // Se llama siempre, antes de cualquier return anticipado (reglas de
-  // hooks) - el carrito vive en localStorage por tenantSlug, asi que no
-  // importa si la tienda todavia esta cargando.
+  // Se llaman siempre, antes de cualquier return anticipado (reglas de
+  // hooks) - el carrito vive en localStorage por tenantSlug y la cuenta se
+  // resuelve via /auth/me, asi que no importa si la tienda todavia esta
+  // cargando.
   const cart = useCart(tenantSlug);
+  const accountState = useAccountState(tenantSlug);
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -139,31 +142,63 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
             )}
           </div>
 
-          <Link
-            href={`/tienda/${tenantSlug}/carrito`}
-            style={{
-              marginLeft: 'auto', flexShrink: 0, position: 'relative', display: 'flex',
-              alignItems: 'center', justifyContent: 'center', width: 44, height: 44,
-              borderRadius: 10, border: '1px solid #E4E7EC', background: '#fff', textDecoration: 'none',
-            }}
-          >
-            <ShoppingCart size={19} style={{ color: '#172033' }} />
-            {cart.itemCount > 0 && (
-              <span style={{
-                position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
-                background: 'var(--store-accent)', color: '#fff', fontSize: 10, fontWeight: 800,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
-              }}>
-                {cart.itemCount}
-              </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {!accountState.loading && (
+              accountState.account ? (
+                <Link
+                  href={`/tienda/${tenantSlug}/cuenta`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', height: 44,
+                    borderRadius: 10, border: '1px solid #E4E7EC', background: '#fff', textDecoration: 'none',
+                    fontSize: 12, fontWeight: 700, color: '#172033',
+                  }}
+                  title={accountState.account.email}
+                >
+                  <UserCircle2 size={17} style={{ color: 'var(--store-accent)' }} />
+                  {accountState.account.name.split(' ')[0]}
+                </Link>
+              ) : (
+                <Link
+                  href={`/tienda/${tenantSlug}/cuenta`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', height: 44,
+                    borderRadius: 10, border: '1px solid #E4E7EC', background: '#fff', textDecoration: 'none',
+                    fontSize: 12, fontWeight: 700, color: '#172033',
+                  }}
+                >
+                  <UserCircle2 size={17} /> Ingresar
+                </Link>
+              )
             )}
-          </Link>
+
+            <Link
+              href={`/tienda/${tenantSlug}/carrito`}
+              style={{
+                flexShrink: 0, position: 'relative', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', width: 44, height: 44,
+                borderRadius: 10, border: '1px solid #E4E7EC', background: '#fff', textDecoration: 'none',
+              }}
+            >
+              <ShoppingCart size={19} style={{ color: '#172033' }} />
+              {cart.itemCount > 0 && (
+                <span style={{
+                  position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
+                  background: 'var(--store-accent)', color: '#fff', fontSize: 10, fontWeight: 800,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
+                }}>
+                  {cart.itemCount}
+                </span>
+              )}
+            </Link>
+          </div>
         </header>
 
         <main style={{ maxWidth: 1080, margin: '0 auto', padding: '0 20px 60px' }}>
-          <CartContext.Provider value={cart}>
-            {children}
-          </CartContext.Provider>
+          <AccountContext.Provider value={accountState}>
+            <CartContext.Provider value={cart}>
+              {children}
+            </CartContext.Provider>
+          </AccountContext.Provider>
         </main>
 
         <footer style={{ borderTop: '1px solid #E4E7EC', padding: '20px', textAlign: 'center', fontSize: 11, color: '#98A2B3' }}>

@@ -8,7 +8,8 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useStore } from '../StoreContext';
 import { useCartContext } from '../CartContext';
-import { Search, Package, ChevronLeft, ChevronRight, Plus, Check } from 'lucide-react';
+import SkuScannerModal from '@/components/SkuScannerModal';
+import { Search, Package, ChevronLeft, ChevronRight, Plus, Check, ScanBarcode } from 'lucide-react';
 
 type StoreProduct = {
   id: string;
@@ -38,12 +39,19 @@ export default function TiendaProductosPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const handleAdd = (p: StoreProduct) => {
     addItem({ productId: p.id, name: p.name, imageUrl: p.imageUrl, price: p.price, saleUnit: p.saleUnit }, p.saleUnit === 'KG' ? 1 : 1);
     setJustAdded(p.id);
     toast.success(`${p.name} agregado al carrito`);
     setTimeout(() => setJustAdded((cur) => (cur === p.id ? null : cur)), 1200);
+  };
+
+  const handleScanned = (code: string) => {
+    setScannerOpen(false);
+    setSearch(code.trim());
+    toast.success(`Buscando "${code.trim()}"...`);
   };
 
   useEffect(() => { setPage(1); }, [categorySlug, search]);
@@ -65,18 +73,38 @@ export default function TiendaProductosPage() {
 
   return (
     <div style={{ paddingTop: 8 }}>
-      <div style={{ position: 'relative', marginBottom: 20, maxWidth: 360 }}>
-        <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#98A2B3' }} />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar productos..."
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, maxWidth: 420 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#98A2B3' }} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar productos..."
+            style={{
+              width: '100%', padding: '10px 12px 10px 36px', borderRadius: 10,
+              border: '1px solid #D0D5DD', fontSize: 14, outline: 'none',
+            }}
+          />
+        </div>
+        <button
+          onClick={() => setScannerOpen(true)}
+          title="Escanear código de barras"
           style={{
-            width: '100%', padding: '10px 12px 10px 36px', borderRadius: 10,
-            border: '1px solid #D0D5DD', fontSize: 14, outline: 'none',
+            flexShrink: 0, width: 44, height: 44, borderRadius: 10, border: '1px solid #D0D5DD',
+            background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           }}
-        />
+        >
+          <ScanBarcode size={18} style={{ color: 'var(--store-accent)' }} />
+        </button>
       </div>
+
+      <SkuScannerModal
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onDetected={handleScanned}
+        title="Escanear producto"
+        hint="Apuntá la cámara al código de barras del producto."
+      />
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>

@@ -7,7 +7,7 @@ import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { fmtMoney, fmtDate } from '@/lib/helpers';
-import { Package, X, Check, Ban, Banknote, Landmark, Wallet, ShoppingBag } from 'lucide-react';
+import { Package, X, Check, Ban, Banknote, Landmark, Wallet, ShoppingBag, MessageCircle } from 'lucide-react';
 
 type OrderListItem = {
   id: string;
@@ -62,6 +62,7 @@ const PAYMENT_METHOD_INFO: Record<string, { label: string; icon: any }> = {
   EFECTIVO: { label: 'Efectivo', icon: Banknote },
   TRANSFERENCIA: { label: 'Transferencia', icon: Landmark },
   MERCADOPAGO: { label: 'Mercado Pago', icon: Wallet },
+  WHATSAPP: { label: 'WhatsApp', icon: MessageCircle },
 };
 
 export default function TiendaOnlinePedidosPage() {

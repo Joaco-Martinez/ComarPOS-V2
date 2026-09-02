@@ -1883,6 +1883,7 @@ enum OrderPaymentMethod {
   EFECTIVO
   TRANSFERENCIA
   MERCADOPAGO
+  WHATSAPP
 }
 
 enum OrderPaymentStatus {
