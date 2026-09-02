@@ -209,44 +209,41 @@ function validatePricesBySaleUnit(data: CreateProductInput | any) {
   // clientPrice/clientPricePerKg siguen existiendo en el modelo (por si algo
   // viejo los lee) pero ya no se piden ni se validan; product.write.ts los
   // espeja siempre desde price/pricePerKg.
+  // wholesalePrice/wholesalePricePerKg ya no se piden en el form (doc "listas
+  // de precios" - el precio mayorista pasa a ser una lista de precios mas, no
+  // un campo fijo del producto): product.write.ts los espeja automaticamente
+  // desde price/pricePerKg cuando no vienen en el body. Por eso acá solo se
+  // exige el precio de lista, y el mayorista se valida unicamente si vino
+  // explícito (para no rechazar el alta con "es requerido" por un campo que
+  // la UI nunca envía).
   if (saleUnit === SaleUnit.KG) {
     const pricePerKg = toNumberOrNull(data.pricePerKg);
-    const wholesalePricePerKg = toNumberOrNull(data.wholesalePricePerKg);
 
     if (pricePerKg === null) {
       throw new Error("Si saleUnit es KG, pricePerKg es requerido");
-    }
-
-    if (wholesalePricePerKg === null) {
-      throw new Error("Si saleUnit es KG, wholesalePricePerKg es requerido");
     }
 
     if (!isValidPositiveNumber(pricePerKg)) {
       throw new Error("Si saleUnit es KG, pricePerKg debe ser mayor a 0");
     }
 
-    if (!isValidPositiveNumber(wholesalePricePerKg)) {
+    if (data.wholesalePricePerKg !== undefined && !isValidPositiveNumber(data.wholesalePricePerKg)) {
       throw new Error("Si saleUnit es KG, wholesalePricePerKg debe ser mayor a 0");
     }
   }
 
   if (saleUnit === SaleUnit.UNIT) {
     const price = toNumberOrNull(data.price);
-    const wholesalePrice = toNumberOrNull(data.wholesalePrice);
 
     if (price === null) {
       throw new Error("Si saleUnit es UNIT, price es requerido");
-    }
-
-    if (wholesalePrice === null) {
-      throw new Error("Si saleUnit es UNIT, wholesalePrice es requerido");
     }
 
     if (!isValidPositiveNumber(price)) {
       throw new Error("Si saleUnit es UNIT, price debe ser mayor a 0");
     }
 
-    if (!isValidPositiveNumber(wholesalePrice)) {
+    if (data.wholesalePrice !== undefined && !isValidPositiveNumber(data.wholesalePrice)) {
       throw new Error("Si saleUnit es UNIT, wholesalePrice debe ser mayor a 0");
     }
   }
