@@ -9,7 +9,7 @@ import ImageCropModal, { PRODUCT_IMAGE_SIZE } from '@/components/ImageCropModal'
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { Product, ProductCategory } from '@/types';
-import { categoryName, fmtMoney, normalizeArray, num, productStock, productMinStock } from '@/lib/helpers';
+import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
 import { Package, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, ScanBarcode } from 'lucide-react';
@@ -239,12 +239,11 @@ export default function ProductosPage() {
                     return <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text3)' }}>Sin límite</span>;
                   }
                   const stockVal = productStock(p);
-                  const minVal = productMinStock(p);
-                  const low = stockVal <= minVal && minVal > 0;
+                  const low = productHasLowStockLocation(p);
                   return (
                     <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: low ? 'var(--warn)' : 'var(--text2)' }}>
                       {low && <AlertTriangle size={11} style={{ display: 'inline', marginRight: 4 }} />}
-                      {stockVal}{p.saleUnit === 'KG' ? 'kg' : ''}
+                      {p.saleUnit === 'KG' ? `${fmtKg(stockVal)}kg` : stockVal}
                     </span>
                   );
                 },
@@ -277,7 +276,7 @@ export default function ProductosPage() {
             renderMobileCard={(p) => {
               const stockVal = productStock(p);
               const minVal = productMinStock(p);
-              const low = stockVal <= minVal && minVal > 0;
+              const low = productHasLowStockLocation(p);
               return (
                 <>
                   <div className="mobile-card-head">
@@ -311,7 +310,7 @@ export default function ProductosPage() {
                     ) : (
                       <span style={{ fontFamily: 'var(--mono)', color: low ? 'var(--warn)' : 'var(--text2)' }}>
                         {low && <AlertTriangle size={11} style={{ display: 'inline', marginRight: 4 }} />}
-                        {stockVal}{p.saleUnit === 'KG' ? 'kg' : ''} / {minVal}
+                        {p.saleUnit === 'KG' ? `${fmtKg(stockVal)}kg` : stockVal} / {p.saleUnit === 'KG' ? fmtKg(minVal) : minVal}
                       </span>
                     )}
                   </div>

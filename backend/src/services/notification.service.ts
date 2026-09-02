@@ -86,6 +86,12 @@ export const notificationService = {
   // stockLocal+stockDeposito contra un unico minStock fijo; ver doc de
   // migracion "ubicaciones de stock dinamicas", y alert.service.ts que
   // sigue el mismo criterio para la pagina de Alertas).
+  //
+  // No re-notifica un (producto, ubicacion) que ya tiene una notificacion
+  // LOW_STOCK sin leer (misma idea que checkOnboarding): sin esto, cada
+  // corrida del cron (ver cron/scheduler.ts) volvia a crear una notificacion
+  // nueva para todos los admins mientras el producto siguiera bajo el
+  // minimo, generando spam de push/email.
   async checkLowStock() {
     const scope = tenantScope();
     const products = await prisma.product.findMany({
@@ -95,7 +101,7 @@ export const notificationService = {
         name: true,
         sku: true,
         saleUnit: true,
-        stock: { include: { businessLocation: { select: { name: true, isActive: true } } } },
+        stock: { include: { businessLocation: { select: { id: true, name: true, isActive: true } } } },
       },
     });
 
@@ -105,6 +111,22 @@ export const notificationService = {
       select: { id: true },
     });
     if (!admins.length) return { created: 0 };
+
+    const pendingLowStock = await prisma.notification.findMany({
+      where: {
+        type: "LOW_STOCK" as NotificationType,
+        isRead: false,
+        userId: { in: admins.map((u) => u.id) },
+        ...tenantScope(),
+      },
+      select: { data: true },
+    });
+    const alreadyNotified = new Set(
+      pendingLowStock
+        .map((n) => n.data as { productId?: string; businessLocationId?: string } | null)
+        .filter((d): d is { productId: string; businessLocationId: string } => !!d?.productId && !!d?.businessLocationId)
+        .map((d) => `${d.productId}:${d.businessLocationId}`)
+    );
 
     let created = 0;
     for (const product of products) {
@@ -116,12 +138,14 @@ export const notificationService = {
         const min = isKg ? row.minQuantityKg : row.minQuantity;
         if (min == null || Number(min) <= 0) continue;
         if (qty > Number(min)) continue;
+        if (alreadyNotified.has(`${product.id}:${row.businessLocation.id}`)) continue;
 
         await this.broadcast({
           userIds: admins.map((u) => u.id),
           type: "LOW_STOCK" as NotificationType,
           title: "Stock bajo",
           body: `${product.name}${product.sku ? ` (SKU: ${product.sku})` : ""} tiene ${qty} ${isKg ? "kg" : "unidades"} en "${row.businessLocation.name}" (mínimo: ${min}).`,
+          data: { productId: product.id, businessLocationId: row.businessLocation.id },
         });
         created += admins.length;
       }

@@ -204,6 +204,13 @@ export async function setStockMin(
   minQuantity: number | null,
   minQuantityKg: number | null
 ) {
+  if (minQuantity != null && (!Number.isFinite(minQuantity) || minQuantity < 0)) {
+    throw new Error("El stock mínimo no puede ser negativo");
+  }
+  if (minQuantityKg != null && (!Number.isFinite(minQuantityKg) || minQuantityKg < 0)) {
+    throw new Error("El stock mínimo (KG) no puede ser negativo");
+  }
+
   await requireProduct(productId);
   await requireLocation(businessLocationId, "destino");
 

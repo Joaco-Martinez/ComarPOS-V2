@@ -8,7 +8,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { BusinessLocation, Product, ProductCategory, StockMovement } from '@/types';
-import { categoryName, fmtDate, normalizeArray, num, productStock, productMinStock } from '@/lib/helpers';
+import { categoryName, fmtDate, fmtKg, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import { BarChart2, Search, ArrowRightLeft, X, AlertTriangle, RefreshCcw, History, ScanBarcode, Package, Pencil } from 'lucide-react';
 
@@ -171,11 +171,7 @@ export default function StockPage() {
     }
   };
 
-  const lowStockCount = products.filter((p) => {
-    const s = productStock(p);
-    const m = productMinStock(p);
-    return m > 0 && s <= m;
-  }).length;
+  const lowStockCount = products.filter((p) => productStock(p) <= 0 || productHasLowStockLocation(p)).length;
 
   return (
     <AppLayout
@@ -257,7 +253,7 @@ export default function StockPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: critical ? 'var(--danger)' : low ? 'var(--warn)' : 'var(--text2)' }}>
                             {low && <AlertTriangle size={10} style={{ display: 'inline', marginRight: 3 }} />}
-                            {qty} {unit}
+                            {isKg ? fmtKg(qty) : qty} {unit}
                           </span>
                           <button
                             onClick={() => openMinModal(p, loc)}
@@ -274,9 +270,8 @@ export default function StockPage() {
                   {
                     key: 'estado', header: 'Estado', render: (p) => {
                       const s = productStock(p);
-                      const m = productMinStock(p);
-                      const low = m > 0 && s <= m;
                       const critical = s <= 0;
+                      const low = !critical && productHasLowStockLocation(p);
                       return critical ? (
                         <span className="badge badge-red">Sin stock</span>
                       ) : low ? (
@@ -303,8 +298,8 @@ export default function StockPage() {
                 renderMobileCard={(p) => {
                   const s = productStock(p);
                   const m = productMinStock(p);
-                  const low = m > 0 && s <= m;
                   const critical = s <= 0;
+                  const low = !critical && productHasLowStockLocation(p);
                   const unit = p.saleUnit === 'KG' ? 'kg' : 'un';
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -332,13 +327,13 @@ export default function StockPage() {
                         return (
                           <div className="mobile-card-row" key={loc.id}>
                             <span>{loc.name}</span>
-                            <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{qty} {unit}</span>
+                            <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{isKg ? fmtKg(qty) : qty} {unit}</span>
                           </div>
                         );
                       })}
                       <div className="mobile-card-row">
                         <span>Mínimo (total)</span>
-                        <span style={{ fontFamily: 'var(--mono)' }}>{m} {unit}</span>
+                        <span style={{ fontFamily: 'var(--mono)' }}>{p.saleUnit === 'KG' ? fmtKg(m) : m} {unit}</span>
                       </div>
                       <button
                         onClick={() => openMoveModal(p)}

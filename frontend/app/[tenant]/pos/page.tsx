@@ -8,7 +8,7 @@ import ClientFormModal from '@/components/ClientFormModal';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, PriceList, Product, ProductCategory, SalePayment } from '@/types';
-import { categoryName, clientName, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
+import { categoryName, clientName, fmtKg, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
 import {
   AlertTriangle, Check, ChevronLeft, Minus, Package, Plus, RefreshCcw,
   ScanBarcode, Search, ShoppingCart, Trash2, X, User, Percent,
@@ -624,7 +624,7 @@ export default function PosPage() {
                 const stockRow = p.stock?.find((s) => s.businessLocationId === stockLocationId);
                 const minStock = num(p.saleUnit === 'KG' ? stockRow?.minQuantityKg : stockRow?.minQuantity);
                 const lowStock = stock <= minStock && minStock > 0 && !p.unlimitedStock;
-                const noStock = p.saleUnit !== 'KG' && stock <= 0 && !p.isService && !p.unlimitedStock;
+                const noStock = stock <= 0 && !p.isService && !p.unlimitedStock;
                 const retailPrice = resolvedPrice(p);
 
                 return (
@@ -653,7 +653,7 @@ export default function PosPage() {
                         {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
                         {p.unlimitedStock
                           ? 'Sin límite'
-                          : noStock ? 'Sin stock' : `Stock: ${p.saleUnit === 'KG' ? `${stock}kg` : stock}`}
+                          : noStock ? 'Sin stock' : `Stock: ${p.saleUnit === 'KG' ? `${fmtKg(stock)}kg` : stock}`}
                       </span>
                       {categoryName(p) !== 'Sin categoría' && (
                         <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

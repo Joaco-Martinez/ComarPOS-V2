@@ -31,6 +31,16 @@ export const num = (v: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+// Redondea a 3 decimales (gramo) y saca ceros/punto sobrantes, para mostrar
+// cantidades por KG consistentemente en toda la UI -- sin esto, arrastrar un
+// stock cargado con muchos decimales (ingresos/ventas sucesivos, error de
+// tipeo) se mostraba tal cual en algunas pantallas mientras otras redondeaban
+// (ver sale.pricing.ts round2 en el backend, que solo redondea montos, no kg).
+export const fmtKg = (v: unknown): string => {
+  const n = num(v);
+  return (Math.round(n * 1000) / 1000).toString();
+};
+
 // Detecta el 403 que devuelve requirePlanFeature (backend/src/middleware/planFeature.ts)
 // cuando el modulo no esta incluido en el plan del tenant -- distinto de un
 // error generico, asi las paginas de Fidelidad/Promociones/Cuentas
@@ -92,4 +102,21 @@ export const productMinStock = (product: Product) => {
     (acc, row) => acc + num(product.saleUnit === 'KG' ? row.minQuantityKg : row.minQuantity),
     0
   );
+};
+
+// El backend (alert.service.ts, notification.service.ts) dispara la alerta
+// de "stock bajo" por ubicacion individual, no contra la suma total entre
+// ubicaciones -- sumar (como hacen productStock/productMinStock, utiles para
+// mostrar un total) puede esconder que una sucursal puntual esta en deficit
+// mientras otra tiene de sobra. Este helper replica el mismo criterio que el
+// backend para que el badge "Estado" del listado no contradiga una alerta
+// real.
+export const productHasLowStockLocation = (product: Product): boolean => {
+  const rows = product.stock ?? [];
+  const isKg = product.saleUnit === 'KG';
+  return rows.some((row) => {
+    const qty = num(isKg ? row.quantityKg : row.quantity);
+    const min = num(isKg ? row.minQuantityKg : row.minQuantity);
+    return min > 0 && qty <= min;
+  });
 };
