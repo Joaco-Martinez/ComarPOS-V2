@@ -8,6 +8,13 @@ function wrap(fn: (req: Request, res: Response) => Promise<any>) {
   };
 }
 
+function sendServiceResponse(res: Response, result: any) {
+  if (result?.statusCode) {
+    return res.status(result.statusCode).json({ message: result.message });
+  }
+  return res.json(result);
+}
+
 export const supplierController = {
   getAll: wrap(async () => supplierService.getAll()),
 
@@ -36,4 +43,16 @@ export const supplierController = {
   }),
 
   getPurchaseHistory: wrap(async (req) => supplierService.getPurchaseHistory(req.params.id as string)),
+
+  async bulkPriceUpdate(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await supplierService.bulkPriceUpdate(req.params.id as string, Number(req.body.percentage));
+      if (!(result as any)?.statusCode) {
+        logAudit(req, "UPDATE", "Supplier", req.params.id as string, { bulkPriceUpdate: req.body.percentage });
+      }
+      return sendServiceResponse(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

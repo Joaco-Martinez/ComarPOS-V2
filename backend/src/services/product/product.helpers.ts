@@ -73,6 +73,7 @@ export type CreateProductInput = {
 
   categoryId?: string;
   category?: string;
+  supplierId?: string;
 
   saleUnit?: SaleUnit | "UNIT" | "KG";
   pricePerKg?: number | string;
@@ -85,6 +86,11 @@ export type CreateProductInput = {
 
   components?: ProductComponentInput[];
   boxContents?: { productId: string; quantity: number; quantityKg?: number }[];
+
+  // Stock inicial por ubicacion, cargado en el mismo alta (evita el paso
+  // extra de crear el producto y despues ir a Stock a cargarle cantidad).
+  initialStock?: { businessLocationId: string; quantity?: number | string; quantityKg?: number | string }[];
+  userId?: string;
 };
 
 function normalizeComponents(data: CreateProductInput | any): ProductComponentInput[] {
@@ -115,6 +121,23 @@ async function validateCategory(categoryId?: string | null) {
 
   if (!category.isActive) {
     throw new Error("La categoría seleccionada está inactiva");
+  }
+}
+
+async function validateSupplier(supplierId?: string | null) {
+  if (!supplierId) return;
+
+  const supplier = await prisma.supplier.findFirst({
+    where: { id: supplierId, ...tenantScope() },
+    select: { id: true, isActive: true },
+  });
+
+  if (!supplier) {
+    throw new Error("El proveedor seleccionado no existe");
+  }
+
+  if (!supplier.isActive) {
+    throw new Error("El proveedor seleccionado está inactivo");
   }
 }
 
@@ -255,6 +278,7 @@ function validatePricesBySaleUnit(data: CreateProductInput | any) {
 
 const productInclude = {
   category: true,
+  supplier: true,
   stock: { include: { businessLocation: true } },
   components: {
     include: {
@@ -282,6 +306,7 @@ export {
   safeDeleteLocalFile,
   normalizeComponents,
   validateCategory,
+  validateSupplier,
   validateComponents,
   validatePricesBySaleUnit,
   productInclude,

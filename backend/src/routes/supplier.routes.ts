@@ -15,5 +15,11 @@ router.get("/:id/purchase-history", requireAnyRole(["ADMIN", "CONTADOR"]), suppl
 router.post("/", requireAnyRole(["ADMIN"]), requirePlanFeature("proveedores"), supplierController.create);
 router.put("/:id", requireAnyRole(["ADMIN"]), requirePlanFeature("proveedores"), supplierController.update);
 router.delete("/:id", requireAnyRole(["ADMIN"]), requirePlanFeature("proveedores"), supplierController.remove);
+router.post(
+  "/:id/bulk-price-update",
+  requireAnyRole(["ADMIN"]),
+  requirePlanFeature("proveedores"),
+  supplierController.bulkPriceUpdate
+);
 
 export default router;

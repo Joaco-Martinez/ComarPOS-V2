@@ -102,6 +102,8 @@ export interface Product {
   type: ProductType;
   categoryId?: string | null;
   category?: ProductCategory | string | null;
+  supplierId?: string | null;
+  supplier?: Supplier | null;
   price: number;
   clientPrice: number;
   wholesalePrice: number;

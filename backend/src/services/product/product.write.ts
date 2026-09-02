@@ -3,7 +3,7 @@
  * Extraido de product.service.ts (doc seccion 4.1 - modularizacion).
  */
 import prisma from "../../prisma";
-import { ProductType, Product, SaleUnit } from "@prisma/client";
+import { ProductType, Product, SaleUnit, MovementType } from "@prisma/client";
 import type { Express } from "express";
 import cloudinary from "../../config/cloudinary";
 import alertService from "../alert.service";
@@ -19,6 +19,7 @@ import {
   safeDeleteLocalFile,
   normalizeComponents,
   validateCategory,
+  validateSupplier,
   validateComponents,
   validatePricesBySaleUnit,
   productInclude,
@@ -55,6 +56,7 @@ export async function create(data: CreateProductInput) {
 
   try {
     await validateCategory(data.categoryId);
+    await validateSupplier(data.supplierId);
 
     validatePricesBySaleUnit({
       ...data,
@@ -112,6 +114,7 @@ export async function create(data: CreateProductInput) {
       description: data.description?.trim() || null,
       type,
       categoryId: data.categoryId || null,
+      supplierId: data.supplierId || null,
       saleUnit,
       sku,
       isService: isTrue(data.isService),
@@ -172,22 +175,61 @@ export async function create(data: CreateProductInput) {
       },
     });
 
-    // Arranca con stock en 0 en cada ubicacion activa del tenant - el
-    // negocio carga cantidades despues desde Stock/Compras/Conteo (ver doc
-    // de migracion "ubicaciones de stock dinamicas").
+    // Arranca con una fila de stock en cada ubicacion activa del tenant (ver
+    // doc de migracion "ubicaciones de stock dinamicas"). Si el alta trajo
+    // cantidades iniciales (initialStock), se cargan ahi mismo en vez de en
+    // 0 - evita el paso extra de crear el producto y despues ir a Stock a
+    // cargarle cantidad. Cada cantidad inicial > 0 tambien deja un
+    // StockMovement de INGRESS, igual que addStock/addStockKg, para no
+    // romper la trazabilidad de movimientos.
     const locations = await prisma.businessLocation.findMany({
       where: { isActive: true, ...tenantScope() },
       select: { id: true },
     });
+
+    const initialByLocation = new Map<string, { quantity: number; quantityKg: number }>();
+    for (const entry of data.initialStock ?? []) {
+      if (!entry.businessLocationId) continue;
+      const quantity = toNumberOrZero(entry.quantity);
+      const quantityKg = toNumberOrZero(entry.quantityKg);
+      initialByLocation.set(entry.businessLocationId, { quantity, quantityKg });
+    }
+
     if (locations.length > 0) {
       await prisma.productStock.createMany({
-        data: locations.map((loc) => ({
-          productId: created.id,
-          businessLocationId: loc.id,
-          tenantId: currentTenantId(),
-        })),
+        data: locations.map((loc) => {
+          const initial = initialByLocation.get(loc.id);
+          return {
+            productId: created.id,
+            businessLocationId: loc.id,
+            tenantId: currentTenantId(),
+            quantity: initial?.quantity ?? 0,
+            quantityKg: initial?.quantityKg ?? 0,
+          };
+        }),
         skipDuplicates: true,
       });
+    }
+
+    if (data.userId) {
+      const movements = locations
+        .map((loc) => ({ loc, initial: initialByLocation.get(loc.id) }))
+        .filter(({ initial }) => (initial?.quantity ?? 0) > 0 || (initial?.quantityKg ?? 0) > 0);
+
+      if (movements.length > 0) {
+        await prisma.stockMovement.createMany({
+          data: movements.map(({ loc, initial }) => ({
+            productId: created.id,
+            userId: data.userId!,
+            type: MovementType.INGRESS,
+            toLocationId: loc.id,
+            quantity: initial && initial.quantity > 0 ? initial.quantity : null,
+            quantityKg: initial && initial.quantityKg > 0 ? initial.quantityKg : null,
+            reason: "Stock inicial (alta de producto)",
+            tenantId: currentTenantId(),
+          })),
+        });
+      }
     }
 
     await priceListService.syncDefaultPriceListItem(currentTenantId(), created);
@@ -283,6 +325,10 @@ export async function update(id: string, data: Partial<Product> & any) {
     await validateCategory(data.categoryId);
   }
 
+  if (data.supplierId !== undefined && data.supplierId !== null && data.supplierId !== "") {
+    await validateSupplier(data.supplierId);
+  }
+
   const nextType = (data.type as ProductType | undefined) ?? existing.type;
   const nextSaleUnit = (data.saleUnit as SaleUnit | undefined) ?? existing.saleUnit;
 
@@ -305,6 +351,7 @@ export async function update(id: string, data: Partial<Product> & any) {
 
   setIfDefined("type", data.type);
   setIfDefined("categoryId", data.categoryId === "" ? null : data.categoryId);
+  setIfDefined("supplierId", data.supplierId === "" ? null : data.supplierId);
   setIfDefined("sku", data.sku);
   setIfDefined("imageUrl", data.imageUrl);
   setIfDefined("imageId", data.imageId);

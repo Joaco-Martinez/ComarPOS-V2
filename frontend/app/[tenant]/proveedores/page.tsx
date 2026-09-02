@@ -6,17 +6,18 @@ import { useParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { Supplier } from '@/types';
-import { normalizeArray, fmtMoney } from '@/lib/helpers';
+import type { Supplier, Product } from '@/types';
+import { normalizeArray, fmtMoney, num } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
-import { Truck, Plus, Edit2, Trash2, X, CreditCard } from 'lucide-react';
+import { Truck, Plus, Edit2, Trash2, X, CreditCard, Package, Search } from 'lucide-react';
 
 const emptyForm = { name: '', cuit: '', contactName: '', phone: '', email: '', address: '', notes: '' };
 
 export default function ProveedoresPage() {
   const { tenant } = useParams<{ tenant: string }>();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
@@ -25,15 +26,71 @@ export default function ProveedoresPage() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Supplier | null>(null);
 
+  const [detail, setDetail] = useState<Supplier | null>(null);
+  const [detailSearch, setDetailSearch] = useState('');
+  const [bulkPct, setBulkPct] = useState('');
+  const [applyingBulk, setApplyingBulk] = useState(false);
+  const [linking, setLinking] = useState<string | null>(null);
+
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/suppliers');
-      setSuppliers(normalizeArray<Supplier>(data));
+      const [sr, pr] = await Promise.all([
+        api.get('/suppliers'),
+        api.get('/products', { params: { limit: 500 } }).catch(() => null),
+      ]);
+      setSuppliers(normalizeArray<Supplier>(sr.data));
+      if (pr) setProducts(normalizeArray<Product>(pr.data));
     } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
+
+  const openDetail = (s: Supplier) => { setDetail(s); setDetailSearch(''); setBulkPct(''); };
+
+  const linkedProducts = products.filter((p) => p.supplierId === detail?.id);
+  const searchResults = detailSearch.trim()
+    ? products
+        .filter((p) => p.supplierId !== detail?.id)
+        .filter((p) => p.name.toLowerCase().includes(detailSearch.toLowerCase()) || p.sku?.toLowerCase().includes(detailSearch.toLowerCase()))
+        .slice(0, 20)
+    : [];
+
+  const linkProduct = async (p: Product) => {
+    if (!detail) return;
+    setLinking(p.id);
+    try {
+      await api.put(`/products/${p.id}`, { supplierId: detail.id });
+      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, supplierId: detail.id } : x)));
+      toast.success(`"${p.name}" vinculado a ${detail.name}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'No se pudo vincular el producto');
+    } finally { setLinking(null); }
+  };
+
+  const unlinkProduct = async (p: Product) => {
+    setLinking(p.id);
+    try {
+      await api.put(`/products/${p.id}`, { supplierId: '' });
+      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, supplierId: null } : x)));
+    } catch {
+      toast.error('No se pudo quitar el producto');
+    } finally { setLinking(null); }
+  };
+
+  const applyBulk = async () => {
+    if (!detail || bulkPct === '') return;
+    setApplyingBulk(true);
+    try {
+      const { data } = await api.post(`/suppliers/${detail.id}/bulk-price-update`, { percentage: num(bulkPct) });
+      toast.success(`${data.count} productos actualizados con ${num(bulkPct) >= 0 ? '+' : ''}${bulkPct}%`);
+      const { data: pr } = await api.get('/products', { params: { limit: 500 } });
+      setProducts(normalizeArray<Product>(pr));
+      setBulkPct('');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'No se pudo aplicar el aumento');
+    } finally { setApplyingBulk(false); }
+  };
 
 
   const openCreate = () => { setForm(emptyForm); setEditing(null); setModal('create'); };
@@ -119,6 +176,7 @@ export default function ProveedoresPage() {
               {
                 key: 'acciones', header: '', render: (s) => (
                   <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => openDetail(s)} className="btn btn-ghost btn-xs" title="Productos y aumento de precios"><Package size={12} /></button>
                     <a href={`/${tenant}/cuentas-corrientes`} className="btn btn-ghost btn-xs" title="Cuenta corriente"><CreditCard size={12} /></a>
                     <button onClick={() => openEdit(s)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
                     <button onClick={() => setConfirmDelete(s)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
@@ -153,6 +211,9 @@ export default function ProveedoresPage() {
                   <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: s.currentBalance > 0 ? 'var(--warn)' : 'var(--text3)' }}>{fmtMoney(s.currentBalance)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <button onClick={(e) => { e.stopPropagation(); openDetail(s); }} className="btn btn-ghost btn-xs" style={{ gap: 4 }}>
+                    <Package size={12} /> Productos
+                  </button>
                   <a href={`/${tenant}/cuentas-corrientes`} onClick={(e) => e.stopPropagation()} className="btn btn-ghost btn-xs" style={{ gap: 4 }}>
                     <CreditCard size={12} /> Cta. cte.
                   </a>
@@ -217,6 +278,83 @@ export default function ProveedoresPage() {
               <button onClick={save} disabled={saving || !form.name.trim()} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : modal === 'create' ? 'Crear' : 'Guardar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detail && (
+        <div className="modal-overlay" onClick={() => setDetail(null)}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800, fontSize: 15 }}>{detail.name} — Productos</span>
+              <button onClick={() => setDetail(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ padding: 10, background: 'var(--bg2)', borderRadius: 8, marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Aumentar (o bajar) precios en bloque</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
+                  Aplica el % sobre el precio de venta actual de los {linkedProducts.length} productos de este proveedor.
+                  Positivo = aumento (ej. 10), negativo = descuento (ej. -10). No toca el costo de compra.
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="number" step="any"
+                    value={bulkPct}
+                    onChange={(e) => setBulkPct(e.target.value)}
+                    placeholder="Ej: 10"
+                    style={{ width: 100 }}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--text3)' }}>%</span>
+                  <button
+                    onClick={applyBulk}
+                    disabled={applyingBulk || bulkPct === '' || linkedProducts.length === 0}
+                    className="btn btn-primary btn-xs"
+                  >
+                    {applyingBulk ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Aplicar a todos'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Productos vinculados ({linkedProducts.length})</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto', marginBottom: 14 }}>
+                {linkedProducts.length === 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--text3)', padding: '10px 0' }}>Todavía no hay productos vinculados a este proveedor.</div>
+                )}
+                {linkedProducts.map((p) => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{fmtMoney(p.saleUnit === 'KG' ? (p.pricePerKg ?? 0) : p.price)}{p.saleUnit === 'KG' ? '/kg' : ''}</div>
+                    </div>
+                    <button onClick={() => unlinkProduct(p)} disabled={linking === p.id} className="btn btn-ghost btn-xs" title="Quitar del proveedor"><X size={12} /></button>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Vincular otro producto</div>
+              <div style={{ position: 'relative', marginBottom: 10 }}>
+                <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--text3)' }} />
+                <input
+                  value={detailSearch}
+                  onChange={(e) => setDetailSearch(e.target.value)}
+                  placeholder="Buscar producto por nombre o SKU..."
+                  style={{ paddingLeft: 30 }}
+                />
+              </div>
+              {searchResults.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+                  {searchResults.map((p) => (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                        {p.supplier && <div style={{ fontSize: 11, color: 'var(--text3)' }}>Actualmente: {p.supplier.name}</div>}
+                      </div>
+                      <button onClick={() => linkProduct(p)} disabled={linking === p.id} className="btn btn-secondary btn-xs">Vincular</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

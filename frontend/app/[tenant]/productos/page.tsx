@@ -8,14 +8,14 @@ import SkuScannerModal from '@/components/SkuScannerModal';
 import ImageCropModal, { PRODUCT_IMAGE_SIZE } from '@/components/ImageCropModal';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { Product, ProductCategory } from '@/types';
+import type { Product, ProductCategory, Supplier, BusinessLocation } from '@/types';
 import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
 import { Package, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, ScanBarcode } from 'lucide-react';
 
 const emptyForm = {
-  name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '',
+  name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '', supplierId: '',
   saleUnit: 'UNIT', isService: 'false', unlimitedStock: 'false',
   price: '', purchasePrice: '',
   ivaRate: '21',
@@ -27,12 +27,15 @@ type Form = typeof emptyForm;
 export default function ProductosPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [locations, setLocations] = useState<BusinessLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState<Form>(emptyForm);
+  const [initialStock, setInitialStock] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [imgFile, setImgFile] = useState<File | null>(null);
   const [imgPreviewUrl, setImgPreviewUrl] = useState<string | null>(null);
@@ -44,12 +47,16 @@ export default function ProductosPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [pr, cr] = await Promise.all([
+      const [pr, cr, sr, lr] = await Promise.all([
         api.get('/products', { params: { limit: 500 } }),
         api.get('/categories'),
+        api.get('/suppliers').catch(() => null),
+        api.get('/business-locations', { params: { onlyActive: true } }).catch(() => null),
       ]);
       setProducts(normalizeArray<Product>(pr.data));
       setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
+      if (sr) setSuppliers(normalizeArray<Supplier>(sr.data).filter((s) => s.isActive));
+      if (lr) setLocations(normalizeArray<BusinessLocation>(lr.data));
     } finally {
       setLoading(false);
     }
@@ -74,12 +81,12 @@ export default function ProductosPage() {
     return p;
   }, [products, catFilter, search]);
 
-  const openCreate = () => { setForm(emptyForm); setEditing(null); setImgFile(null); setCropSourceFile(null); setModal('create'); };
+  const openCreate = () => { setForm(emptyForm); setEditing(null); setImgFile(null); setCropSourceFile(null); setInitialStock({}); setModal('create'); };
   const openEdit = (p: Product) => {
     setEditing(p);
     setForm({
       name: p.name, description: p.description ?? '', sku: p.sku ?? '',
-      type: p.type, categoryId: p.categoryId ?? '', saleUnit: p.saleUnit,
+      type: p.type, categoryId: p.categoryId ?? '', supplierId: p.supplierId ?? '', saleUnit: p.saleUnit,
       isService: String(p.isService ?? false),
       unlimitedStock: String(p.unlimitedStock ?? false),
       price: String(p.price),
@@ -89,6 +96,7 @@ export default function ProductosPage() {
     });
     setImgFile(null);
     setCropSourceFile(null);
+    setInitialStock({});
     setModal('edit');
   };
 
@@ -126,6 +134,14 @@ export default function ProductosPage() {
       if (imgFile) body.append('image', imgFile);
 
       if (modal === 'create') {
+        const isKg = form.saleUnit === 'KG';
+        const stockEntries = Object.entries(initialStock)
+          .map(([businessLocationId, qty]) => ({ businessLocationId, qty: num(qty) }))
+          .filter((e) => e.qty > 0)
+          .map((e) => (isKg ? { businessLocationId: e.businessLocationId, quantityKg: e.qty } : { businessLocationId: e.businessLocationId, quantity: e.qty }));
+        if (stockEntries.length > 0) {
+          body.append('initialStock', JSON.stringify(stockEntries));
+        }
         await api.post('/products', body);
         toast.success('Producto creado correctamente');
       } else if (editing) {
@@ -376,6 +392,14 @@ export default function ProductosPage() {
                 </div>
               </div>
 
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Proveedor</label>
+                <select value={form.supplierId} onChange={f('supplierId')}>
+                  <option value="">Sin proveedor</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
               <div className="form-grid-3">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Tipo</label>
@@ -439,9 +463,28 @@ export default function ProductosPage() {
 
               {/* Stock */}
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Stock</div>
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -4 }}>
-                La cantidad y el mínimo de stock no se cargan acá — se ajustan por ubicación desde <b>Stock</b> o <b>Conteo de Stock</b> para que quede registrado el movimiento.
-              </div>
+              {modal === 'create' && form.unlimitedStock === 'false' && locations.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -4 }}>
+                    Opcional: cargá la cantidad inicial por ubicación para no tener que ir después a <b>Stock</b>.
+                  </div>
+                  {locations.map((loc) => (
+                    <div key={loc.id} className="form-row" style={{ alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: 'var(--text2)' }}>{loc.name}</span>
+                      <input
+                        type="number" min="0" step="any"
+                        value={initialStock[loc.id] ?? ''}
+                        onChange={(e) => setInitialStock((prev) => ({ ...prev, [loc.id]: e.target.value }))}
+                        placeholder="0"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -4 }}>
+                  La cantidad y el mínimo de stock no se cargan acá — se ajustan por ubicación desde <b>Stock</b> o <b>Conteo de Stock</b> para que quede registrado el movimiento.
+                </div>
+              )}
 
               {/* Image */}
               <div className="form-group" style={{ marginBottom: 0 }}>

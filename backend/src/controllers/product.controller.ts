@@ -125,6 +125,7 @@ export const productController = {
 
         categoryId: req.body.categoryId,
         category: req.body.category,
+        supplierId: req.body.supplierId,
 
         price: req.body.price,
         wholesalePrice: req.body.wholesalePrice,
@@ -142,6 +143,8 @@ export const productController = {
 
         components: parseJsonArray(req.body.components),
         boxContents: parseJsonArray(req.body.boxContents),
+        initialStock: parseJsonArray(req.body.initialStock),
+        userId: (req as any).user?.id,
       });
 
       if ((newProduct as any)?.statusCode) {
@@ -170,6 +173,7 @@ export const productController = {
 
       if (body.type !== undefined) cleanBody.type = body.type;
       if (body.categoryId !== undefined) cleanBody.categoryId = body.categoryId;
+      if (body.supplierId !== undefined) cleanBody.supplierId = body.supplierId;
       if (body.sku !== undefined) cleanBody.sku = String(body.sku);
       if (body.saleUnit !== undefined) cleanBody.saleUnit = body.saleUnit;
 

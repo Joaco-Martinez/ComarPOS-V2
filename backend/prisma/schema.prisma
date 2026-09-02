@@ -509,6 +509,8 @@ model Product {
   stockLocal          Int                 @default(0)
   stockDeposito       Int                 @default(0)
   categoryId          String?
+  supplierId          String?
+  supplier            Supplier?           @relation(fields: [supplierId], references: [id])
   imageUrl            String?
   imageId             String?
   isActive            Boolean             @default(true)
@@ -556,6 +558,7 @@ model Product {
   @@unique([tenantId, sku])
   @@index([sku])
   @@index([categoryId])
+  @@index([supplierId])
   @@index([type])
   @@index([isActive])
   @@index([isActive, name])
@@ -1458,6 +1461,7 @@ model Supplier {
   purchases        Purchase[]
   purchaseOrders   PurchaseOrder[]
   accountMovements SupplierAccountMovement[]
+  products         Product[]
 
   @@index([tenantId])
   @@index([isActive])
