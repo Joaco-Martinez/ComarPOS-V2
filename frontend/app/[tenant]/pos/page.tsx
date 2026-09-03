@@ -10,7 +10,7 @@ import { useAuthStore } from '@/store/auth';
 import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, PriceList, Product, ProductCategory, SalePayment } from '@/types';
 import { categoryName, clientName, fmtKg, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
 import {
-  AlertTriangle, Check, ChevronLeft, Minus, Package, Plus, RefreshCcw,
+  AlertTriangle, Check, ChevronLeft, LayoutGrid, List, Minus, Package, Plus, RefreshCcw,
   ScanBarcode, Search, ShoppingCart, Trash2, X, User, Percent,
   DollarSign, CreditCard, Banknote, Smartphone, Warehouse,
 } from 'lucide-react';
@@ -48,6 +48,10 @@ export default function PosPage() {
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<string>('');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  // Preferencia de vista (grilla con imagenes vs tabla compacta) - por
+  // dispositivo/usuario, no por tenant, asi que se guarda en localStorage
+  // en vez de mandarse al backend.
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [stockLocationId, setStockLocationId] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -83,6 +87,16 @@ export default function PosPage() {
   const deliveryProductRef = useRef<Product | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('comarpos:pos:viewMode');
+    if (stored === 'grid' || stored === 'list') setViewMode(stored);
+  }, []);
+
+  const toggleViewMode = (mode: 'grid' | 'list') => {
+    setViewMode(mode);
+    localStorage.setItem('comarpos:pos:viewMode', mode);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -540,28 +554,50 @@ export default function PosPage() {
         {/* ─── Left: Product grid ─── */}
         <div className="pos-products">
           {/* Search */}
-          <div style={{ position: 'relative' }}>
-            <Search size={15} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-            <input
-              ref={searchRef}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar producto por nombre o SKU..."
-              style={{ paddingLeft: 34, paddingRight: search ? 62 : 36 }}
-              autoFocus
-            />
-            {search && (
-              <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 2 }}>
-                <X size={14} />
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+              <Search size={15} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar producto por nombre o SKU..."
+                style={{ paddingLeft: 34, paddingRight: search ? 62 : 36 }}
+                autoFocus
+              />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 2 }}>
+                  <X size={14} />
+                </button>
+              )}
+              <button
+                onClick={openSkuScanner}
+                title="Escanear SKU con la cámara"
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 2, display: 'flex' }}
+              >
+                <ScanBarcode size={16} />
               </button>
-            )}
-            <button
-              onClick={openSkuScanner}
-              title="Escanear SKU con la cámara"
-              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 2, display: 'flex' }}
-            >
-              <ScanBarcode size={16} />
-            </button>
+            </div>
+            {/* Toggle grilla (con imagenes) / tabla (compacta, sin imagenes) -
+                preferencia por dispositivo, ver comarpos:pos:viewMode. */}
+            <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border2)', borderRadius: 8, overflow: 'hidden' }}>
+              <button
+                onClick={() => toggleViewMode('grid')}
+                title="Vista de grilla con imágenes"
+                className={`btn btn-xs ${viewMode === 'grid' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ borderRadius: 0, padding: '9px 8px' }}
+              >
+                <LayoutGrid size={14} />
+              </button>
+              <button
+                onClick={() => toggleViewMode('list')}
+                title="Vista de tabla"
+                className={`btn btn-xs ${viewMode === 'list' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ borderRadius: 0, padding: '9px 8px' }}
+              >
+                <List size={14} />
+              </button>
+            </div>
           </div>
 
           {/* Stock location */}
@@ -611,13 +647,67 @@ export default function PosPage() {
             ))}
           </div>
 
-          {/* Product grid */}
-          <div className="pos-products-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8, alignContent: 'start' }}>
+          {/* Product grid / tabla */}
+          <div
+            className={viewMode === 'grid' ? 'pos-products-grid' : undefined}
+            style={
+              viewMode === 'grid'
+                ? { gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8, alignContent: 'start' }
+                : { display: 'flex', flexDirection: 'column', gap: 4 }
+            }
+          >
             {filtered.length === 0 ? (
-              <div className="empty-state" style={{ gridColumn: '1/-1' }}>
+              <div className="empty-state" style={viewMode === 'grid' ? { gridColumn: '1/-1' } : undefined}>
                 <Package size={32} />
                 <p>Sin resultados</p>
               </div>
+            ) : viewMode === 'list' ? (
+              visibleProducts.map((p) => {
+                const stock = productStock(p);
+                const stockRow = p.stock?.find((s) => s.businessLocationId === stockLocationId);
+                const minStock = num(p.saleUnit === 'KG' ? stockRow?.minQuantityKg : stockRow?.minQuantity);
+                const lowStock = stock <= minStock && minStock > 0 && !p.unlimitedStock;
+                const noStock = stock <= 0 && !p.isService && !p.unlimitedStock;
+                const retailPrice = resolvedPrice(p);
+
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => addToCart(p, 'price')}
+                    disabled={noStock}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+                      background: 'var(--surface)',
+                      border: `1px solid ${lowStock ? 'rgba(243,156,18,0.3)' : 'var(--border)'}`,
+                      borderRadius: 6, padding: '8px 10px',
+                      opacity: noStock ? 0.5 : 1,
+                      cursor: noStock ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.name}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                        <span style={{ fontSize: 10, color: lowStock ? 'var(--warn)' : 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                          {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
+                          {p.unlimitedStock
+                            ? 'Sin límite'
+                            : noStock ? 'Sin stock' : `Stock: ${p.saleUnit === 'KG' ? `${fmtKg(stock)}kg` : stock}`}
+                        </span>
+                        {categoryName(p) !== 'Sin categoría' && (
+                          <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {categoryName(p)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--text)', flexShrink: 0 }}>
+                      {fmtMoney(retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                    </span>
+                  </button>
+                );
+              })
             ) : (
               visibleProducts.map((p) => {
                 const stock = productStock(p);
