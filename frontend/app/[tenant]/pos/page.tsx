@@ -546,6 +546,20 @@ export default function PosPage() {
               ref={searchRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                // Soporta lectoras de código de barras USB/bluetooth que
+                // "tipean" el SKU y mandan Enter - si hay match exacto de
+                // SKU, lo agrega directo al carrito sin que el vendedor
+                // tenga que clickear el producto en la grilla.
+                if (e.key !== 'Enter') return;
+                const q = search.trim().toLowerCase();
+                if (!q) return;
+                const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === q);
+                if (!product || product.isService) return;
+                e.preventDefault();
+                addToCart(product, 'price');
+                setSearch('');
+              }}
               placeholder="Buscar producto por nombre o SKU..."
               style={{ paddingLeft: 34, paddingRight: search ? 62 : 36 }}
               autoFocus
