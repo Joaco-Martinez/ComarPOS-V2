@@ -208,27 +208,65 @@ export default function OrdenesCompraPage() {
     setScannerForIndex(i);
   };
 
+  // Modo "carga rápida": -1 en vez de un índice de línea puntual. No cierra
+  // el modal al primer producto encontrado - va agregando una línea nueva
+  // por cada SKU escaneado (o sumando cantidad si ya está cargado) para que
+  // el vendedor pueda escanear varios productos seguidos de una compra sin
+  // tener que reabrir la cámara cada vez.
+  const openSkuScannerAppend = () => {
+    setScannerError('');
+    setScannerLoading(true);
+    scannerHandledRef.current = false;
+    setScannerForIndex(-1);
+  };
+
   // Mismo criterio que la búsqueda por texto: busca solo entre los
   // productos del proveedor elegido (o cualquiera, sin proveedor).
   const handleScannedSku = async (rawSku: string) => {
     const sku = rawSku.trim();
     if (!sku || scannerHandledRef.current || scannerForIndex === null) return;
     scannerHandledRef.current = true;
+    const appendMode = scannerForIndex === -1;
 
     const product = supplierProducts.find((p: any) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
 
     if (!product) {
-      scannerHandledRef.current = false;
-      setScannerError(
-        form.supplierId
-          ? `No encontré ningún producto de este proveedor con SKU: ${sku}`
-          : `No encontré ningún producto con SKU: ${sku}`
-      );
+      const msg = form.supplierId
+        ? `No encontré ningún producto de este proveedor con SKU: ${sku}`
+        : `No encontré ningún producto con SKU: ${sku}`;
+      if (appendMode) {
+        toast.error(msg);
+        window.setTimeout(() => { scannerHandledRef.current = false; }, 1200);
+      } else {
+        scannerHandledRef.current = false;
+        setScannerError(msg);
+      }
       return;
     }
 
-    selectItemProduct(scannerForIndex, product);
-    await closeSkuScanner();
+    if (!appendMode) {
+      selectItemProduct(scannerForIndex, product);
+      await closeSkuScanner();
+      return;
+    }
+
+    setItems((prev) => {
+      const idx = prev.findIndex((it) => it.productId === product.id);
+      if (idx >= 0) {
+        const n = [...prev];
+        n[idx] = { ...n[idx], quantityOrdered: String(num(n[idx].quantityOrdered) + 1) };
+        return n;
+      }
+      return [...prev, {
+        productId: product.id,
+        quantityOrdered: '1',
+        unitCost: String(product.purchasePrice ?? 0),
+        ivaRate: String(product.ivaRate ?? 21),
+        search: product.name,
+      }];
+    });
+    toast.success(`${product.name} agregado`);
+    window.setTimeout(() => { scannerHandledRef.current = false; }, 1200);
   };
 
   useEffect(() => {
@@ -501,7 +539,10 @@ export default function OrdenesCompraPage() {
                 <span className="section-title" style={{ fontSize: 12 }}>
                   Productos {form.supplierId ? '(solo los de este proveedor)' : ''}
                 </span>
-                <button className="btn btn-secondary btn-sm" onClick={addItem} style={{ gap: 5 }}><Plus size={12} /> Agregar</button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-secondary btn-sm" onClick={openSkuScannerAppend} style={{ gap: 5 }}><ScanBarcode size={12} /> Escanear productos</button>
+                  <button className="btn btn-secondary btn-sm" onClick={addItem} style={{ gap: 5 }}><Plus size={12} /> Agregar</button>
+                </div>
               </div>
               {items.length === 0 && <div style={{ color: 'var(--text3)', fontSize: 12, textAlign: 'center', padding: 12 }}>Sin productos. Agregue al menos uno.</div>}
               <div className="line-item-scroll">
@@ -752,7 +793,7 @@ export default function OrdenesCompraPage() {
         <div className="modal-overlay" onClick={closeSkuScanner}>
           <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <span style={{ fontWeight: 700 }}>Escanear producto</span>
+              <span style={{ fontWeight: 700 }}>{scannerForIndex === -1 ? 'Escanear productos' : 'Escanear producto'}</span>
               <button onClick={closeSkuScanner} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -760,7 +801,9 @@ export default function OrdenesCompraPage() {
                 <ScanBarcode size={18} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }} />
                 <div>
                   <b style={{ display: 'block', color: 'var(--text)' }}>Apuntá al código de barras o QR</b>
-                  Cuando lo detecte, carga el producto y su costo en esta línea.
+                  {scannerForIndex === -1
+                    ? 'Cada producto que detecte se agrega solo como una línea nueva (o suma cantidad si ya está) - seguí escaneando sin cerrar esto.'
+                    : 'Cuando lo detecte, carga el producto y su costo en esta línea.'}
                 </div>
               </div>
               <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#000', minHeight: 220 }}>
@@ -782,7 +825,7 @@ export default function OrdenesCompraPage() {
               )}
             </div>
             <div className="modal-footer">
-              <button onClick={closeSkuScanner} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={closeSkuScanner} className="btn btn-secondary btn-sm">{scannerForIndex === -1 ? 'Listo' : 'Cancelar'}</button>
             </div>
           </div>
         </div>
