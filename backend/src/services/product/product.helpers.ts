@@ -89,7 +89,15 @@ export type CreateProductInput = {
 
   // Stock inicial por ubicacion, cargado en el mismo alta (evita el paso
   // extra de crear el producto y despues ir a Stock a cargarle cantidad).
-  initialStock?: { businessLocationId: string; quantity?: number | string; quantityKg?: number | string }[];
+  // minQuantity/minQuantityKg tambien se pueden cargar aca para que las
+  // alertas de bajo stock (alertService) funcionen desde el alta.
+  initialStock?: {
+    businessLocationId: string;
+    quantity?: number | string;
+    quantityKg?: number | string;
+    minQuantity?: number | string;
+    minQuantityKg?: number | string;
+  }[];
   userId?: string;
 };
 

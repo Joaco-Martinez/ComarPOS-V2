@@ -36,6 +36,7 @@ export default function ProductosPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState<Form>(emptyForm);
   const [initialStock, setInitialStock] = useState<Record<string, string>>({});
+  const [initialMinStock, setInitialMinStock] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [imgFile, setImgFile] = useState<File | null>(null);
   const [imgPreviewUrl, setImgPreviewUrl] = useState<string | null>(null);
@@ -81,7 +82,7 @@ export default function ProductosPage() {
     return p;
   }, [products, catFilter, search]);
 
-  const openCreate = () => { setForm(emptyForm); setEditing(null); setImgFile(null); setCropSourceFile(null); setInitialStock({}); setModal('create'); };
+  const openCreate = () => { setForm(emptyForm); setEditing(null); setImgFile(null); setCropSourceFile(null); setInitialStock({}); setInitialMinStock({}); setModal('create'); };
   const openEdit = (p: Product) => {
     setEditing(p);
     setForm({
@@ -97,6 +98,7 @@ export default function ProductosPage() {
     setImgFile(null);
     setCropSourceFile(null);
     setInitialStock({});
+    setInitialMinStock({});
     setModal('edit');
   };
 
@@ -135,10 +137,19 @@ export default function ProductosPage() {
 
       if (modal === 'create') {
         const isKg = form.saleUnit === 'KG';
-        const stockEntries = Object.entries(initialStock)
-          .map(([businessLocationId, qty]) => ({ businessLocationId, qty: num(qty) }))
-          .filter((e) => e.qty > 0)
-          .map((e) => (isKg ? { businessLocationId: e.businessLocationId, quantityKg: e.qty } : { businessLocationId: e.businessLocationId, quantity: e.qty }));
+        const locationIds = new Set([...Object.keys(initialStock), ...Object.keys(initialMinStock)]);
+        const stockEntries = Array.from(locationIds)
+          .map((businessLocationId) => ({
+            businessLocationId,
+            qty: num(initialStock[businessLocationId] ?? ''),
+            min: num(initialMinStock[businessLocationId] ?? ''),
+          }))
+          .filter((e) => e.qty > 0 || e.min > 0)
+          .map((e) => ({
+            businessLocationId: e.businessLocationId,
+            ...(isKg ? { quantityKg: e.qty } : { quantity: e.qty }),
+            ...(e.min > 0 ? (isKg ? { minQuantityKg: e.min } : { minQuantity: e.min }) : {}),
+          }));
         if (stockEntries.length > 0) {
           body.append('initialStock', JSON.stringify(stockEntries));
         }
@@ -466,16 +477,22 @@ export default function ProductosPage() {
               {modal === 'create' && form.unlimitedStock === 'false' && locations.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -4 }}>
-                    Opcional: cargá la cantidad inicial por ubicación para no tener que ir después a <b>Stock</b>.
+                    Opcional: cargá la cantidad inicial y el mínimo por ubicación para no tener que ir después a <b>Stock</b>. El mínimo dispara las alertas y notificaciones de stock bajo.
                   </div>
                   {locations.map((loc) => (
                     <div key={loc.id} className="form-row" style={{ alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, color: 'var(--text2)' }}>{loc.name}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 70 }}>{loc.name}</span>
                       <input
                         type="number" min="0" step="any"
                         value={initialStock[loc.id] ?? ''}
                         onChange={(e) => setInitialStock((prev) => ({ ...prev, [loc.id]: e.target.value }))}
-                        placeholder="0"
+                        placeholder="Cantidad"
+                      />
+                      <input
+                        type="number" min="0" step="any"
+                        value={initialMinStock[loc.id] ?? ''}
+                        onChange={(e) => setInitialMinStock((prev) => ({ ...prev, [loc.id]: e.target.value }))}
+                        placeholder="Mínimo"
                       />
                     </div>
                   ))}

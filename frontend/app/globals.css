@@ -224,8 +224,11 @@ input[type="checkbox"], input[type="radio"] {
 }
 @media (max-width: 768px) {
   /* font-size >= 16px evita que iOS Safari haga zoom automático al enfocar
-     un input (ej. el buscador del POS, que tiene autoFocus). */
-  input, select, textarea { border-radius: 12px; padding: 11px 14px; background: var(--surface); border-color: var(--border); font-size: 16px; }
+     un input (ej. el buscador del POS, que tiene autoFocus). !important
+     porque varios inputs de tablas fijan un fontSize inline mas chico
+     (11-13px, para verse compactos en filas densas) que de otra forma
+     pisaria esta regla y volveria a disparar el zoom. */
+  input, select, textarea { border-radius: 12px; padding: 11px 14px; background: var(--surface); border-color: var(--border); font-size: 16px !important; }
 
   /* Las barras de filtros (buscador + selects/fechas) fijan anchos en px
      por pagina (ej. 140-190px) pensados para desktop. En mobile, dos de

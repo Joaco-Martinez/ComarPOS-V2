@@ -187,12 +187,17 @@ export async function create(data: CreateProductInput) {
       select: { id: true },
     });
 
-    const initialByLocation = new Map<string, { quantity: number; quantityKg: number }>();
+    const initialByLocation = new Map<
+      string,
+      { quantity: number; quantityKg: number; minQuantity: number | null; minQuantityKg: number | null }
+    >();
     for (const entry of data.initialStock ?? []) {
       if (!entry.businessLocationId) continue;
       const quantity = toNumberOrZero(entry.quantity);
       const quantityKg = toNumberOrZero(entry.quantityKg);
-      initialByLocation.set(entry.businessLocationId, { quantity, quantityKg });
+      const minQuantity = toNumberOrNull(entry.minQuantity);
+      const minQuantityKg = toNumberOrNull(entry.minQuantityKg);
+      initialByLocation.set(entry.businessLocationId, { quantity, quantityKg, minQuantity, minQuantityKg });
     }
 
     if (locations.length > 0) {
@@ -205,6 +210,8 @@ export async function create(data: CreateProductInput) {
             tenantId: currentTenantId(),
             quantity: initial?.quantity ?? 0,
             quantityKg: initial?.quantityKg ?? 0,
+            minQuantity: initial?.minQuantity ?? null,
+            minQuantityKg: initial?.minQuantityKg ?? null,
           };
         }),
         skipDuplicates: true,
