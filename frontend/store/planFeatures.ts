@@ -11,6 +11,10 @@ interface PlanFeaturesState {
   features: Partial<Record<PlanFeatureKey, boolean>> | null;
   planName: string | null;
   loaded: boolean;
+  // Flujo de cobro alternativo del POS (modal de metodo + monto + vuelto al
+  // confirmar) -- flag por tenant puntual, no un modulo de navConfig.ts, así
+  // que va aparte de `features`. Ver Tenant.posCheckoutModalEnabled.
+  posCheckoutModalEnabled: boolean;
   load: () => Promise<void>;
   reset: () => void;
 }
@@ -19,16 +23,22 @@ export const usePlanFeaturesStore = create<PlanFeaturesState>((set) => ({
   features: null,
   planName: null,
   loaded: false,
+  posCheckoutModalEnabled: false,
   load: async () => {
     try {
       const { data } = await api.get('/billing/status');
       const status = data.content ?? data;
-      set({ features: status?.plan?.features ?? null, planName: status?.plan?.name ?? null, loaded: true });
+      set({
+        features: status?.plan?.features ?? null,
+        planName: status?.plan?.name ?? null,
+        posCheckoutModalEnabled: !!status?.posCheckoutModalEnabled,
+        loaded: true,
+      });
     } catch {
-      set({ features: null, loaded: true });
+      set({ features: null, posCheckoutModalEnabled: false, loaded: true });
     }
   },
-  reset: () => set({ features: null, planName: null, loaded: false }),
+  reset: () => set({ features: null, planName: null, posCheckoutModalEnabled: false, loaded: false }),
 }));
 
 /** true si no hay info cargada (fail-open) o el modulo no esta explicitamente apagado. */

@@ -60,6 +60,7 @@ export const billingService = {
         mpSubscriptionAmount: true,
         planId: true,
         featureOverrides: true,
+        posCheckoutModalEnabled: true,
       },
     });
 

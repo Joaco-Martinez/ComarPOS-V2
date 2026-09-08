@@ -31,6 +31,7 @@ export default function PlatformAdminTenantDetailPage() {
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [impersonating, setImpersonating] = useState(false);
   const [togglingFeature, setTogglingFeature] = useState<PlanFeatureKey | null>(null);
+  const [togglingPosModal, setTogglingPosModal] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -116,6 +117,19 @@ export default function PlatformAdminTenantDetailPage() {
       toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally {
       setTogglingFeature(null);
+    }
+  };
+
+  const togglePosCheckoutModal = async (enabled: boolean) => {
+    setTogglingPosModal(true);
+    try {
+      await api.patch(`/platform-admin/tenants/${id}/pos-checkout-modal`, { enabled });
+      toast.success(`Modal de cobro con vuelto ${enabled ? 'activado' : 'desactivado'} para este tenant`);
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
+    } finally {
+      setTogglingPosModal(false);
     }
   };
 
@@ -277,6 +291,31 @@ export default function PlatformAdminTenantDetailPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <SlidersHorizontal size={15} style={{ color: 'var(--text3)' }} />
+          <span style={{ fontWeight: 700, fontSize: 13 }}>POS — Cobro</span>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>
+          Reemplaza el selector de método de pago del carrito por un modal al confirmar la venta, donde se elige método, se carga cuánto pagó el cliente y se muestra el vuelto a devolver. Pedido puntual, no forma parte de ningún plan — por defecto queda apagado y el POS se ve como siempre.
+        </div>
+        <button
+          onClick={() => togglePosCheckoutModal(!tenant.posCheckoutModalEnabled)}
+          disabled={togglingPosModal}
+          className="btn btn-ghost btn-xs"
+          style={{ color: tenant.posCheckoutModalEnabled ? 'var(--success)' : 'var(--text3)', gap: 6 }}
+        >
+          {togglingPosModal ? (
+            <span className="spinner" style={{ width: 13, height: 13 }} />
+          ) : tenant.posCheckoutModalEnabled ? (
+            <ToggleRight size={18} />
+          ) : (
+            <ToggleLeft size={18} />
+          )}
+          <span style={{ fontSize: 11 }}>Modal de cobro con vuelto: {tenant.posCheckoutModalEnabled ? 'Activo' : 'Inactivo'}</span>
+        </button>
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>

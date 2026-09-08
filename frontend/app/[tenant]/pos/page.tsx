@@ -7,6 +7,7 @@ import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import ClientFormModal from '@/components/ClientFormModal';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import { usePlanFeaturesStore } from '@/store/planFeatures';
 import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, PriceList, Product, ProductCategory, SalePayment } from '@/types';
 import { categoryName, clientName, fmtKg, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
 import {
@@ -64,6 +65,16 @@ export default function PosPage() {
   const [paymentMode, setPaymentMode] = useState<'single' | 'multi'>('single');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
   const [payments, setPayments] = useState<SalePayment[]>([{ method: 'EFECTIVO', amount: 0 }]);
+  // Flujo de cobro alternativo (modal de metodo + monto recibido + vuelto al
+  // confirmar), prendido solo para tenants puntuales -- ver
+  // Tenant.posCheckoutModalEnabled / store/planFeatures.ts. Por defecto false,
+  // asi que el POS de todos los demas tenants queda exactamente como antes.
+  const posCheckoutModalEnabled = usePlanFeaturesStore((s) => s.posCheckoutModalEnabled);
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  // Cuanto pago el cliente en modo "Un método" dentro del modal -- el modo
+  // "Varios métodos" ya trackea montos por método en `payments`/`totalPaid`.
+  const [modalAmount, setModalAmount] = useState('');
+
   const [kgModal, setKgModal] = useState<KgModal>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [successMsg, setSuccessMsg] = useState('');
@@ -469,6 +480,8 @@ export default function PosPage() {
     setMobileCartStep('items');
     setPriceListId('');
     setDeliveryAmountInput('');
+    setCheckoutModalOpen(false);
+    setModalAmount('');
     searchRef.current?.focus();
   };
 
@@ -1062,7 +1075,10 @@ export default function PosPage() {
               );
             })()}
 
-            {/* Payments */}
+            {/* Payments — reemplazado por el modal de cobro cuando
+                posCheckoutModalEnabled esta prendido para este tenant (ver
+                boton Confirmar mas abajo). */}
+            {!posCheckoutModalEnabled && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <div style={{ display: 'flex', gap: 4 }}>
                 <button
@@ -1139,6 +1155,13 @@ export default function PosPage() {
                 </>
               )}
             </div>
+            )}
+
+            {posCheckoutModalEnabled && (
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                El método de pago y el vuelto se cargan al confirmar.
+              </div>
+            )}
 
             {/* Submit */}
             <div style={{ display: 'flex', gap: 6 }}>
@@ -1152,11 +1175,21 @@ export default function PosPage() {
                 Guardar pendiente
               </button>
               <button
-                onClick={() => submitSale('COMPLETED')}
+                onClick={() => {
+                  if (posCheckoutModalEnabled) {
+                    setPaymentMode('single');
+                    setPaymentMethod('EFECTIVO');
+                    setPayments([{ method: 'EFECTIVO', amount: 0 }]);
+                    setModalAmount('');
+                    setCheckoutModalOpen(true);
+                    return;
+                  }
+                  submitSale('COMPLETED');
+                }}
                 disabled={
                   cart.length === 0 || submitting ||
-                  (paymentMode === 'single' && paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient) ||
-                  (paymentMode === 'multi' && totalPaid < total && !selectedClient)
+                  (!posCheckoutModalEnabled && paymentMode === 'single' && paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient) ||
+                  (!posCheckoutModalEnabled && paymentMode === 'multi' && totalPaid < total && !selectedClient)
                 }
                 className="btn btn-primary"
                 style={{ flex: 1, fontSize: 14, padding: '11px 16px' }}
@@ -1188,6 +1221,152 @@ export default function PosPage() {
             <small>{cart.length > 0 ? 'Finalizar' : ' '}</small>
           </span>
         </button>
+      )}
+
+      {/* Modal de cobro (posCheckoutModalEnabled): metodo + monto recibido + vuelto */}
+      {checkoutModalOpen && (
+        <div className="modal-overlay" onClick={() => !submitting && setCheckoutModalOpen(false)}>
+          <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontSize: 15, fontWeight: 700 }}>Cobrar</span>
+              <button onClick={() => setCheckoutModalOpen(false)} disabled={submitting} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 13, color: 'var(--text3)' }}>Total a cobrar</span>
+                <span style={{ fontSize: 24, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--accent)' }}>{fmtMoney(total)}</span>
+              </div>
+
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => setPaymentMode('single')}
+                  className={`btn btn-xs ${paymentMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: 1 }}
+                >
+                  Un método
+                </button>
+                <button
+                  onClick={() => setPaymentMode('multi')}
+                  className={`btn btn-xs ${paymentMode === 'multi' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: 1 }}
+                >
+                  Varios métodos
+                </button>
+              </div>
+
+              {paymentMode === 'single' ? (
+                <>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Método de pago</label>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => { setPaymentMethod(e.target.value as PaymentMethod); setModalAmount(''); }}
+                      autoFocus
+                    >
+                      {ALL_METHODS.map((m) => (
+                        <option key={m.method} value={m.method}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {paymentMethod === 'CUENTA_CORRIENTE' ? (
+                    !selectedClient && (
+                      <div style={{ fontSize: 12, color: 'var(--warn)' }}>Elegí un cliente para vender en cuenta corriente.</div>
+                    )
+                  ) : (
+                    <>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">¿Cuánto pagó?</label>
+                        <input
+                          type="number" min="0" step="any"
+                          value={modalAmount}
+                          onChange={(e) => setModalAmount(e.target.value)}
+                          placeholder={fmtMoney(total).replace('$', '')}
+                          style={{ fontSize: 20, fontWeight: 700, padding: '10px 12px', fontFamily: 'var(--mono)' }}
+                          onKeyDown={(e) => e.key === 'Enter' && num(modalAmount) >= total && submitSale('COMPLETED')}
+                        />
+                      </div>
+                      {num(modalAmount) > 0 && (
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '10px 14px', borderRadius: 8,
+                          background: num(modalAmount) >= total ? 'rgba(24,193,94,0.12)' : 'rgba(243,156,18,0.12)',
+                        }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: num(modalAmount) >= total ? 'var(--success)' : 'var(--warn)' }}>
+                            {num(modalAmount) >= total ? 'Vuelto' : 'Falta'}
+                          </span>
+                          <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--mono)', color: num(modalAmount) >= total ? 'var(--success)' : 'var(--warn)' }}>
+                            {fmtMoney(Math.abs(num(modalAmount) - total))}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  {payments.map((pay, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <select
+                        value={pay.method}
+                        onChange={(e) => updatePayment(idx, 'method', e.target.value)}
+                        style={{ padding: '6px 8px', flex: 1 }}
+                      >
+                        {ALL_METHODS.map((m) => (
+                          <option key={m.method} value={m.method}>{m.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number" min="0" step="any"
+                        value={pay.amount || ''}
+                        onChange={(e) => updatePayment(idx, 'amount', Number(e.target.value))}
+                        placeholder={idx === 0 ? fmtMoney(total).replace('$', '') : '0'}
+                        style={{ padding: '6px 8px', width: 90, flexShrink: 0 }}
+                      />
+                      {payments.length > 1 && (
+                        <button onClick={() => removePayment(idx)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)', padding: 3 }}>
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={addPaymentMethod} className="btn btn-ghost btn-xs" style={{ justifyContent: 'flex-start', color: 'var(--text3)', fontSize: 11 }}>
+                    <Plus size={11} /> Agregar método de pago
+                  </button>
+                  {totalPaid < total && (
+                    <div style={{ fontSize: 12, color: 'var(--warn)' }}>
+                      {selectedClient ? `Faltan ${fmtMoney(total - totalPaid)} — quedan como saldo en cuenta corriente.` : `Faltan ${fmtMoney(total - totalPaid)}. Elegí un cliente para dejarlo en cuenta corriente.`}
+                    </div>
+                  )}
+                  {change > 0 && (
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '10px 14px', borderRadius: 8, background: 'rgba(24,193,94,0.12)',
+                    }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>Vuelto</span>
+                      <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--success)' }}>{fmtMoney(change)}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setCheckoutModalOpen(false)} disabled={submitting} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button
+                onClick={() => submitSale('COMPLETED')}
+                disabled={
+                  submitting ||
+                  (paymentMode === 'single' && paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient) ||
+                  (paymentMode === 'multi' && totalPaid < total && !selectedClient)
+                }
+                className="btn btn-primary btn-sm"
+                style={{ gap: 6 }}
+              >
+                {submitting ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><Check size={14} /> Confirmar venta</>}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* KG Modal */}

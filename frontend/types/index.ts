@@ -712,6 +712,10 @@ export interface Tenant {
   // verticales como "hoteleria" arrancan apagados en todos los planes y se
   // prenden desde aca, tenant por tenant.
   featureOverrides?: Partial<Record<PlanFeatureKey, boolean>> | null;
+  // Flujo de cobro alternativo del POS (modal de metodo + monto recibido +
+  // vuelto al confirmar), prendido por tenant puntual desde /platform-admin.
+  // Default false -- ver backend Tenant.posCheckoutModalEnabled.
+  posCheckoutModalEnabled?: boolean;
   paymentLogs?: TenantPaymentLog[];
   users?: User[];
   // Uso real (ver platformTenant.service.ts): calculados server-side, no
@@ -786,4 +790,19 @@ export interface PrintboxDevice {
   lastSeenAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  board?: PrintboxBoard | null;
+  firmwareVersion?: number | null;
+}
+
+export type PrintboxBoard = 'ESP32_S3' | 'ESP32_CLASSIC';
+
+export interface PrintboxFirmware {
+  id: string;
+  board: PrintboxBoard;
+  version: number;
+  sha256: string;
+  sizeBytes: number;
+  fileUrl: string;
+  notes?: string | null;
+  createdAt: string;
 }

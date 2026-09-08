@@ -186,6 +186,25 @@ export const platformTenantService = {
   },
 
   /**
+   * Prende/apaga el flujo de cobro alternativo del POS (modal de metodo +
+   * monto recibido + vuelto al confirmar) para UN tenant puntual. Separado
+   * de featureOverrides porque no es un modulo de navConfig.ts, es una
+   * variante de UX dentro de la pantalla de POS -- ver
+   * Tenant.posCheckoutModalEnabled y billing.service.ts#getStatus (que lo
+   * expone al frontend). Sin cache propio que invalidar: se lee de la fila
+   * del tenant al toque en cada request.
+   */
+  async setPosCheckoutModal(id: string, enabled: boolean) {
+    const tenant = await prisma.tenant.update({
+      where: { id },
+      data: { posCheckoutModalEnabled: enabled },
+      select: { posCheckoutModalEnabled: true },
+    });
+
+    return tenant;
+  },
+
+  /**
    * Alta manual desde el panel de super-admin. A diferencia del alta
    * self-service (trialSignup.service.ts), este tenant arranca directo en
    * subscriptionStatus=ACTIVE (nunca TRIAL) y sin paidUntil -- getTenantBlock

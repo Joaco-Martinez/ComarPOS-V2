@@ -93,6 +93,16 @@ model Tenant {
   // { [PlanFeatureKey]: boolean }, null = sin overrides.
   featureOverrides Json?
 
+  // Flujo de cobro alternativo del POS: al confirmar la venta se abre un
+  // modal para elegir metodo de pago + cuanto pago el cliente, mostrando el
+  // vuelto a devolver -- en vez del flujo clasico (metodo elegido inline en
+  // el carrito, sin calculo de vuelto). Pedido puntual de UN tenant, no un
+  // cambio de UX general, asi que va aparte de featureOverrides (que es para
+  // modulos de navConfig.ts) y arranca apagado para no alterarle el POS a
+  // nadie mas. Se prende/apaga por tenant desde /platform-admin (ver
+  // platformTenant.service.ts#setPosCheckoutModal).
+  posCheckoutModalEnabled Boolean @default(false)
+
   // Datos de cabecera para tickets/documentos impresos (printbox). Si son
   // null, ticket.service.ts cae a `name` para no dejar el ticket en blanco.
   ticketBusinessName String?

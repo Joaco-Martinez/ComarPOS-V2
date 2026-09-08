@@ -12,7 +12,7 @@ import type { Product, ProductCategory, Supplier, BusinessLocation } from '@/typ
 import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
-import { Package, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, ScanBarcode } from 'lucide-react';
+import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, ScanBarcode } from 'lucide-react';
 
 const emptyForm = {
   name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '', supplierId: '',
@@ -44,6 +44,15 @@ export default function ProductosPage() {
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [formScannerOpen, setFormScannerOpen] = useState(false);
+
+  // Agregar stock desde Productos: pega directo a los mismos endpoints que
+  // usa la página Stock (product.stock.ts#addStock/addStockKg) para que
+  // quede registrado el StockMovement (tipo INGRESS, con usuario y motivo) —
+  // por eso no se deja editar la cantidad de stock a mano en el form de
+  // arriba (ver nota en la sección Stock del modal de producto).
+  const [stockModal, setStockModal] = useState<Product | null>(null);
+  const [stockForm, setStockForm] = useState({ businessLocationId: '', quantity: '', reason: '' });
+  const [addingStock, setAddingStock] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -188,6 +197,42 @@ export default function ProductosPage() {
     }
   };
 
+  const canAddStock = (p: Product) => p.isService !== true && p.unlimitedStock !== true && p.type !== 'COMPUESTO';
+
+  const openStockModal = (p: Product) => {
+    setStockModal(p);
+    setStockForm({ businessLocationId: locations[0]?.id ?? '', quantity: '', reason: '' });
+  };
+
+  const submitAddStock = async () => {
+    if (!stockModal || !stockForm.businessLocationId || num(stockForm.quantity) <= 0) return;
+    setAddingStock(true);
+    try {
+      const isKgProduct = stockModal.saleUnit === 'KG';
+      if (isKgProduct) {
+        await api.post(`/products/${stockModal.id}/add-stock-kg`, {
+          businessLocationId: stockForm.businessLocationId,
+          quantityKg: num(stockForm.quantity),
+          reason: stockForm.reason || undefined,
+        });
+      } else {
+        await api.post('/products/add-stock', {
+          productId: stockModal.id,
+          businessLocationId: stockForm.businessLocationId,
+          quantity: num(stockForm.quantity),
+          reason: stockForm.reason || undefined,
+        });
+      }
+      toast.success('Stock agregado y movimiento registrado');
+      setStockModal(null);
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al agregar stock');
+    } finally {
+      setAddingStock(false);
+    }
+  };
+
   const isKg = form.saleUnit === 'KG';
 
   return (
@@ -294,6 +339,11 @@ export default function ProductosPage() {
               {
                 key: 'acciones', header: '', render: (p) => (
                   <div style={{ display: 'flex', gap: 4 }}>
+                    {canAddStock(p) && (
+                      <button onClick={() => openStockModal(p)} className="btn btn-ghost btn-xs" title="Agregar stock" style={{ color: 'var(--success)' }}>
+                        <PackagePlus size={12} />
+                      </button>
+                    )}
                     <button onClick={() => openEdit(p)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
                     <button onClick={() => setConfirmDelete(p)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
                   </div>
@@ -342,6 +392,9 @@ export default function ProductosPage() {
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    {canAddStock(p) && (
+                      <button onClick={() => openStockModal(p)} className="btn btn-secondary btn-xs" style={{ flex: 1, gap: 4, color: 'var(--success)' }}><PackagePlus size={12} /> Stock</button>
+                    )}
                     <button onClick={() => openEdit(p)} className="btn btn-secondary btn-xs" style={{ flex: 1, gap: 4 }}><Edit2 size={12} /> Editar</button>
                     <button onClick={() => setConfirmDelete(p)} className="btn btn-secondary btn-xs" style={{ color: 'var(--danger)', gap: 4 }}><Trash2 size={12} /></button>
                   </div>
@@ -563,6 +616,67 @@ export default function ProductosPage() {
         onClose={() => setCropSourceFile(null)}
         onCropped={handleCropped}
       />
+
+      {/* Agregar stock */}
+      {stockModal && (
+        <div className="modal-overlay" onClick={() => !addingStock && setStockModal(null)}>
+          <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>Agregar stock</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{stockModal.name}</div>
+              </div>
+              <button onClick={() => setStockModal(null)} disabled={addingStock} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {locations.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--warn)' }}>
+                  No hay ninguna ubicación de stock configurada. Creá una desde Configuración → Sucursales.
+                </div>
+              ) : (
+                <>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Ubicación</label>
+                    <select
+                      value={stockForm.businessLocationId}
+                      onChange={(e) => setStockForm((p) => ({ ...p, businessLocationId: e.target.value }))}
+                    >
+                      {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Cantidad a agregar {stockModal.saleUnit === 'KG' ? '(kg)' : ''}</label>
+                    <input
+                      type="number" min="0.01" step="any" autoFocus
+                      value={stockForm.quantity}
+                      onChange={(e) => setStockForm((p) => ({ ...p, quantity: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Motivo</label>
+                    <input
+                      value={stockForm.reason}
+                      onChange={(e) => setStockForm((p) => ({ ...p, reason: e.target.value }))}
+                      placeholder="Ej: compra a proveedor (opcional)"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setStockModal(null)} disabled={addingStock} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button
+                onClick={submitAddStock}
+                disabled={addingStock || locations.length === 0 || !stockForm.businessLocationId || num(stockForm.quantity) <= 0}
+                className="btn btn-primary btn-sm"
+              >
+                {addingStock ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Agregar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirm delete */}
       {confirmDelete && (
