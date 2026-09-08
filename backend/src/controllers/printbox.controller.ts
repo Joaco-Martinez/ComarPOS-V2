@@ -145,12 +145,22 @@ export const printboxController = {
     try {
       const pairingCode = String(req.body?.pairingCode || "").trim();
       const hardwareId = String(req.body?.hardwareId || "").trim();
+      const board = req.body?.board ? String(req.body.board).trim() : undefined;
+      const firmwareVersion = Number.isFinite(Number(req.body?.firmwareVersion))
+        ? Number(req.body.firmwareVersion)
+        : undefined;
 
       if (!pairingCode || !hardwareId) {
         throw new AppError("MISSING_FIELDS", "pairingCode y hardwareId son requeridos.", 400);
       }
 
-      const result = await printboxPairingService.redeemPairingCode(pairingCode, hardwareId, normalizeIp(req.ip || ""));
+      const result = await printboxPairingService.redeemPairingCode(
+        pairingCode,
+        hardwareId,
+        normalizeIp(req.ip || ""),
+        board,
+        firmwareVersion
+      );
 
       res.json({ ok: true, ...result });
     } catch (err) {
@@ -226,6 +236,35 @@ export const printboxController = {
       await printboxService.ackPrintJob(id, jobId, timestamp, signature, path, ok, errorMessage);
 
       res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // Público — chequeo periodico de OTA del ESP32 (auth por firma HMAC,
+  // mismo esquema que heartbeat/poll). board/version van en la query string
+  // (no firmados, ver comentario de printboxService.firmwareCheck: en el
+  // peor caso alguien fuerza un falso "no hay actualización", no hay riesgo
+  // real de escritura ni de fabricar una impresión).
+  async firmwareCheck(req: Request, res: Response, next: any) {
+    try {
+      const id = getParamAsString(req.params.id, "id");
+      const timestamp = String(req.headers["x-pos-timestamp"] || "");
+      const signature = String(req.headers["x-pos-signature"] || "");
+
+      if (!timestamp || !signature) {
+        throw new AppError("MISSING_SIGNATURE", "Faltan los headers X-Pos-Timestamp/X-Pos-Signature.", 401);
+      }
+
+      const path = `/printbox/devices/${id}/firmware-check`;
+      const board = req.query.board ? String(req.query.board) : null;
+      const version = req.query.version != null && Number.isFinite(Number(req.query.version))
+        ? Number(req.query.version)
+        : null;
+
+      const result = await printboxService.firmwareCheck(id, timestamp, signature, path, board, version);
+
+      res.json({ ok: true, ...result });
     } catch (err) {
       next(err);
     }

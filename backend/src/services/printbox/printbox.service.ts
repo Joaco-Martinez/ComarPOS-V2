@@ -3,6 +3,12 @@ import prisma from "../../prisma";
 import { AppError } from "../../utils/asyncHandler";
 import { decryptPrintboxSecret } from "./printbox.crypto";
 import { signRequest, verifyRequest } from "./printbox.hmac";
+import { printboxFirmwareService } from "./printboxFirmware.service";
+import type { PrintboxBoard } from "@prisma/client";
+
+function parseBoard(raw: string | null | undefined): PrintboxBoard | null {
+  return raw === "ESP32_S3" || raw === "ESP32_CLASSIC" ? raw : null;
+}
 
 const PRINT_TICKET_SIGN_METHOD = "POST";
 const PRINT_TICKET_SIGN_PATH = "/print/ticket";
@@ -259,5 +265,61 @@ export const printboxService = {
         data: { lastSeenAt: new Date() },
       }),
     ]);
+  },
+
+  /**
+   * Chequeo periodico de OTA -- el ESP32 manda su board (fijo, compilado) y
+   * su version actual (ver FIRMWARE_VERSION en main.cpp); si hay una fila en
+   * PrintboxFirmware con version mayor PARA ESE board, se la devolvemos
+   * (url/sha256/size) para que el device la descargue y se autoflashee. Sin
+   * eso, "updateAvailable: false" y listo -- no hay long-poll acá, es un
+   * pedido/respuesta directo (a diferencia de pollForPrintJob, no tiene
+   * sentido dejarlo colgado esperando: un firmware nuevo no "llega" en
+   * medio de la espera de este request puntual).
+   *
+   * Aprovecha la request para refrescar PrintboxDevice.board/firmwareVersion
+   * -- son datos que el panel puede querer mostrar a futuro, y sirven de
+   * diagnostico aunque hoy no haya UI para eso.
+   */
+  async firmwareCheck(
+    deviceId: string,
+    timestamp: string,
+    signature: string,
+    path: string,
+    reportedBoard: string | null,
+    reportedVersion: number | null
+  ) {
+    const { device, token } = await getActiveDeviceWithToken(deviceId);
+
+    const error = verifyRequest(token, "GET", path, timestamp, "", signature);
+    if (error) {
+      throw new AppError("INVALID_SIGNATURE", `Firma inválida: ${error}`, 401);
+    }
+
+    const board = parseBoard(reportedBoard) ?? device.board;
+
+    await prisma.printboxDevice.update({
+      where: { id: device.id },
+      data: {
+        lastSeenAt: new Date(),
+        ...(parseBoard(reportedBoard) ? { board: parseBoard(reportedBoard) } : {}),
+        ...(reportedVersion != null ? { firmwareVersion: reportedVersion } : {}),
+      },
+    });
+
+    if (!board) return { updateAvailable: false };
+
+    const latest = await printboxFirmwareService.getLatest(board);
+    if (!latest || reportedVersion == null || latest.version <= reportedVersion) {
+      return { updateAvailable: false };
+    }
+
+    return {
+      updateAvailable: true,
+      version: latest.version,
+      url: latest.fileUrl,
+      sha256: latest.sha256,
+      size: latest.sizeBytes,
+    };
   },
 };

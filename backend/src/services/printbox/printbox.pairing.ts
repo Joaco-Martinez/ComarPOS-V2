@@ -3,6 +3,11 @@ import prisma from "../../prisma";
 import { AppError } from "../../utils/asyncHandler";
 import { encryptPrintboxSecret, decryptPrintboxSecret } from "./printbox.crypto";
 import { verifyRequest } from "./printbox.hmac";
+import type { PrintboxBoard } from "@prisma/client";
+
+function parseBoard(raw: string): PrintboxBoard | null {
+  return raw === "ESP32_S3" || raw === "ESP32_CLASSIC" ? raw : null;
+}
 
 const HEARTBEAT_PATH_PREFIX = "/printbox/devices/";
 const HEARTBEAT_PATH_SUFFIX = "/heartbeat";
@@ -90,7 +95,13 @@ export const printboxPairingService = {
    * algo que el ESP32 auto-reporte) -- es la que el backend va a usar
    * despues para mandarle los tickets por HTTP directo.
    */
-  async redeemPairingCode(pairingCode: string, hardwareId: string, deviceIp: string) {
+  async redeemPairingCode(
+    pairingCode: string,
+    hardwareId: string,
+    deviceIp: string,
+    board?: string,
+    firmwareVersion?: number
+  ) {
     const device = await prisma.printboxDevice.findUnique({ where: { pairingCode } });
 
     if (!device || device.status !== "PENDING_PAIRING") {
@@ -127,6 +138,8 @@ export const printboxPairingService = {
           pairingCode: null,
           pairingCodeExpiresAt: null,
           lastSeenAt: new Date(),
+          ...(board ? { board: parseBoard(board) } : {}),
+          ...(firmwareVersion != null ? { firmwareVersion } : {}),
         },
       });
     });

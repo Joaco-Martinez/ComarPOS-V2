@@ -11,6 +11,7 @@ router.post("/pair", printboxController.pair);
 router.post("/devices/:id/heartbeat", printboxController.heartbeat);
 router.get("/devices/:id/poll", printboxController.poll);
 router.post("/devices/:id/jobs/:jobId/ack", printboxController.ackJob);
+router.get("/devices/:id/firmware-check", printboxController.firmwareCheck);
 
 router.use(authMiddleware);
 

@@ -7,8 +7,11 @@
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <WiFiClientSecure.h>
+#include <Update.h>
 #include <Adafruit_GFX.h>
 #include <time.h>
+#include <vector>
+#include <algorithm>
 #include "mbedtls/md.h" // HMAC-SHA256 -- parte del core ESP32 (ESP-IDF), no hace falta agregarla a lib_deps
 
 // ================= Pines por variante de placa =================
@@ -233,6 +236,24 @@ void showStatus(DeviceStatus status, const String &detail = "") {
   static const uint16_t API_PORT = 443;
 #endif
 static const char* API_PAIR_PATH = "/printbox/pair";
+
+// ================= OTA =================
+// Entero simple, no semver -- comparar "2 > 1" no necesita parsear nada acá
+// ni en el backend (ver PrintboxFirmware.version en schema.prisma).
+// Incrementar a mano en cada release y subir el .bin nuevo desde
+// platform-admin (POST /platform-admin/printbox-firmware) antes de esperar
+// que los devices ya en campo lo detecten (ver checkForFirmwareUpdate()).
+#define FIRMWARE_VERSION 1
+
+// Coincide 1:1 con el enum PrintboxBoard del backend (schema.prisma) -- el
+// backend usa esto para elegir CUAL de los dos .bin ofrecer, asi que un
+// ESP32 clasico nunca puede terminar recibiendo el binario de la S3 (pines
+// incompatibles, ver WIRING.md) ni viceversa.
+#if defined(PRINTBOX_BOARD_CLASSIC)
+  static const char* BOARD_VARIANT = "ESP32_CLASSIC";
+#else
+  static const char* BOARD_VARIANT = "ESP32_S3";
+#endif
 
 
 #define PRINTBOX_CONFIG_VERSION 2
@@ -563,23 +584,279 @@ void sendHtmlResponse(ClientT &client, const String &body) {
 }
 
 template <typename ClientT>
+void sendJsonResponse(ClientT &client, const String &body) {
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: application/json; charset=utf-8");
+  client.print("Content-Length: ");
+  client.println(body.length());
+  client.println("Connection: close");
+  client.println();
+  client.print(body);
+  client.flush();
+}
+
+// GET /wifi-scan -- lista de redes cercanas para que el formulario de
+// pairing las muestre en vez de obligar a tipear el SSID a mano. Andar en
+// WIFI_AP_STA (ver setup()) permite escanear sin tirar abajo el AP propio
+// que el celu está usando para llegar hasta acá. Dedupea por SSID
+// quedandose con la señal mas fuerte -- un mismo local con varios APs
+// (mesh/repetidores) satura la lista si no se agrupa.
+struct WifiNet { String ssid; int rssi; bool secure; };
+
+String scanWifiNetworksJson() {
+  int n = WiFi.scanNetworks();
+  std::vector<WifiNet> nets;
+  for (int i = 0; i < n; i++) {
+    String ssid = WiFi.SSID(i);
+    if (ssid.length() == 0) continue;
+    int rssi = WiFi.RSSI(i);
+    bool secure = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+
+    bool merged = false;
+    for (auto &net : nets) {
+      if (net.ssid == ssid) {
+        if (rssi > net.rssi) net.rssi = rssi;
+        merged = true;
+        break;
+      }
+    }
+    if (!merged) nets.push_back({ ssid, rssi, secure });
+  }
+  WiFi.scanDelete();
+
+  std::sort(nets.begin(), nets.end(), [](const WifiNet &a, const WifiNet &b) {
+    return a.rssi > b.rssi;
+  });
+
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+  for (auto &net : nets) {
+    JsonObject o = arr.add<JsonObject>();
+    o["ssid"] = net.ssid;
+    o["rssi"] = net.rssi;
+    o["secure"] = net.secure;
+  }
+  String out;
+  serializeJson(doc, out);
+  return out;
+}
+
+// Pagina de pairing servida por el AP propio del ESP32. Es un unico string
+// (ver comentario de sendHtmlResponse/servePairingPage mas arriba sobre por
+// que no hay una lib de WebServer completa) pero con CSS/JS embebidos --
+// el celu que se conecta al AP "PrintBox-Setup" corre un browser real, asi
+// que fetch()/DOM normal andan bien aunque el server que lo sirve sea
+// minimo. El JS pide /wifi-scan al cargar y arma la lista de redes
+// cercanas para tocar en vez de tipear el SSID a mano (con fallback manual
+// si el scan falla o la red no aparece).
+static const char PAIRING_PAGE[] PROGMEM = R"HTML(<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configurar PrintBox</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 16px 40px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f4f6fb; color: #14213d;
+  }
+  .wrap { max-width: 420px; margin: 0 auto; }
+  .logo { text-align: center; margin-bottom: 18px; }
+  .logo .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#0d59e7; margin-right:8px; }
+  .logo span { font-weight: 800; font-size: 14px; letter-spacing: .5px; color:#0d59e7; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: #6b7690; margin: 0 0 20px; line-height:1.5; }
+  .card { background:#fff; border-radius:14px; padding:18px; box-shadow: 0 1px 3px rgba(20,33,61,.08), 0 8px 24px rgba(20,33,61,.06); margin-bottom:14px; }
+  .card h2 { font-size:12.5px; text-transform:uppercase; letter-spacing:.6px; color:#6b7690; margin:0 0 12px; font-weight:700; }
+  .nets { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow-y:auto; }
+  .net {
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    padding:11px 12px; border-radius:10px; border:1px solid #e6e9f2; background:#fafbfd;
+    font-size:14px; color:#14213d; cursor:pointer; font-family:inherit;
+  }
+  .net:active { background:#eef2fb; }
+  .net.selected { border-color:#0d59e7; background:#eaf1ff; }
+  .net .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+  .net .lock { color:#9aa4bd; flex-shrink:0; font-size:12px; }
+  .bars { display:flex; align-items:flex-end; gap:2px; height:12px; flex-shrink:0; }
+  .bars i { width:3px; background:#c7cede; border-radius:1px; display:block; }
+  .bars i:nth-child(1){height:25%} .bars i:nth-child(2){height:50%} .bars i:nth-child(3){height:75%} .bars i:nth-child(4){height:100%}
+  .bars.s1 i:nth-child(1){background:#0d59e7}
+  .bars.s2 i:nth-child(1),.bars.s2 i:nth-child(2){background:#0d59e7}
+  .bars.s3 i:nth-child(1),.bars.s3 i:nth-child(2),.bars.s3 i:nth-child(3){background:#0d59e7}
+  .bars.s4 i{background:#0d59e7}
+  .hint { font-size:12.5px; color:#8891a8; text-align:center; padding:16px 4px; }
+  .spinner { width:16px; height:16px; border-radius:50%; border:2px solid #d7deee; border-top-color:#0d59e7; animation:spin .7s linear infinite; margin:0 auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .refresh { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; margin-top:10px; padding:9px; border-radius:9px; border:1px solid #e6e9f2; background:#fff; color:#0d59e7; font-size:13px; font-weight:700; font-family:inherit; }
+  .refresh svg { width:14px; height:14px; }
+  .refresh.spinning svg { animation: spin 0.8s linear infinite; }
+  label { display:block; font-size:12.5px; font-weight:700; color:#4b5570; margin-bottom:6px; }
+  input { width:100%; padding:11px 12px; border-radius:9px; border:1.5px solid #e2e6f0; font-size:15px; background:#fafbfd; color:#14213d; font-family:inherit; }
+  input:focus { outline:none; border-color:#0d59e7; background:#fff; }
+  .field { margin-bottom:14px; }
+  .field:last-child { margin-bottom:0; }
+  .manual-toggle { font-size:12.5px; color:#0d59e7; text-align:center; margin-top:10px; font-weight:700; cursor:pointer; }
+  .code-input { font-size:1.6em; letter-spacing:4px; text-align:center; font-weight:800; }
+  button[type=submit] { width:100%; padding:13px; border-radius:10px; border:none; background:#0d59e7; color:#fff; font-size:15px; font-weight:800; font-family:inherit; margin-top:4px; }
+  button[type=submit]:active { background:#0a48bf; }
+  .result { text-align:center; font-size:14px; font-weight:700; padding:24px 18px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"><span class="dot"></span><span>PRINTBOX</span></div>
+  <h1>Configurar impresora</h1>
+  <p class="sub">Elegí tu red WiFi, cargá el código de pairing que te dieron en el panel y la IP de la impresora.</p>
+
+  <form id="pairForm" method="POST" action="/pair">
+    <div class="card">
+      <h2>Red WiFi</h2>
+      <div id="netsBox">
+        <div class="hint"><div class="spinner"></div><div style="margin-top:8px">Buscando redes cercanas…</div></div>
+      </div>
+      <button type="button" class="refresh" id="refreshBtn" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5"/></svg>
+        Buscar de nuevo
+      </button>
+      <div class="manual-toggle" id="manualToggle">Cargar el nombre de la red a mano</div>
+
+      <div id="ssidField" class="field" style="margin-top:14px" hidden>
+        <label>Nombre de la red (SSID)</label>
+        <input name="wifiSsid" id="ssidInput" autocomplete="off">
+      </div>
+      <div id="passField" class="field" style="margin-top:14px" hidden>
+        <label>Contraseña de esa red</label>
+        <input name="wifiPassword" id="passInput" type="password" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Datos del pairing</h2>
+      <div class="field">
+        <label>Código de pairing</label>
+        <input name="code" class="code-input" maxlength="6" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>IP de la impresora (conectada por cable al PrintBox)</label>
+        <input name="printerIp" placeholder="192.168.1.100" autocomplete="off">
+      </div>
+    </div>
+
+    <button type="submit">Emparejar</button>
+  </form>
+</div>
+
+<script>
+(function(){
+  var netsBox = document.getElementById('netsBox');
+  var refreshBtn = document.getElementById('refreshBtn');
+  var manualToggle = document.getElementById('manualToggle');
+  var ssidField = document.getElementById('ssidField');
+  var passField = document.getElementById('passField');
+  var ssidInput = document.getElementById('ssidInput');
+  var passInput = document.getElementById('passInput');
+  var codeInput = document.querySelector('.code-input');
+  var form = document.getElementById('pairForm');
+  var selectedEl = null;
+
+  function bars(rssi) {
+    var level = rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1;
+    return '<span class="bars s' + level + '"><i></i><i></i><i></i><i></i></span>';
+  }
+
+  function selectNetwork(el, ssid, secure) {
+    if (selectedEl) selectedEl.classList.remove('selected');
+    el.classList.add('selected');
+    selectedEl = el;
+    ssidInput.value = ssid;
+    ssidField.hidden = false;
+    passField.hidden = !secure;
+    if (!secure) passInput.value = '';
+    (secure ? passInput : codeInput).focus();
+  }
+
+  function showManual() {
+    if (selectedEl) { selectedEl.classList.remove('selected'); selectedEl = null; }
+    ssidInput.value = '';
+    ssidField.hidden = false;
+    passField.hidden = false;
+    ssidInput.focus();
+  }
+  manualToggle.addEventListener('click', showManual);
+
+  function renderNetworks(nets) {
+    if (!nets.length) {
+      netsBox.innerHTML = '<div class="hint">No se encontró ninguna red cercana. Podés cargarla a mano.</div>';
+      refreshBtn.hidden = false;
+      showManual();
+      return;
+    }
+    var html = '<div class="nets">';
+    nets.forEach(function(n, i){
+      html += '<button type="button" class="net" data-i="' + i + '">' +
+        bars(n.rssi) +
+        '<span class="name">' + n.ssid.replace(/</g,'&lt;') + '</span>' +
+        (n.secure ? '<span class="lock">&#128274;</span>' : '') +
+        '</button>';
+    });
+    html += '</div>';
+    netsBox.innerHTML = html;
+    refreshBtn.hidden = false;
+    Array.prototype.forEach.call(netsBox.querySelectorAll('.net'), function(btn){
+      btn.addEventListener('click', function(){
+        var n = nets[+btn.getAttribute('data-i')];
+        selectNetwork(btn, n.ssid, n.secure);
+      });
+    });
+  }
+
+  function scan() {
+    refreshBtn.classList.add('spinning');
+    fetch('/wifi-scan').then(function(r){ return r.json(); }).then(function(nets){
+      renderNetworks(nets);
+    }).catch(function(){
+      netsBox.innerHTML = '<div class="hint">No se pudo buscar redes. Probá de nuevo o cargá el nombre a mano.</div>';
+      refreshBtn.hidden = false;
+      showManual();
+    }).finally(function(){
+      refreshBtn.classList.remove('spinning');
+    });
+  }
+
+  refreshBtn.addEventListener('click', scan);
+  scan();
+
+  form.addEventListener('submit', function(e){
+    if (!ssidInput.value.trim()) {
+      e.preventDefault();
+      showManual();
+      return;
+    }
+    // OJO: no tocar el DOM del form/sus ancestros aca -- si se lo saca de
+    // circulacion (ej. reemplazando el innerHTML de un contenedor que lo
+    // envuelve) antes de que el browser efectivamente mande el POST, el
+    // submit nativo queda huerfano y la request nunca sale (paso una vez:
+    // "carga la pagina pero no pasa nada" -- el ESP32 nunca recibia el
+    // /pair). Alcanza con deshabilitar el boton; la navegacion de pagina
+    // completa que dispara el form ya se encarga de mostrar el resultado.
+    var btn = form.querySelector('button[type=submit]');
+    btn.disabled = true;
+    btn.textContent = 'Emparejando…';
+  });
+})();
+</script>
+</body>
+</html>
+)HTML";
+
+template <typename ClientT>
 void servePairingPage(ClientT &client) {
-  String body;
-  body += "<!doctype html><html><body style='font-family:sans-serif;max-width:420px;margin:40px auto'>";
-  body += "<h2>Configurar PrintBox</h2>";
-  body += "<p>Pedile el código de pairing a quien lo esté dando de alta en el panel.</p>";
-  body += "<form method='POST' action='/pair'>";
-  body += "<label>Código de pairing</label><br>";
-  body += "<input name='code' maxlength='6' style='font-size:1.5em;width:100%;box-sizing:border-box'><br><br>";
-  body += "<label>Nombre de tu red WiFi (para conectarse a internet)</label><br>";
-  body += "<input name='wifiSsid' style='width:100%;box-sizing:border-box'><br><br>";
-  body += "<label>Contraseña de esa red WiFi</label><br>";
-  body += "<input name='wifiPassword' type='password' style='width:100%;box-sizing:border-box'><br><br>";
-  body += "<label>IP de la impresora (conectada por cable al PrintBox)</label><br>";
-  body += "<input name='printerIp' placeholder='192.168.1.100' style='width:100%;box-sizing:border-box'><br><br>";
-  body += "<button type='submit' style='width:100%;padding:10px'>Emparejar</button>";
-  body += "</form></body></html>";
-  sendHtmlResponse(client, body);
+  sendHtmlResponse(client, String((const __FlashStringHelper*)PAIRING_PAGE));
 }
 
 // El link Ethernet con la impresora es punto a punto (sin DHCP del otro
@@ -627,6 +904,8 @@ bool pairWithBackend(const String &code, const IPAddress &printerIp, const Strin
   JsonDocument reqDoc;
   reqDoc["pairingCode"] = code;
   reqDoc["hardwareId"] = getHardwareId();
+  reqDoc["board"] = BOARD_VARIANT;
+  reqDoc["firmwareVersion"] = FIRMWARE_VERSION;
   String body;
   serializeJson(reqDoc, body);
 
@@ -724,6 +1003,8 @@ void handlePairingRequest(ClientT client) {
 
     sendHtmlResponse(client, String("<h3>Código inválido o expirado. Volvé atrás e intentá de nuevo.</h3>"));
     showStatus(DeviceStatus::ERROR_, "Código inválido");
+  } else if (requestLine.startsWith("GET /wifi-scan")) {
+    sendJsonResponse(client, scanWifiNetworksJson());
   } else {
     servePairingPage(client);
   }
@@ -2729,6 +3010,230 @@ void sendHeartbeat() {
   apiClient.stop();
 }
 
+// ================= OTA =================
+// Descarga el .bin de la URL que devolvio /firmware-check y lo escribe
+// directo en la particion OTA "de repuesto" via la libreria Update (misma
+// que usa cualquier ejemplo de ArduinoOTA/HTTPUpdate del core, pero acá a
+// mano en vez de con esas libs para no sumar otra dependencia -- el
+// parseo de URL/descarga por streaming ya existe en downloadToLittleFs(),
+// este es el mismo patron adaptado a Update.write() en vez de un File).
+//
+// Verificacion de integridad: el SHA256 se calcula EN VIVO mientras se
+// descarga (reusando mbedtls/md.h ya linkeado para el HMAC, sin sumar otra
+// libreria de hash) y se compara contra el que mando el backend ANTES de
+// llamar Update.end() -- si no coincide, Update.abort() y se sigue
+// corriendo el firmware viejo. Sin esto, una descarga cortada a la mitad
+// (WiFi que se cae, etc.) se flashearia igual y el device podria terminar
+// bootloopeando con un binario truncado.
+//
+// Rollback automatico: el partition scheme default de 4MB ya trae dos
+// particiones OTA (ver el aviso de espacio en README.md/WIRING.md) mas
+// otadata -- si el firmware nuevo llega a bootear en loop/crashear antes
+// de marcarse valido, el bootloader de ESP-IDF vuelve solo a la particion
+// anterior en el siguiente arranque (rollback de fabrica, no hay que
+// implementarlo a mano). Devuelve true si quedo escrito y verificado OK
+// (el caller reinicia); false en cualquier fallo (se reintenta en el
+// proximo ciclo de checkForFirmwareUpdate(), FIRMWARE_CHECK_INTERVAL_MS
+// despues).
+bool applyOtaUpdate(const String &url, const String &expectedSha256, size_t expectedSize) {
+  bool isHttps = url.startsWith("https://");
+  int schemeEnd = url.indexOf("://");
+  String rest = schemeEnd >= 0 ? url.substring(schemeEnd + 3) : url;
+  int pathStart = rest.indexOf('/');
+  String hostPort = pathStart >= 0 ? rest.substring(0, pathStart) : rest;
+  String path = pathStart >= 0 ? rest.substring(pathStart) : "/";
+
+  String host = hostPort;
+  uint16_t port = isHttps ? 443 : 80;
+  int colonIdx = hostPort.indexOf(':');
+  if (colonIdx >= 0) {
+    host = hostPort.substring(0, colonIdx);
+    port = hostPort.substring(colonIdx + 1).toInt();
+  }
+
+  Client *client = isHttps ? (Client*)&wifiClientSecure : (Client*)&wifiClient;
+  if (isHttps) wifiClientSecure.setInsecure(); // mismo TODO que downloadToLittleFs -- pendiente pinnear CA real
+
+  if (!client->connect(host.c_str(), port)) {
+    Serial.println("OTA: no se pudo conectar a " + url);
+    return false;
+  }
+
+  client->print("GET " + path + " HTTP/1.1\r\n");
+  client->print("Host: " + host + "\r\n");
+  client->print("Connection: close\r\n\r\n");
+
+  unsigned long headerStart = millis();
+  int contentLength = -1;
+  String line;
+  while ((client->connected() || client->available()) && millis() - headerStart < 10000) {
+    line = client->readStringUntil('\n');
+    if (line.startsWith("Content-Length:")) contentLength = line.substring(16).toInt();
+    if (line == "\r") break;
+  }
+
+  if (contentLength <= 0) {
+    Serial.println("OTA: sin Content-Length, aborto descarga.");
+    client->stop();
+    return false;
+  }
+  if (expectedSize > 0 && (size_t)contentLength != expectedSize) {
+    Serial.println("OTA: tamano inesperado (Content-Length=" + String(contentLength) + ", esperado=" + String((unsigned long)expectedSize) + "), aborto.");
+    client->stop();
+    return false;
+  }
+
+  if (!Update.begin(contentLength)) {
+    Serial.println("OTA: Update.begin() fallo: " + String(Update.errorString()));
+    client->stop();
+    return false;
+  }
+
+  mbedtls_md_context_t shaCtx;
+  mbedtls_md_init(&shaCtx);
+  mbedtls_md_setup(&shaCtx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 0); // 0 = hash plano, no HMAC
+  mbedtls_md_starts(&shaCtx);
+
+  showStatus(DeviceStatus::CONNECTING, "Actualizando FW...");
+
+  unsigned long bodyStart = millis();
+  unsigned long lastHousekeepingAt = 0;
+  int received = 0;
+  uint8_t buf[512];
+  bool writeError = false;
+  // Hasta 2 min -- un .bin de ~1.2MB a WiFi normal entra comodo, pero deja
+  // margen para una red flojita sin abandonar la actualizacion de una.
+  while (received < contentLength && millis() - bodyStart < 120000) {
+    if (client->available()) {
+      int n = client->read(buf, min((int)sizeof(buf), contentLength - received));
+      if (n > 0) {
+        if (Update.write(buf, n) != (size_t)n) {
+          Serial.println("OTA: Update.write() fallo: " + String(Update.errorString()));
+          writeError = true;
+          break;
+        }
+        mbedtls_md_update(&shaCtx, buf, n);
+        received += n;
+      }
+    }
+    // Mismo motivo que en sendHeartbeat()/pollForPrintJob(): sin esto el
+    // boton de factory reset queda sin leer durante toda la descarga.
+    if (millis() - lastHousekeepingAt >= 50) {
+      lastHousekeepingAt = millis();
+      updateStatusLeds();
+      checkFactoryResetButton();
+    }
+  }
+  client->stop();
+
+  uint8_t hash[32];
+  mbedtls_md_finish(&shaCtx, hash);
+  mbedtls_md_free(&shaCtx);
+
+  if (writeError || received != contentLength) {
+    Serial.println("OTA: descarga incompleta (" + String(received) + "/" + String(contentLength) + " bytes), aborto -- sigue el firmware actual.");
+    Update.abort();
+    return false;
+  }
+
+  String gotSha256;
+  char hexByte[3];
+  for (int i = 0; i < 32; i++) {
+    snprintf(hexByte, sizeof(hexByte), "%02x", hash[i]);
+    gotSha256 += hexByte;
+  }
+
+  if (!expectedSha256.equalsIgnoreCase(gotSha256)) {
+    Serial.println("OTA: SHA256 no coincide (esperado " + expectedSha256 + ", descargado " + gotSha256 + ") -- descarga corrupta, NO flasheo.");
+    Update.abort();
+    return false;
+  }
+
+  if (!Update.end(true)) {
+    Serial.println("OTA: Update.end() fallo: " + String(Update.errorString()));
+    return false;
+  }
+
+  Serial.println("OTA: firmware nuevo escrito y verificado OK.");
+  return true;
+}
+
+unsigned long lastFirmwareCheckAt = 0;
+// Cada 6hs alcanza de sobra para un release manual (no es una flota de
+// miles de devices con urgencia de propagar un fix en minutos) y mantiene
+// el trafico/carga de este chequeo insignificante comparado con el
+// heartbeat de 60s.
+const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 6UL * 60UL * 60UL * 1000UL;
+
+// Chequeo periodico de OTA (ver GET /firmware-check en printbox.service.ts
+// del backend) -- a diferencia de pollForPrintJob() esto NO es long-poll,
+// es un pedido/respuesta directo: no tiene sentido dejarlo colgado
+// esperando, un release nuevo no "aparece" en medio de la espera de este
+// request puntual, aparece cuando alguien lo publica desde platform-admin.
+void checkForFirmwareUpdate() {
+  if (millis() - lastFirmwareCheckAt < FIRMWARE_CHECK_INTERVAL_MS) return;
+  lastFirmwareCheckAt = millis();
+
+  if (!apiClient.connect(API_HOST, API_PORT)) {
+    Serial.println("Firmware-check: no se pudo conectar al backend.");
+    return;
+  }
+
+  // La firma cubre el path SIN query string (igual que heartbeat/poll,
+  // ver printbox.hmac.ts) -- board/version van sueltos en la URL, el
+  // backend los usa solo para decidir que ofrecer, no hay nada que
+  // proteger ahi (ver comentario en printbox.controller.ts#firmwareCheck).
+  String signedPath = "/printbox/devices/" + cfg.deviceId + "/firmware-check";
+  String requestPath = signedPath + "?board=" + String(BOARD_VARIANT) + "&version=" + String(FIRMWARE_VERSION);
+  String timestamp = currentTimestampSec();
+  String signature = signRequest(cfg.token, "GET", signedPath, timestamp, "");
+
+  apiClient.print(String("GET ") + requestPath + " HTTP/1.1\r\n");
+  apiClient.print(String("Host: ") + API_HOST + "\r\n");
+  apiClient.print("X-Pos-Timestamp: " + timestamp + "\r\n");
+  apiClient.print("X-Pos-Signature: " + signature + "\r\n");
+  apiClient.print("Connection: close\r\n\r\n");
+
+  unsigned long start = millis();
+  int contentLength = 0;
+  String line;
+  while ((apiClient.connected() || apiClient.available()) && millis() - start < 8000) {
+    line = apiClient.readStringUntil('\n');
+    if (line.startsWith("Content-Length:")) contentLength = line.substring(16).toInt();
+    if (line == "\r") break;
+  }
+
+  String responseBody;
+  while ((int)responseBody.length() < contentLength && (apiClient.connected() || apiClient.available()) && millis() - start < 8000) {
+    if (apiClient.available()) responseBody += (char)apiClient.read();
+  }
+  apiClient.stop();
+
+  if (responseBody.length() == 0) return;
+
+  JsonDocument doc;
+  if (deserializeJson(doc, responseBody) != DeserializationError::Ok) {
+    Serial.println("Firmware-check: respuesta invalida: " + responseBody);
+    return;
+  }
+  if (doc["updateAvailable"] != true) return;
+
+  int newVersion = doc["version"] | 0;
+  String url = doc["url"].as<String>();
+  String sha256 = doc["sha256"].as<String>();
+  size_t size = doc["size"] | 0;
+
+  Serial.println("Firmware nuevo disponible: v" + String(newVersion) + " (actual v" + String(FIRMWARE_VERSION) + "). Descargando...");
+
+  if (applyOtaUpdate(url, sha256, size)) {
+    Serial.println("OTA aplicada, reiniciando...");
+    delay(500);
+    ESP.restart();
+  }
+  // Si fallo (log ya impreso adentro de applyOtaUpdate), seguimos
+  // corriendo el firmware actual -- se reintenta solo en el proximo ciclo.
+}
+
 bool wasReady = false;
 
 void loop() {
@@ -2769,5 +3274,6 @@ void loop() {
 #endif
 
   sendHeartbeat();
+  checkForFirmwareUpdate();
   pollForPrintJob();
 }

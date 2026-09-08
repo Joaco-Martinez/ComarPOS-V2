@@ -1087,6 +1087,15 @@ enum PrintboxDeviceStatus {
   REVOKED
 }
 
+// Variante de placa del ESP32 -- dos binarios de firmware distintos (pines
+// distintos, ver printbox/WIRING.md), nunca intercambiables. El device la
+// reporta solo (compilada como #define en main.cpp), no es algo que el
+// panel elija.
+enum PrintboxBoard {
+  ESP32_S3
+  ESP32_CLASSIC
+}
+
 enum PrintJobStatus {
   QUEUED
   PUBLISHED
@@ -1124,6 +1133,13 @@ model PrintboxDevice {
   pairingCode          String?              @unique
   pairingCodeExpiresAt DateTime?
   lastSeenAt           DateTime?
+  // Los dos de abajo se completan solos: board llega en el POST /pair (el
+  // firmware lo manda fijo segun con que #define se compilo), firmwareVersion
+  // se refresca en cada GET /firmware-check (ver printbox.service.ts). Ninguno
+  // se edita a mano desde el panel -- son diagnostico + insumo para decidir
+  // si ese device tiene una actualizacion pendiente.
+  board                PrintboxBoard?
+  firmwareVersion      Int?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 
@@ -1131,6 +1147,33 @@ model PrintboxDevice {
 
   @@index([tenantId])
   @@index([status])
+}
+
+// Catalogo de builds de firmware publicadas para el PrintBox, una fila por
+// (board, version). El ESP32 pregunta periodicamente (GET
+// /printbox/devices/:id/firmware-check, firmado igual que heartbeat/poll) si
+// hay una version mas nueva que la suya PARA SU board, y si hay, descarga el
+// .bin (Cloudinary, resource_type "raw") y se autoflashea con la libreria
+// Update de arduino-esp32 -- ver "OTA" en printbox/README.md.
+//
+// version es un entero simple (no semver) a proposito: comparar "2 > 1" no
+// necesita parsear nada en un ESP32; alcanza con incrementar a mano en cada
+// release (ver FIRMWARE_VERSION en main.cpp).
+model PrintboxFirmware {
+  id        String        @id @default(uuid())
+  board     PrintboxBoard
+  version   Int
+  sha256    String
+  sizeBytes Int
+  fileUrl   String
+  // public_id de Cloudinary -- hace falta aparte de fileUrl para poder
+  // borrar el asset (cloudinary.uploader.destroy) si se da de baja la fila.
+  fileId    String
+  notes     String?
+  createdAt DateTime      @default(now())
+
+  @@unique([board, version])
+  @@index([board])
 }
 
 // Registro/auditoria de cada ticket mandado por HTTP al PrintBox -- para
