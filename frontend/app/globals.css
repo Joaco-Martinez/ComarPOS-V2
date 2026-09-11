@@ -694,6 +694,32 @@ tbody tr:hover { background: rgba(13, 89, 231, 0.05); }
   .modal-overlay { align-items: flex-end; padding: 0; }
 }
 
+/* Variante opt-in para modales con formularios largos (ej. "Nuevo producto")
+   -- el bottom-sheet generico de arriba (acotado a 88dvh) esta pensado para
+   modales cortos; con un formulario largo el usuario terminaba scrolleando
+   dentro de una ventana chica con el resto de la pantalla (bottom-nav,
+   fondo) tapado igual por el overlay, sin ganar nada. Ocupa toda la
+   pantalla en vez de quedar a mitad de camino, y con eso queda arriba de
+   TODO (bottom-nav, banner de instalar PWA, etc. - mismo z-index que el
+   resto de los modales, ver .modal-overlay mas arriba) sin la sensacion de
+   "hoja a medias". No toca .modal a secas para no afectar el resto de los
+   modales de la app, ya afinados como bottom-sheet corto. */
+@media (max-width: 768px) {
+  .modal-mobile-full {
+    width: 100%; max-width: 100%;
+    border-radius: 0;
+    /* No se pisa `bottom` (queda el --keyboard-inset heredado de .modal) ni
+       se usa 100dvh fijo -- con el teclado abierto, la altura tiene que
+       encogerse la misma cantidad que sube el modal, si no el footer con
+       "Crear producto" queda otra vez detras del teclado (mismo motivo que
+       --keyboard-inset en .modal, ver comentario ahi). */
+    height: calc(100dvh - var(--keyboard-inset, 0px));
+    max-height: calc(100dvh - var(--keyboard-inset, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
 @keyframes modalSlideUp {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }

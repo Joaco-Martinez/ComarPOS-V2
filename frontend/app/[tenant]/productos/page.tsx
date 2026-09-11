@@ -12,7 +12,7 @@ import type { Product, ProductCategory, Supplier, BusinessLocation } from '@/typ
 import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
-import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, ScanBarcode, Barcode, Download, FileSpreadsheet } from 'lucide-react';
+import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, Camera, AlertTriangle, ScanBarcode, Barcode, Download, FileSpreadsheet } from 'lucide-react';
 
 const emptyForm = {
   name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '', supplierId: '',
@@ -143,6 +143,12 @@ export default function ProductosPage() {
   const handleCropped = (cropped: File) => {
     setImgFile(cropped);
     setCropSourceFile(null);
+  };
+
+  const handleImagePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0] ?? null;
+    if (picked) setCropSourceFile(picked);
+    e.target.value = '';
   };
 
   const save = async () => {
@@ -484,7 +490,7 @@ export default function ProductosPage() {
       {/* Create/Edit Modal */}
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '92vh' }}>
+          <div className="modal modal-lg modal-mobile-full" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <span style={{ fontWeight: 800, fontSize: 15 }}>{modal === 'create' ? 'Nuevo producto' : 'Editar producto'}</span>
               <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
@@ -614,20 +620,28 @@ export default function ProductosPage() {
                     Opcional: cargá la cantidad inicial y el mínimo por ubicación para no tener que ir después a <b>Stock</b>. El mínimo dispara las alertas y notificaciones de stock bajo.
                   </div>
                   {locations.map((loc) => (
-                    <div key={loc.id} className="form-row" style={{ alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 70 }}>{loc.name}</span>
-                      <input
-                        type="number" min="0" step="any"
-                        value={initialStock[loc.id] ?? ''}
-                        onChange={(e) => setInitialStock((prev) => ({ ...prev, [loc.id]: e.target.value }))}
-                        placeholder="Cantidad"
-                      />
-                      <input
-                        type="number" min="0" step="any"
-                        value={initialMinStock[loc.id] ?? ''}
-                        onChange={(e) => setInitialMinStock((prev) => ({ ...prev, [loc.id]: e.target.value }))}
-                        placeholder="Mínimo"
-                      />
+                    <div key={loc.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, background: 'var(--surface2)', borderRadius: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{loc.name}</span>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <div>
+                          <label className="form-label" style={{ marginBottom: 4 }}>Cantidad</label>
+                          <input
+                            type="number" min="0" step="any"
+                            value={initialStock[loc.id] ?? ''}
+                            onChange={(e) => setInitialStock((prev) => ({ ...prev, [loc.id]: e.target.value }))}
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ marginBottom: 4 }}>Mínimo</label>
+                          <input
+                            type="number" min="0" step="any"
+                            value={initialMinStock[loc.id] ?? ''}
+                            onChange={(e) => setInitialMinStock((prev) => ({ ...prev, [loc.id]: e.target.value }))}
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -643,7 +657,7 @@ export default function ProductosPage() {
                 <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: -2, marginBottom: 8 }}>
                   Se guarda cuadrada, {PRODUCT_IMAGE_SIZE}×{PRODUCT_IMAGE_SIZE}px — vas a poder encuadrarla antes de subirla.
                 </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                   {(imgPreviewUrl || editing?.imageUrl) && (
                     <img
                       src={imgPreviewUrl ?? editing?.imageUrl ?? ''}
@@ -651,21 +665,39 @@ export default function ProductosPage() {
                       style={{ width: 56, height: 56, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border2)' }}
                     />
                   )}
-                  <label style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '9px 12px', background: 'var(--surface2)', border: '1px dashed var(--border2)', borderRadius: 6, fontSize: 13, color: 'var(--text2)' }}>
-                    <ImagePlus size={15} style={{ color: 'var(--text3)' }} />
-                    {imgFile ? imgFile.name : 'Seleccionar imagen'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={(e) => {
-                        const picked = e.target.files?.[0] ?? null;
-                        if (picked) setCropSourceFile(picked);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
+                  <div style={{ flex: 1, minWidth: 220, display: 'flex', gap: 8 }}>
+                    {/* capture="environment" abre directo la cámara trasera en mobile
+                        (en desktop el navegador lo ignora y cae al selector de archivos
+                        de siempre) -- botón separado del de galería para no forzar la
+                        cámara cuando el usuario quiere subir una foto ya sacada. */}
+                    <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer', padding: '10px 10px', background: 'var(--surface2)', border: '1px dashed var(--border2)', borderRadius: 6, fontSize: 12, color: 'var(--text2)' }}>
+                      <Camera size={15} style={{ color: 'var(--text3)', flexShrink: 0 }} />
+                      Tomar foto
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        style={{ display: 'none' }}
+                        onChange={handleImagePicked}
+                      />
+                    </label>
+                    <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer', padding: '10px 10px', background: 'var(--surface2)', border: '1px dashed var(--border2)', borderRadius: 6, fontSize: 12, color: 'var(--text2)' }}>
+                      <ImagePlus size={15} style={{ color: 'var(--text3)', flexShrink: 0 }} />
+                      Galería
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={handleImagePicked}
+                      />
+                    </label>
+                  </div>
                 </div>
+                {imgFile && (
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {imgFile.name}
+                  </div>
+                )}
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>
