@@ -77,22 +77,11 @@ async function exportPdf(params: { productIds?: string[]; quantities?: Record<st
   const marginY = doc.page.margins.top;
   const rowsPerPage = Math.floor((doc.page.height - marginY * 2) / LABEL_H);
 
-  const addFooter = () => {
-    doc
-      .fontSize(7)
-      .fillColor("#999999")
-      .text("Hecho con ComarPOS", marginX, doc.page.height - marginY / 2, {
-        width: doc.page.width - marginX * 2,
-        align: "center",
-      });
-  };
-
   let col = 0;
   let row = 0;
 
   for (const label of labels) {
     if (row >= rowsPerPage) {
-      addFooter();
       doc.addPage();
       row = 0;
       col = 0;
@@ -113,6 +102,10 @@ async function exportPdf(params: { productIds?: string[]; quantities?: Record<st
     doc
       .fontSize(10)
       .text(`$${label.price.toFixed(2)}`, x + 6, y + 80, { width: LABEL_W - 20, align: "center" });
+    doc
+      .fontSize(5)
+      .fillColor("#999999")
+      .text("Hecho con ComarPOS", x + 6, y + 93, { width: LABEL_W - 20, align: "center" });
 
     col += 1;
     if (col >= COLS) {
@@ -121,7 +114,6 @@ async function exportPdf(params: { productIds?: string[]; quantities?: Record<st
     }
   }
 
-  addFooter();
   doc.end();
   return finished;
 }
@@ -152,9 +144,6 @@ async function exportExcel(params: { productIds?: string[] }): Promise<ExcelJS.B
   }
 
   ws.getColumn("price").numFmt = '"$"#,##0.00';
-
-  const footerRow = ws.addRow({ sku: "Hecho con ComarPOS" });
-  footerRow.getCell("sku").font = { italic: true, color: { argb: "FF999999" } };
 
   return wb.xlsx.writeBuffer();
 }
