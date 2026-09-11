@@ -77,11 +77,22 @@ async function exportPdf(params: { productIds?: string[]; quantities?: Record<st
   const marginY = doc.page.margins.top;
   const rowsPerPage = Math.floor((doc.page.height - marginY * 2) / LABEL_H);
 
+  const addFooter = () => {
+    doc
+      .fontSize(7)
+      .fillColor("#999999")
+      .text("Hecho con ComarPOS", marginX, doc.page.height - marginY / 2, {
+        width: doc.page.width - marginX * 2,
+        align: "center",
+      });
+  };
+
   let col = 0;
   let row = 0;
 
   for (const label of labels) {
     if (row >= rowsPerPage) {
+      addFooter();
       doc.addPage();
       row = 0;
       col = 0;
@@ -110,6 +121,7 @@ async function exportPdf(params: { productIds?: string[]; quantities?: Record<st
     }
   }
 
+  addFooter();
   doc.end();
   return finished;
 }
@@ -140,6 +152,9 @@ async function exportExcel(params: { productIds?: string[] }): Promise<ExcelJS.B
   }
 
   ws.getColumn("price").numFmt = '"$"#,##0.00';
+
+  const footerRow = ws.addRow({ sku: "Hecho con ComarPOS" });
+  footerRow.getCell("sku").font = { italic: true, color: { argb: "FF999999" } };
 
   return wb.xlsx.writeBuffer();
 }
