@@ -36,6 +36,9 @@ type CreatePurchaseInput = {
   // Datos fiscales del comprobante recibido -- ver Purchase en schema.prisma
   // y libroIvaDigital/compras.service.ts (para que sirven).
   providerCuit?: string;
+  // A nombre de cual dueno (ArcaConfig) del tenant quedo esta compra --
+  // solo aplica con multi-facturacion habilitada (ver Purchase.arcaConfigId).
+  arcaConfigId?: string;
   invoiceType?: number | string;
   invoicePointOfSale?: number | string;
   nonTaxedAmount?: number | string;
@@ -145,6 +148,19 @@ export const purchaseService = {
     const paymentMethod = validatePaymentMethod(data.paymentMethod);
     const date = parseDate(data.date);
 
+    // Nunca confiar ciegamente en un arcaConfigId crudo del cliente -- tiene
+    // que ser una config ARCA real de este mismo tenant (mismo criterio que
+    // facturar.controller.ts con las ventas).
+    let arcaConfigId: string | null = null;
+    if (data.arcaConfigId) {
+      const owned = await prisma.arcaConfig.findFirst({
+        where: { id: data.arcaConfigId, ...tenantScope() },
+        select: { id: true },
+      });
+      if (!owned) throw new Error("La configuración ARCA (dueño) seleccionada no es válida.");
+      arcaConfigId = owned.id;
+    }
+
     const createdPurchase = await prisma.$transaction(async (tx) => {
       const purchase = await tx.purchase.create({
         data: {
@@ -161,6 +177,7 @@ export const purchaseService = {
           supplierId: data.supplierId ?? null,
           purchaseOrderId: data.purchaseOrderId ?? null,
           providerCuit: data.providerCuit?.trim() || null,
+          arcaConfigId,
           invoiceType: data.invoiceType !== undefined && data.invoiceType !== "" ? Number(data.invoiceType) : null,
           invoicePointOfSale: data.invoicePointOfSale !== undefined && data.invoicePointOfSale !== "" ? Number(data.invoicePointOfSale) : null,
           nonTaxedAmount: toMoneyOrZero(data.nonTaxedAmount),

@@ -15,6 +15,10 @@ interface PlanFeaturesState {
   // confirmar) -- flag por tenant puntual, no un modulo de navConfig.ts, así
   // que va aparte de `features`. Ver Tenant.posCheckoutModalEnabled.
   posCheckoutModalEnabled: boolean;
+  // Multi-facturacion: hasta 4 ArcaConfig (duenos/CUIT) para este tenant --
+  // flag por tenant puntual, prendido a mano desde /platform-admin. Ver
+  // Tenant.multiInvoicingEnabled.
+  multiInvoicingEnabled: boolean;
   load: () => Promise<void>;
   reset: () => void;
 }
@@ -24,6 +28,7 @@ export const usePlanFeaturesStore = create<PlanFeaturesState>((set) => ({
   planName: null,
   loaded: false,
   posCheckoutModalEnabled: false,
+  multiInvoicingEnabled: false,
   load: async () => {
     try {
       const { data } = await api.get('/billing/status');
@@ -32,13 +37,14 @@ export const usePlanFeaturesStore = create<PlanFeaturesState>((set) => ({
         features: status?.plan?.features ?? null,
         planName: status?.plan?.name ?? null,
         posCheckoutModalEnabled: !!status?.posCheckoutModalEnabled,
+        multiInvoicingEnabled: !!status?.multiInvoicingEnabled,
         loaded: true,
       });
     } catch {
-      set({ features: null, posCheckoutModalEnabled: false, loaded: true });
+      set({ features: null, posCheckoutModalEnabled: false, multiInvoicingEnabled: false, loaded: true });
     }
   },
-  reset: () => set({ features: null, planName: null, posCheckoutModalEnabled: false, loaded: false }),
+  reset: () => set({ features: null, planName: null, posCheckoutModalEnabled: false, multiInvoicingEnabled: false, loaded: false }),
 }));
 
 /** true si no hay info cargada (fail-open) o el modulo no esta explicitamente apagado. */

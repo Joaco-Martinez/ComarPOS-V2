@@ -8,10 +8,11 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { toDateInputAR, formatDateAR, formatDateTimeAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
+import { usePlanFeaturesStore } from '@/store/planFeatures';
 import {
   ShieldCheck, Building2, FileKey2, FileText, CheckCircle2, XCircle,
   AlertCircle, HelpCircle, RefreshCcw, Save, Plus, Edit2, Trash2,
-  Download, Upload, BadgeCheck, Loader2, Video,
+  Download, Upload, BadgeCheck, Loader2, Video, Users, UserPlus,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -40,6 +41,11 @@ interface ArcaConfig {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  // Solo vienen pobladas cuando la fila sale de /arca-config/all (list(),
+  // que incluye estas relaciones) -- se usan para no tener que pedir
+  // puntos de venta/CAI de remitos aparte por cada dueno.
+  pointsOfSale?: ArcaPointOfSale[];
+  remitoCais?: RemitoCaiConfig[];
 }
 
 interface ArcaPointOfSale {
@@ -237,6 +243,15 @@ export default function ArcaPage() {
   const [remitoCais, setRemitoCais] = useState<RemitoCaiConfig[]>([]);
   const [tenantInfo, setTenantInfo] = useState<TenantEmpresaInfo | null>(null);
 
+  // Multi-facturacion: hasta 4 ArcaConfig (duenos/CUIT) para este tenant --
+  // ver Tenant.multiInvoicingEnabled. Sin el flag, esta pagina se comporta
+  // exactamente igual que antes (1 sola config, sin selector).
+  const multiInvoicingEnabled = usePlanFeaturesStore((s) => s.multiInvoicingEnabled);
+  const [configs, setConfigs] = useState<ArcaConfig[]>([]);
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
+  const [addingOwner, setAddingOwner] = useState(false);
+  const MAX_OWNERS = 4;
+
   const [fiscalForm, setFiscalForm]       = useState(emptyFiscal);
   const [pointForm, setPointForm]         = useState(emptyPoint);
   const [remitoCaiForm, setRemitoCaiForm] = useState(emptyRemitoCai);
@@ -299,30 +314,92 @@ export default function ArcaPage() {
     showToast('Autocompletado con los datos de Empresa', 'info');
   }
 
-  async function loadAll() {
+  // Con multi-facturacion, /arca-config/all ya trae pointsOfSale/remitoCais
+  // incluidos (ver arcaConfig.core.ts#list) -- no hace falta pedirlos aparte
+  // por cada dueno, alcanza con elegir cual de la lista es el "activo" en
+  // pantalla. Sin el flag, comportamiento identico a antes (1 sola config).
+  async function loadAll(preferredConfigId?: string | null) {
     setLoading(true);
     try {
-      const [cfgRes, pvRes, caiRes, tenantRes] = await Promise.all([
+      const tenantRes = await api.get('/tenant/me').catch(() => null);
+      const tenant = tenantRes?.data?.tenant as TenantEmpresaInfo | undefined;
+      if (tenant) setTenantInfo(tenant);
+
+      if (multiInvoicingEnabled) {
+        const allRes = await api.get('/arca-config/all').catch(() => null);
+        const list = allRes ? (getContent<ArcaConfig[]>(allRes.data) ?? []) : [];
+        setConfigs(Array.isArray(list) ? list : []);
+
+        const wanted = preferredConfigId ?? selectedConfigId;
+        const activeId = (wanted && list.some((c) => c.id === wanted)) ? wanted : (list[0]?.id ?? null);
+        setSelectedConfigId(activeId);
+
+        const active = list.find((c) => c.id === activeId) ?? null;
+        setConfig(active);
+        setPoints(active?.pointsOfSale ?? []);
+        setRemitoCais(active?.remitoCais ?? []);
+        if (active) fillFiscal(active, tenant?.ticketBusinessName ?? undefined);
+        return;
+      }
+
+      const [cfgRes, pvRes, caiRes] = await Promise.all([
         api.get('/arca-config/config').catch(() => null),
         api.get('/arca-config/puntos-venta').catch(() => null),
         api.get('/arca-config/remitos-cai').catch(() => null),
-        api.get('/tenant/me').catch(() => null),
       ]);
       const cfg  = cfgRes  ? getContent<ArcaConfig | null>(cfgRes.data)           : null;
       const pvs  = pvRes   ? getContent<ArcaPointOfSale[]>(pvRes.data)             : [];
       const cais = caiRes  ? getContent<RemitoCaiConfig[]>(caiRes.data)            : [];
-      const tenant = tenantRes?.data?.tenant as TenantEmpresaInfo | undefined;
       setConfig(cfg);
       setPoints(Array.isArray(pvs) ? pvs : []);
       setRemitoCais(Array.isArray(cais) ? cais : []);
-      if (tenant) setTenantInfo(tenant);
       if (cfg) fillFiscal(cfg, tenant?.ticketBusinessName ?? undefined);
     } catch (err: any) {
       showToast(getErr(err, 'Error al cargar la configuración ARCA'), 'err');
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { loadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadAll(); }, [multiInvoicingEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Agrega arcaConfigId al body (POST/PUT) cuando hay un dueno seleccionado
+  // (multi-facturacion) -- sin eso, cada service cae al comportamiento de
+  // siempre (config unica del tenant).
+  function withOwner<T extends object>(body: T): T & { arcaConfigId?: string } {
+    return selectedConfigId ? { ...body, arcaConfigId: selectedConfigId } : body;
+  }
+  function ownerParams(): { arcaConfigId: string } | undefined {
+    return selectedConfigId ? { arcaConfigId: selectedConfigId } : undefined;
+  }
+
+  async function handleAddOwner() {
+    if (configs.length >= MAX_OWNERS) { showToast(`Ya tenés el máximo de ${MAX_OWNERS} dueños`, 'err'); return; }
+    setAddingOwner(true);
+    try {
+      // PUT /config (sin arcaConfigId): con multi-facturacion habilitada y
+      // sin id explicito, upsertConfig() crea una fila NUEVA en vez de pisar
+      // la existente (ver arcaConfig.core.ts) -- misma ruta que ya usa
+      // handleSaveFiscal, sin pasar por el middleware de multer de POST /.
+      const { data } = await api.put('/arca-config/config', { businessName: 'Nuevo dueño' });
+      const created = getContent<ArcaConfig>(data);
+      showToast('Dueño agregado — completá sus datos fiscales', 'ok');
+      await loadAll(created?.id ?? null);
+    } catch (err: any) { showToast(getErr(err, 'Error al agregar dueño'), 'err'); }
+    finally { setAddingOwner(false); }
+  }
+
+  function askRemoveOwner(c: ArcaConfig) {
+    setConfirmState({
+      title: 'Eliminar dueño',
+      message: `¿Eliminar "${c.businessName}" (CUIT ${c.cuit})? Se borran sus certificados y puntos de venta. Las facturas ya emitidas a su nombre no se tocan.`,
+      onConfirm: async () => {
+        try {
+          await api.delete(`/arca-config/${c.id}`);
+          showToast('Dueño eliminado', 'ok');
+          await loadAll(null);
+        } catch (err: any) { showToast(getErr(err, 'Error al eliminar dueño'), 'err'); }
+      },
+    });
+  }
 
   // ── Fiscal ──
 
@@ -333,7 +410,7 @@ export default function ArcaPage() {
     if (cuit.length !== 11) { showToast('El CUIT debe tener 11 dígitos sin guiones', 'err'); return; }
     setSavingFiscal(true);
     try {
-      const { data } = await api.put('/arca-config/config', {
+      const { data } = await api.put('/arca-config/config', withOwner({
         businessName: fiscalForm.businessName.trim(),
         cuit, ivaCondition: fiscalForm.ivaCondition,
         fiscalAddress: fiscalForm.fiscalAddress || null,
@@ -343,7 +420,7 @@ export default function ArcaPage() {
         defaultPointOfSale: fiscalForm.defaultPointOfSale,
         defaultCurrencyId: fiscalForm.defaultCurrencyId,
         defaultConcept: fiscalForm.defaultConcept,
-      });
+      }));
       const saved = getContent<ArcaConfig>(data);
       setConfig(saved);
       fillFiscal(saved);
@@ -352,15 +429,21 @@ export default function ArcaPage() {
       // > Empresa, ver ticket.service.ts), no de ArcaConfig -- se guarda aparte.
       // Best-effort: requiere rol ADMIN (PATCH /tenant/me), asi que un
       // CONTADOR puede guardar los datos fiscales igual aunque esto falle.
-      if (fiscalForm.fantasyName.trim() !== (tenantInfo?.ticketBusinessName ?? '')) {
+      // Solo tiene sentido sin multi-facturacion (con varios duenos, el
+      // nombre de fantasia del ticket es uno solo por tenant, no por CUIT).
+      if (!multiInvoicingEnabled && fiscalForm.fantasyName.trim() !== (tenantInfo?.ticketBusinessName ?? '')) {
         try {
           const { data: tenantRes } = await api.patch('/tenant/me', { ticketBusinessName: fiscalForm.fantasyName.trim() || null });
           if (tenantRes?.tenant) setTenantInfo(tenantRes.tenant);
         } catch { /* ver comentario arriba */ }
       }
 
-      const pvRes = await api.get('/arca-config/puntos-venta').catch(() => null);
-      if (pvRes) setPoints(getContent<ArcaPointOfSale[]>(pvRes.data) ?? []);
+      if (multiInvoicingEnabled) {
+        await loadAll(saved?.id ?? selectedConfigId);
+      } else {
+        const pvRes = await api.get('/arca-config/puntos-venta').catch(() => null);
+        if (pvRes) setPoints(getContent<ArcaPointOfSale[]>(pvRes.data) ?? []);
+      }
       showToast('Configuración fiscal guardada', 'ok');
     } catch (err: any) {
       showToast(getErr(err, 'Error al guardar los datos fiscales'), 'err');
@@ -372,7 +455,7 @@ export default function ArcaPage() {
   async function handleGenerateCsr() {
     setSaving(true);
     try {
-      const { data } = await api.post('/arca-config/generate-csr', {
+      const { data } = await api.post('/arca-config/generate-csr', withOwner({
         businessName: fiscalForm.businessName.trim(),
         cuit: normalizeCuit(fiscalForm.cuit),
         ivaCondition: fiscalForm.ivaCondition,
@@ -384,8 +467,10 @@ export default function ArcaPage() {
         defaultCurrencyId: fiscalForm.defaultCurrencyId,
         defaultConcept: fiscalForm.defaultConcept,
         certAlias: 'COMARPOS',
-      });
-      setConfig(getContent<ArcaConfig>(data));
+      }));
+      const saved = getContent<ArcaConfig>(data);
+      setConfig(saved);
+      if (multiInvoicingEnabled) await loadAll(saved?.id ?? selectedConfigId);
       showToast('CSR generado. Descargalo y subilo en ARCA.', 'ok');
     } catch (err: any) { showToast(getErr(err, 'Error al generar CSR'), 'err'); }
     finally { setSaving(false); }
@@ -412,9 +497,12 @@ export default function ArcaPage() {
       fd.append('cert', certFile);
       if (keyFile) fd.append('key', keyFile);
       if (certExpiresAt) fd.append('certExpiresAt', certExpiresAt);
+      if (selectedConfigId) fd.append('arcaConfigId', selectedConfigId);
       const { data } = await api.post('/arca-config/certificados', fd);
-      setConfig(getContent<ArcaConfig>(data));
+      const saved = getContent<ArcaConfig>(data);
+      setConfig(saved);
       setCertFile(null); setKeyFile(null); setCertExpiresAt('');
+      if (multiInvoicingEnabled) await loadAll(saved?.id ?? selectedConfigId);
       showToast('Certificado cargado correctamente', 'ok');
     } catch (err: any) { showToast(getErr(err, 'Error al cargar certificado'), 'err'); }
     finally { setSaving(false); }
@@ -431,8 +519,10 @@ export default function ArcaPage() {
   async function handleDeleteCertificates() {
     setSaving(true);
     try {
-      const { data } = await api.delete('/arca-config/certificados');
-      setConfig(getContent<ArcaConfig>(data));
+      const { data } = await api.delete('/arca-config/certificados', { params: ownerParams() });
+      const saved = getContent<ArcaConfig>(data);
+      setConfig(saved);
+      if (multiInvoicingEnabled) await loadAll(saved?.id ?? selectedConfigId);
       showToast('Certificados eliminados', 'ok');
     } catch (err: any) { showToast(getErr(err, 'Error al eliminar certificados'), 'err'); }
     finally { setSaving(false); }
@@ -443,7 +533,9 @@ export default function ArcaPage() {
     try {
       const url = config?.id ? `/arca-config/${config.id}/activate` : '/arca-config/activate';
       const { data } = await api.patch(url);
-      setConfig(getContent<ArcaConfig>(data));
+      const saved = getContent<ArcaConfig>(data);
+      setConfig(saved);
+      if (multiInvoicingEnabled) await loadAll(saved?.id ?? selectedConfigId);
       showToast('Configuración ARCA activada', 'ok');
     } catch (err: any) { showToast(getErr(err, 'Error al activar ARCA'), 'err'); }
     finally { setSaving(false); }
@@ -452,8 +544,8 @@ export default function ArcaPage() {
   async function handleTestWsaa() {
     setSaving(true);
     try {
-      await api.post('/arca-config/test/wsaa');
-      await loadAll();
+      await api.post('/arca-config/test/wsaa', withOwner({}));
+      await loadAll(selectedConfigId);
       showToast('WSAA OK — token generado correctamente', 'ok');
     } catch (err: any) { showToast(getErr(err, 'Error probando WSAA'), 'err'); }
     finally { setSaving(false); }
@@ -462,8 +554,8 @@ export default function ArcaPage() {
   async function handleTestWsfe() {
     setSaving(true);
     try {
-      await api.post('/arca-config/test/wsfe-dummy');
-      await loadAll();
+      await api.post('/arca-config/test/wsfe-dummy', withOwner({}));
+      await loadAll(selectedConfigId);
       showToast('Test WSFE correcto', 'ok');
     } catch (err: any) { showToast(getErr(err, 'Error probando WSFE'), 'err'); }
     finally { setSaving(false); }
@@ -475,19 +567,23 @@ export default function ArcaPage() {
     if (!pointForm.number || Number(pointForm.number) <= 0) { showToast('El número de PV debe ser > 0', 'err'); return; }
     setSaving(true);
     try {
-      await api.post('/arca-config/puntos-venta', {
+      await api.post('/arca-config/puntos-venta', withOwner({
         id: pointForm.id || undefined,
         number: pointForm.number,
         description: pointForm.description || null,
         enabled: pointForm.enabled,
         isDefault: pointForm.isDefault,
         enabledCbteTypes: pointForm.enabledCbteTypes,
-      });
+      }));
       setPointForm(emptyPoint);
-      const { data } = await api.get('/arca-config/puntos-venta');
-      setPoints(getContent<ArcaPointOfSale[]>(data) ?? []);
-      const cfgRes = await api.get('/arca-config/config').catch(() => null);
-      if (cfgRes) setConfig(getContent<ArcaConfig>(cfgRes.data));
+      if (multiInvoicingEnabled) {
+        await loadAll(selectedConfigId);
+      } else {
+        const { data } = await api.get('/arca-config/puntos-venta');
+        setPoints(getContent<ArcaPointOfSale[]>(data) ?? []);
+        const cfgRes = await api.get('/arca-config/config').catch(() => null);
+        if (cfgRes) setConfig(getContent<ArcaConfig>(cfgRes.data));
+      }
       showToast('Punto de venta guardado', 'ok');
     } catch (err: any) { showToast(getErr(err, 'Error al guardar PV'), 'err'); }
     finally { setSaving(false); }
@@ -504,9 +600,13 @@ export default function ArcaPage() {
   async function handleDeletePoint(id: string) {
     setSaving(true);
     try {
-      await api.delete(`/arca-config/puntos-venta/${id}`);
-      const { data } = await api.get('/arca-config/puntos-venta');
-      setPoints(getContent<ArcaPointOfSale[]>(data) ?? []);
+      await api.delete(`/arca-config/puntos-venta/${id}`, { params: ownerParams() });
+      if (multiInvoicingEnabled) {
+        await loadAll(selectedConfigId);
+      } else {
+        const { data } = await api.get('/arca-config/puntos-venta');
+        setPoints(getContent<ArcaPointOfSale[]>(data) ?? []);
+      }
       showToast('Punto de venta eliminado', 'ok');
     } catch (err: any) { showToast(getErr(err, 'Error al eliminar PV'), 'err'); }
     finally { setSaving(false); }
@@ -572,7 +672,7 @@ export default function ArcaPage() {
       title="Configuración ARCA / AFIP"
       subtitle="Datos fiscales, certificados, puntos de venta y CAI de remitos"
       actions={
-        <button onClick={loadAll} disabled={loading} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+        <button onClick={() => loadAll()} disabled={loading} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
           {loading ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <RefreshCcw size={13} />}
           Actualizar
         </button>
@@ -584,6 +684,49 @@ export default function ArcaPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 860 }}>
+
+          {/* ── Duenos (multi-facturacion) ── */}
+          {multiInvoicingEnabled && (
+            <SectionCard
+              title="Dueños que facturan"
+              subtitle="Cada dueño tiene su propio CUIT, certificado y puntos de venta. Elegí abajo cuál estás editando."
+              icon={<Users size={18} color="var(--accent)" />}
+            >
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {configs.map((c) => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedConfigId(c.id); setConfig(c); setPoints(c.pointsOfSale ?? []); setRemitoCais(c.remitoCais ?? []); fillFiscal(c, tenantInfo?.ticketBusinessName ?? undefined); }}
+                      className={`btn btn-sm ${selectedConfigId === c.id ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ gap: 6 }}
+                    >
+                      {c.businessName || 'Sin nombre'}
+                      {c.isActive && <StatusChip tone="green">Activo</StatusChip>}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => askRemoveOwner(c)}
+                      className="btn btn-ghost btn-xs"
+                      style={{ color: 'var(--danger)' }}
+                      title="Eliminar dueño"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+                {configs.length < MAX_OWNERS && (
+                  <button onClick={handleAddOwner} disabled={addingOwner} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+                    {addingOwner ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <UserPlus size={13} />}
+                    Agregar dueño
+                  </button>
+                )}
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 10, marginBottom: 0 }}>
+                {configs.length}/{MAX_OWNERS} dueños cargados. Todo lo que edites abajo (datos fiscales, certificado, puntos de venta) aplica al dueño seleccionado arriba.
+              </p>
+            </SectionCard>
+          )}
 
           {/* ── Video tutorial ── */}
           <SectionCard
@@ -887,6 +1030,12 @@ export default function ArcaPage() {
             icon={<FileText size={18} color="var(--accent2)" />}
             right={activeRemitoCai ? <StatusChip tone="green">CAI activo</StatusChip> : <StatusChip tone="yellow">Sin CAI activo</StatusChip>}
           >
+            {multiInvoicingEnabled && (
+              <div style={{ background: 'rgba(243,156,18,0.1)', border: '1px solid rgba(243,156,18,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--warn)', display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 16 }}>
+                <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>Los remitos todavía no distinguen entre dueños: siempre usan la configuración ARCA marcada como activa, sin importar qué dueño esté seleccionado arriba.</span>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px,1fr))', gap: 14, marginBottom: 14 }}>
               <HelpField label="Modo" help="Digital completo = imprime todo desde el sistema. Preimpreso = si tenés talonario autorizado.">
                 <select value={remitoCaiForm.mode} onChange={e => rp('mode', e.target.value as RemitoMode)}>

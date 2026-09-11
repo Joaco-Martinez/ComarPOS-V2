@@ -3,15 +3,18 @@ import { emitirFacturaAFIPBase } from "./wsfe-base.service";
 export async function emitirFacturaCConsumidorFinal({
   saleId,
   cuit,
+  arcaConfigId,
   importe,
 }: {
   saleId: string;
   cuit?: string;
+  arcaConfigId?: string;
   importe: number;
 }) {
   return emitirFacturaAFIPBase({
     saleId,
     cuit,
+    arcaConfigId,
     tipoComprobante: 11,
     tipoDoc: 99,
     nroDoc: 0,
@@ -23,6 +26,7 @@ export async function emitirFacturaCConsumidorFinal({
 export async function emitirFacturaCACliente({
   saleId,
   cuit,
+  arcaConfigId,
   tipoDoc,
   nroDoc,
   importe,
@@ -30,6 +34,7 @@ export async function emitirFacturaCACliente({
 }: {
   saleId: string;
   cuit?: string;
+  arcaConfigId?: string;
   tipoDoc: number;
   nroDoc: number;
   importe: number;
@@ -38,6 +43,7 @@ export async function emitirFacturaCACliente({
   return emitirFacturaAFIPBase({
     saleId,
     cuit,
+    arcaConfigId,
     tipoComprobante: 11,
     tipoDoc,
     nroDoc,

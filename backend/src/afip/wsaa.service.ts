@@ -23,10 +23,12 @@ function getSoapValue(body: any) {
   );
 }
 
-export async function generarTokenAFIP() {
+export async function generarTokenAFIP(arcaConfigId?: string) {
   console.log("🔐 Generando nuevo Token/Sign ARCA desde WSAA...");
 
-  const config = await arcaConfigService.getActiveDecrypted();
+  const config = arcaConfigId
+    ? await arcaConfigService.getActiveDecryptedById(arcaConfigId)
+    : await arcaConfigService.getActiveDecrypted();
   const wsaaUrl = getWsaaUrl(config.environment);
 
   const now = new Date();
@@ -194,8 +196,10 @@ export async function generarTokenAFIP() {
   }
 }
 
-export async function getValidToken() {
-  const config = await arcaConfigService.getActive();
+export async function getValidToken(arcaConfigId?: string) {
+  const config = arcaConfigId
+    ? await arcaConfigService.getConfigById(arcaConfigId)
+    : await arcaConfigService.getActive();
 
   let tokenRow = await prisma.afipToken.findUnique({
     where: {
@@ -211,7 +215,7 @@ export async function getValidToken() {
   if (!tokenRow || now >= tokenRow.expiration) {
     console.log("⚠️ Token ARCA vencido o inexistente. Generando nuevo...");
 
-    await generarTokenAFIP();
+    await generarTokenAFIP(config.id);
 
     tokenRow = await prisma.afipToken.findUnique({
       where: {

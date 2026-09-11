@@ -11,6 +11,9 @@
  */
 import {
   getConfig,
+  getConfigById,
+  getActiveDecryptedById,
+  isMultiInvoicingEnabled,
   list,
   getActive,
   getActiveDecrypted,
@@ -31,6 +34,9 @@ import { listAuditLogs, audit, markError, markChecked } from "./arcaConfig/arcaC
 export const arcaConfigService = {
   list,
   getConfig,
+  getConfigById,
+  getActiveDecryptedById,
+  isMultiInvoicingEnabled,
   getActive,
   getActiveDecrypted,
   create,

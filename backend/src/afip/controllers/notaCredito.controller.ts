@@ -56,7 +56,13 @@ export async function notaCreditoController(req: Request, res: Response) {
     let posDisconnected = false;
     let posErrorMessage: string | null = null;
 
-    const arcaConfig = await arcaConfigService.getConfig().catch(() => null);
+    // Multi-facturacion: razon social/domicilio en el PDF tienen que ser
+    // los del dueno que emitio esta NC (notaCredito.arcaConfigId, ya
+    // heredado de la factura original en emitirNotaCreditoAFIP), no "la"
+    // config generica del tenant.
+    const arcaConfig = notaCredito.arcaConfigId
+      ? await arcaConfigService.getConfigById(notaCredito.arcaConfigId).catch(() => arcaConfigService.getConfig().catch(() => null))
+      : await arcaConfigService.getConfig().catch(() => null);
 
     try {
       await generarNotaCreditoAfipPDF({

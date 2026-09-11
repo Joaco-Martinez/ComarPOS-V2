@@ -2,15 +2,18 @@ import prisma from "../prisma";
 import { currentTenantId } from "../context/tenantContext";
 
 export const cbteCounterService = {
-  // Nota: el unique compuesto tenantId_ptoVta_cbteTipo no se puede usar como
-  // `where` directo de Prisma (el tipo generado exige tenantId: string, no
-  // admite null, aunque la columna es nullable) -> se busca/actualiza por
-  // findFirst + create/update en vez de findUnique/upsert.
-  async peekNext(ptoVta: number, cbteTipo: number): Promise<number> {
+  // Nota: el unique compuesto tenantId_arcaConfigId_ptoVta_cbteTipo no se
+  // puede usar como `where` directo de Prisma (el tipo generado exige
+  // tenantId/arcaConfigId: string, no admite null, aunque las columnas son
+  // nullable) -> se busca/actualiza por findFirst + create/update en vez de
+  // findUnique/upsert. arcaConfigId identifica a que dueno (CUIT) pertenece
+  // este contador -- sin multi-facturacion sigue siendo el unico ArcaConfig
+  // del tenant, pero ya no se asume implicito (ver wsfe-base.service.ts).
+  async peekNext(ptoVta: number, cbteTipo: number, arcaConfigId?: string | null): Promise<number> {
     const tenantId = currentTenantId() ?? null;
 
     const counter = await prisma.cbteCounter.findFirst({
-      where: { tenantId, ptoVta, cbteTipo },
+      where: { tenantId, arcaConfigId: arcaConfigId ?? null, ptoVta, cbteTipo },
     });
 
     // Si no existe, el “último” es 0
@@ -18,11 +21,11 @@ export const cbteCounterService = {
     return last + 1;
   },
 
-  async commitUsed(ptoVta: number, cbteTipo: number, usedNumber: number) {
+  async commitUsed(ptoVta: number, cbteTipo: number, usedNumber: number, arcaConfigId?: string | null) {
     const tenantId = currentTenantId() ?? null;
 
     const existing = await prisma.cbteCounter.findFirst({
-      where: { tenantId, ptoVta, cbteTipo },
+      where: { tenantId, arcaConfigId: arcaConfigId ?? null, ptoVta, cbteTipo },
       select: { id: true },
     });
 
@@ -33,7 +36,7 @@ export const cbteCounterService = {
       });
     } else {
       await prisma.cbteCounter.create({
-        data: { tenantId, ptoVta, cbteTipo, lastNumber: usedNumber },
+        data: { tenantId, arcaConfigId: arcaConfigId ?? null, ptoVta, cbteTipo, lastNumber: usedNumber },
       });
     }
   },

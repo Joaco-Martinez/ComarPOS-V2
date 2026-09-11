@@ -32,6 +32,7 @@ export default function PlatformAdminTenantDetailPage() {
   const [impersonating, setImpersonating] = useState(false);
   const [togglingFeature, setTogglingFeature] = useState<PlanFeatureKey | null>(null);
   const [togglingPosModal, setTogglingPosModal] = useState(false);
+  const [togglingMultiInvoicing, setTogglingMultiInvoicing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -130,6 +131,19 @@ export default function PlatformAdminTenantDetailPage() {
       toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally {
       setTogglingPosModal(false);
+    }
+  };
+
+  const toggleMultiInvoicing = async (enabled: boolean) => {
+    setTogglingMultiInvoicing(true);
+    try {
+      await api.patch(`/platform-admin/tenants/${id}/multi-invoicing`, { enabled });
+      toast.success(`Multi-facturación ${enabled ? 'activada' : 'desactivada'} para este tenant`);
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
+    } finally {
+      setTogglingMultiInvoicing(false);
     }
   };
 
@@ -315,6 +329,31 @@ export default function PlatformAdminTenantDetailPage() {
             <ToggleLeft size={18} />
           )}
           <span style={{ fontSize: 11 }}>Modal de cobro con vuelto: {tenant.posCheckoutModalEnabled ? 'Activo' : 'Inactivo'}</span>
+        </button>
+      </div>
+
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <SlidersHorizontal size={15} style={{ color: 'var(--text3)' }} />
+          <span style={{ fontWeight: 700, fontSize: 13 }}>Facturación — Multi-CUIT</span>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>
+          Permite cargar hasta 4 configuraciones ARCA (un CUIT por dueño) para este negocio, y elegir a nombre de quién se factura cada venta desde el modal &quot;Facturar en ARCA&quot;. Por defecto apagado — el tenant sigue limitado a 1 CUIT, sin ningún cambio de comportamiento.
+        </div>
+        <button
+          onClick={() => toggleMultiInvoicing(!tenant.multiInvoicingEnabled)}
+          disabled={togglingMultiInvoicing}
+          className="btn btn-ghost btn-xs"
+          style={{ color: tenant.multiInvoicingEnabled ? 'var(--success)' : 'var(--text3)', gap: 6 }}
+        >
+          {togglingMultiInvoicing ? (
+            <span className="spinner" style={{ width: 13, height: 13 }} />
+          ) : tenant.multiInvoicingEnabled ? (
+            <ToggleRight size={18} />
+          ) : (
+            <ToggleLeft size={18} />
+          )}
+          <span style={{ fontSize: 11 }}>Multi-facturación (hasta 4 dueños): {tenant.multiInvoicingEnabled ? 'Activa' : 'Inactiva'}</span>
         </button>
       </div>
 

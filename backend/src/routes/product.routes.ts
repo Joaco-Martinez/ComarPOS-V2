@@ -37,6 +37,11 @@ router.put(
 // SKU
 router.get("/sku/:sku", authMiddleware, productController.getBySku);
 
+// Códigos de barra para imprimir (PDF con etiquetas, Excel con la imagen
+// embebida) - montadas antes de "/:id" para que "barcodes" no matchee como id.
+router.get("/barcodes/pdf", authMiddleware, productController.barcodesPdf);
+router.get("/barcodes/excel", authMiddleware, productController.barcodesExcel);
+
 // CRUD
 router.get("/", authMiddleware, productController.getAll);
 

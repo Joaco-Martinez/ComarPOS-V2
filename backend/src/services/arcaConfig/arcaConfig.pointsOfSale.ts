@@ -3,10 +3,16 @@
  * Extraido de arcaConfig.service.ts (doc seccion 4 - modularizacion).
  */
 import prisma from "../../prisma";
-import { getConfig, toNullableNumber, parseEnabledCbteTypes, type PointOfSaleInput } from "./arcaConfig.helpers";
+import {
+  getConfig,
+  getConfigById,
+  toNullableNumber,
+  parseEnabledCbteTypes,
+  type PointOfSaleInput,
+} from "./arcaConfig.helpers";
 
-export async function listPointsOfSale() {
-  const config = await getConfig();
+export async function listPointsOfSale(configId?: string) {
+  const config = configId ? await getConfigById(configId) : await getConfig();
   if (!config) return [];
 
   return prisma.arcaPointOfSale.findMany({
@@ -15,8 +21,8 @@ export async function listPointsOfSale() {
   });
 }
 
-export async function upsertPointOfSale(data: PointOfSaleInput) {
-  const config = await getConfig();
+export async function upsertPointOfSale(data: PointOfSaleInput, configId?: string) {
+  const config = configId ? await getConfigById(configId) : await getConfig();
   if (!config) throw new Error("Primero tenés que crear la configuración ARCA.");
 
   const number = toNullableNumber(data.number ?? data.pointOfSale);
@@ -63,8 +69,8 @@ export async function upsertPointOfSale(data: PointOfSaleInput) {
   });
 }
 
-export async function deletePointOfSale(id: string) {
-  const config = await getConfig();
+export async function deletePointOfSale(id: string, configId?: string) {
+  const config = configId ? await getConfigById(configId) : await getConfig();
 
   const point = await prisma.arcaPointOfSale.findFirst({
     where: { id, arcaConfigId: config?.id },

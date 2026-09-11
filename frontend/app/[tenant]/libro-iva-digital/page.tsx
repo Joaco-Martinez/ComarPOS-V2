@@ -8,6 +8,9 @@ import toast from 'react-hot-toast';
 import { fmtMoney } from '@/lib/helpers';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import { FileDown, AlertTriangle, RefreshCcw, Lock, Unlock, Calculator } from 'lucide-react';
+import { usePlanFeaturesStore } from '@/store/planFeatures';
+
+type ArcaOwner = { id: string; businessName: string };
 
 type Resumen = {
   compras: { cantidad: number; total: number; conDatosFaltantes: number };
@@ -36,6 +39,16 @@ export default function LibroIvaDigitalPage() {
     return { year: String(d.getFullYear()), month: String(d.getMonth() + 1) };
   });
   const [tab, setTab] = useState<'libro' | 'liquidacion'>('libro');
+  const multiInvoicingEnabled = usePlanFeaturesStore((s) => s.multiInvoicingEnabled);
+  const [owners, setOwners] = useState<ArcaOwner[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState('');
+
+  useEffect(() => {
+    if (!multiInvoicingEnabled) return;
+    api.get('/arca-config/all').then(({ data }) => {
+      setOwners((data?.content ?? data ?? []) as ArcaOwner[]);
+    }).catch(() => setOwners([]));
+  }, [multiInvoicingEnabled]);
 
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,7 +63,7 @@ export default function LibroIvaDigitalPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/libro-iva-digital/resumen', { params: period });
+      const { data } = await api.get('/libro-iva-digital/resumen', { params: { ...period, arcaConfigId: ownerFilter || undefined } });
       setResumen(data);
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? 'Error al cargar el resumen');
@@ -69,12 +82,12 @@ export default function LibroIvaDigitalPage() {
     } finally { setLoadingLiquidacion(false); }
   };
 
-  useEffect(() => { load(); loadLiquidacion(); }, [period.year, period.month]);
+  useEffect(() => { load(); loadLiquidacion(); }, [period.year, period.month, ownerFilter]);
 
   const download = async (kind: 'ventas-cbte' | 'ventas-alicuotas' | 'compras-cbte' | 'compras-alicuotas') => {
     setDownloading(kind);
     try {
-      const res = await api.get(`/libro-iva-digital/${kind}.csv`, { params: period, responseType: 'blob' });
+      const res = await api.get(`/libro-iva-digital/${kind}.csv`, { params: { ...period, arcaConfigId: ownerFilter || undefined }, responseType: 'blob' });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
@@ -159,6 +172,15 @@ export default function LibroIvaDigitalPage() {
               ))}
             </select>
           </div>
+          {multiInvoicingEnabled && owners.length > 0 && (
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Dueño</label>
+              <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} style={{ width: 200 }}>
+                <option value="">Todos combinados</option>
+                {owners.map((o) => <option key={o.id} value={o.id}>{o.businessName}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 

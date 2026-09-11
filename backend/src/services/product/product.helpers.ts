@@ -17,6 +17,29 @@ function normalizeSku(raw: string): string {
     .replace(/\s+/g, "");
 }
 
+// Genera un SKU secuencial (PRD-000001, PRD-000002, ...) cuando el alta no
+// trae uno propio. Se basa en la cantidad de productos del tenant en vez de
+// un contador dedicado (no hay un modelo para eso todavia) - por las dudas
+// de que el numero derivado del conteo ya este tomado (producto borrado y
+// vuelto a crear, importaciones, etc.) se verifica contra la DB y se avanza
+// hasta encontrar uno libre.
+async function generateSku(): Promise<string> {
+  const count = await prisma.product.count({ where: { ...tenantScope() } });
+  let seq = count + 1;
+
+  while (true) {
+    const candidate = `PRD-${String(seq).padStart(6, "0")}`;
+    const exists = await prisma.product.findFirst({
+      where: { sku: candidate, ...tenantScope() },
+      select: { id: true },
+    });
+
+    if (!exists) return candidate;
+
+    seq += 1;
+  }
+}
+
 function toNumberOrNull(v: any) {
   if (v === undefined || v === null || v === "") return null;
   const n = Number(v);
@@ -80,7 +103,7 @@ export type CreateProductInput = {
   clientPricePerKg?: number | string;
   wholesalePricePerKg?: number | string;
 
-  sku: string;
+  sku?: string;
 
   file?: Express.Multer.File;
 
@@ -307,6 +330,7 @@ const productInclude = {
 
 export {
   normalizeSku,
+  generateSku,
   toNumberOrNull,
   toNumberOrZero,
   isValidPositiveNumber,

@@ -13,6 +13,7 @@ import { planLimitsService } from "../planLimits.service";
 import { priceListService } from "../priceList.service";
 import {
   normalizeSku,
+  generateSku,
   toNumberOrNull,
   toNumberOrZero,
   isTrue,
@@ -32,11 +33,10 @@ export async function create(data: CreateProductInput) {
     return { statusCode: 400, message: "El nombre del producto es requerido" };
   }
 
-  if (!data.sku || !data.sku.trim()) {
-    return { statusCode: 400, message: "El SKU es requerido" };
-  }
-
-  const sku = normalizeSku(data.sku);
+  // Si no viene SKU (o queda vacio despues de normalizar), se genera uno
+  // automatico en vez de rechazar el alta - ver generateSku() en
+  // product.helpers.ts.
+  const sku = data.sku && data.sku.trim() ? normalizeSku(data.sku) : await generateSku();
 
   if (!sku) {
     return { statusCode: 400, message: "El SKU no puede quedar vacío" };

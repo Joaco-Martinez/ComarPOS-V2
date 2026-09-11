@@ -38,16 +38,20 @@ export async function emitirNotaCreditoAFIP({
   if (facturaOriginal.tipoComprobante === 6) tipoComprobanteNC = 8; // NC B
 
   const cuit = facturaOriginal.cuit;
+  // Con multi-facturacion, la NC tiene que salir SIEMPRE del mismo dueno
+  // (CUIT/certificado) que emitio la factura original -- se toma de
+  // facturaOriginal.arcaConfigId en vez de "la" config activa del tenant.
+  const arcaConfigId = facturaOriginal.arcaConfigId ?? undefined;
   const puntoVenta = facturaOriginal.puntoVenta; // 👈 importante
   const tipoDoc = facturaOriginal.tipoDoc;
   const nroDoc = Number(facturaOriginal.nroDoc);
   const condicionIVAReceptor = facturaOriginal.condicionIVAReceptor;
 
   // ✅ 3) Obtener número siguiente SIN incrementar contador
-  const siguiente = await cbteCounterService.peekNext(puntoVenta, tipoComprobanteNC);
+  const siguiente = await cbteCounterService.peekNext(puntoVenta, tipoComprobanteNC, arcaConfigId);
 
   // 4) Token/sign
-  const { token, sign } = await getValidToken();
+  const { token, sign } = await getValidToken(arcaConfigId);
 
   // 5) Calcular neto e IVA
   let neto = importe;
@@ -202,6 +206,7 @@ export async function emitirNotaCreditoAFIP({
       relatedInvoiceId: facturaOriginalId,
       tenantId: currentTenantId(),
       cuit,
+      arcaConfigId,
       puntoVenta,
       tipoComprobante: tipoComprobanteNC,
       tipoDoc,
@@ -224,7 +229,7 @@ export async function emitirNotaCreditoAFIP({
 
   // ✅ 11) SOLO si AFIP aprobó: confirmar contador y marcar NC emitida
   if (resultado === "A" && cae) {
-    await cbteCounterService.commitUsed(puntoVenta, tipoComprobanteNC, siguiente);
+    await cbteCounterService.commitUsed(puntoVenta, tipoComprobanteNC, siguiente, arcaConfigId);
 
     await prisma.sale.update({
       where: { id: saleId },

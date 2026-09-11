@@ -113,6 +113,20 @@ export const platformAdminController = {
     }
   },
 
+  async updateTenantMultiInvoicing(req: Request, res: Response, next: NextFunction) {
+    try {
+      const enabled = Boolean(req.body.enabled);
+      const tenant = await platformTenantService.setMultiInvoicing(
+        getParamAsString(req.params.id, "id"),
+        enabled
+      );
+
+      res.json({ ok: true, content: tenant });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async createTenant(req: Request, res: Response, next: NextFunction) {
     try {
       const platformAdminId = (req as any).platformAdmin?.id;

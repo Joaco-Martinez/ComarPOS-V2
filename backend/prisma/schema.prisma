@@ -103,6 +103,17 @@ model Tenant {
   // platformTenant.service.ts#setPosCheckoutModal).
   posCheckoutModalEnabled Boolean @default(false)
 
+  // Multi-facturacion: permite cargar mas de un ArcaConfig (CUIT) para este
+  // tenant -- hasta 4 duenos facturando cada uno a su propio nombre desde el
+  // mismo negocio (mismo stock/POS, distinta persona fiscal por venta). Sin
+  // este flag el tenant sigue limitado a 1 ArcaConfig, comportamiento actual
+  // sin cambios (ver arcaConfig.core.ts, tope de configs por tenant). Se
+  // prende/apaga por tenant desde /platform-admin, mismo criterio que
+  // posCheckoutModalEnabled (sin audit log ni cache invalidation, se lee en
+  // vivo). Apagarlo no borra configs ya cargadas, solo bloquea cargar una
+  // nueva y oculta los selectores de dueno en ventas/compras.
+  multiInvoicingEnabled Boolean @default(false)
+
   // Datos de cabecera para tickets/documentos impresos (printbox). Si son
   // null, ticket.service.ts cae a `name` para no dejar el ticket en blanco.
   ticketBusinessName String?
@@ -653,6 +664,10 @@ model ArcaConfig {
   pointsOfSale       ArcaPointOfSale[]
   remitos            Remito[]
   remitoCais         RemitoCaiConfig[]
+  invoicesAfip       InvoiceAfip[]
+  cbteCounters       CbteCounter[]
+  salesRequested     Sale[]            @relation("SaleRequestedArcaConfig")
+  purchases          Purchase[]
 
   @@index([cuit])
   @@index([isActive])
@@ -818,17 +833,25 @@ model ArcaAuditLog {
 }
 
 model CbteCounter {
-  id         String   @id @default(uuid())
+  id         String      @id @default(uuid())
   tenantId   String?
-  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+  tenant     Tenant?     @relation(fields: [tenantId], references: [id])
+  // Nullable por compatibilidad con filas existentes de tenants single-CUIT
+  // (backfill: apuntan al unico ArcaConfig que ya tenian). Un tenant con
+  // multi-facturacion necesita un contador separado por dueno porque cada
+  // ArcaConfig es un CUIT distinto ante AFIP, aunque reutilicen el mismo
+  // numero de punto de venta (ver arcaConfig relation en ArcaConfig.cbteCounters).
+  arcaConfigId String?
+  arcaConfig   ArcaConfig? @relation(fields: [arcaConfigId], references: [id])
   ptoVta     Int
   cbteTipo   Int
   lastNumber Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique([tenantId, ptoVta, cbteTipo])
+  @@unique([tenantId, arcaConfigId, ptoVta, cbteTipo])
   @@index([tenantId])
+  @@index([arcaConfigId])
 }
 
 model InvoiceAfip {
@@ -837,6 +860,12 @@ model InvoiceAfip {
   tenant               Tenant?       @relation(fields: [tenantId], references: [id])
   saleId               String?       @unique
   relatedInvoiceId     String?
+  // Que ArcaConfig (CUIT) emitio este comprobante -- antes esto solo se
+  // podia inferir cruzando `cuit` + tenantId. Nullable por compatibilidad
+  // con filas historicas (pre multi-facturacion, no backfillable con
+  // certeza si el tenant llego a tener mas de un ArcaConfig alguna vez).
+  arcaConfigId         String?
+  arcaConfig           ArcaConfig?   @relation(fields: [arcaConfigId], references: [id])
   cuit                 String
   puntoVenta           Int
   tipoComprobante      Int
@@ -860,9 +889,16 @@ model InvoiceAfip {
   creditNotes          InvoiceAfip[] @relation("CreditNoteRelation")
   sale                 Sale?         @relation(fields: [saleId], references: [id])
 
-  @@unique([puntoVenta, tipoComprobante, numero])
+  // Antes esto era global entre TODOS los tenants (ni siquiera scopeado por
+  // tenantId) -- con 4 CUITs de un mismo tenant reutilizando numeros de
+  // punto de venta parecidos esto iba a colisionar seguro. Escalar por
+  // `cuit` (ya es columna, y es la clave natural: un CUIT es unico como
+  // contribuyente) resuelve este caso y de paso cierra ese gap preexistente
+  // entre tenants distintos.
+  @@unique([cuit, puntoVenta, tipoComprobante, numero])
   @@index([cuit, puntoVenta, tipoComprobante])
   @@index([tenantId])
+  @@index([arcaConfigId])
 }
 
 // Liquidacion de IVA mensual (paso siguiente al Libro IVA Digital, RG 4597):
@@ -939,6 +975,13 @@ model Sale {
   nextRetryAt             DateTime?
   retryCount              Int               @default(0)
   afipPayloadJson         Json?
+  // Que ArcaConfig (dueno/CUIT) se eligio para facturar esta venta, elegido
+  // en el modal "Facturar en ARCA" -- se graba ANTES de llamar a AFIP para
+  // que afipRetry.worker.ts sepa con que config reintentar sin depender de
+  // afipPayloadJson (blob no tipado/no queryable). Null = tenant sin
+  // multi-facturacion, usa el flujo de siempre (config unica del tenant).
+  requestedArcaConfigId   String?
+  requestedArcaConfig     ArcaConfig?       @relation("SaleRequestedArcaConfig", fields: [requestedArcaConfigId], references: [id])
   paymentMethod           PaymentMethod
   receiptType             ReceiptType
   status                  SaleStatus        @default(PENDING)
@@ -1003,6 +1046,7 @@ model Sale {
   @@index([invoiceStatus, nextRetryAt])
   @@index([tenantId])
   @@index([promotionId])
+  @@index([requestedArcaConfigId])
 }
 
 // Devolucion de una venta ya completada: modelo propio (antes se reutilizaba
@@ -1410,6 +1454,14 @@ model Purchase {
   // Snapshot del CUIT del proveedor (aunque este vinculado a un Supplier,
   // que puede cambiar de CUIT despues) -- ver Supplier.cuit.
   providerCuit                String?
+  // A nombre de cual de los duenos (ArcaConfig) del tenant quedo registrada
+  // esta compra -- solo aplica si el tenant tiene multiInvoicingEnabled, y
+  // es lo que permite armar el Libro IVA Compras por dueno individual (ver
+  // libroIvaDigital/compras.service.ts). Null = sin multi-facturacion, o
+  // compra vieja sin este dato (queda afuera del filtro por dueno pero sigue
+  // contando en el libro combinado del tenant).
+  arcaConfigId                String?
+  arcaConfig                  ArcaConfig?       @relation(fields: [arcaConfigId], references: [id])
   // Codigo de tipo de comprobante AFIP (1 Factura A, 6 B, 11 C, etc; ver
   // backend/src/services/libroIvaDigital/purchaseInvoiceTypes.ts).
   invoiceType                 Int?
@@ -1453,6 +1505,7 @@ model Purchase {
   @@index([tenantId])
   @@index([supplierId])
   @@index([purchaseOrderId])
+  @@index([arcaConfigId])
 }
 
 model PurchaseItem {

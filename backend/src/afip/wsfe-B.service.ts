@@ -3,6 +3,7 @@ import { emitirFacturaAFIPBase } from "./wsfe-base.service";
 export async function emitirFacturaB({
   saleId,
   cuit,
+  arcaConfigId,
   tipoDoc,
   nroDoc,
   importe,
@@ -10,6 +11,7 @@ export async function emitirFacturaB({
 }: {
   saleId: string;
   cuit?: string;
+  arcaConfigId?: string;
   tipoDoc: number;
   nroDoc: number;
   importe: number;
@@ -18,6 +20,7 @@ export async function emitirFacturaB({
   return emitirFacturaAFIPBase({
     saleId,
     cuit,
+    arcaConfigId,
     tipoComprobante: 6,
     tipoDoc,
     nroDoc,

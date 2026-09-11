@@ -12,6 +12,9 @@ import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile
 import FilterBar from '@/components/mobile/FilterBar';
 import { ShoppingBag, Plus, X, Eye, RefreshCcw, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { todayInputAR } from '@/lib/dateAR';
+import { usePlanFeaturesStore } from '@/store/planFeatures';
+
+type ArcaOwner = { id: string; businessName: string; cuit: string };
 
 // Mismo subconjunto curado que backend/src/services/libroIvaDigital/invoiceTypes.ts
 // -- los tipos de comprobante de compra que un comercio chico/mediano recibe en la práctica.
@@ -32,7 +35,7 @@ const PURCHASE_INVOICE_TYPES = [
 const IVA_RATES = [21, 10.5, 27, 5, 2.5, 0];
 
 const emptyFiscalForm = {
-  providerCuit: '', invoiceType: '', invoicePointOfSale: '',
+  providerCuit: '', arcaConfigId: '', invoiceType: '', invoicePointOfSale: '',
   nonTaxedAmount: '', exemptAmount: '', ivaPerceptionAmount: '',
   nationalTaxPerceptionAmount: '', iibbPerceptionAmount: '',
   municipalPerceptionAmount: '', internalTaxAmount: '',
@@ -55,6 +58,15 @@ export default function ComprasPage() {
   const [search, setSearch] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickedIds, setPickedIds] = useState<Set<string>>(new Set());
+  const multiInvoicingEnabled = usePlanFeaturesStore((s) => s.multiInvoicingEnabled);
+  const [owners, setOwners] = useState<ArcaOwner[]>([]);
+
+  useEffect(() => {
+    if (!multiInvoicingEnabled) return;
+    api.get('/arca-config/all').then(({ data }) => {
+      setOwners(normalizeArray<ArcaOwner>(data?.content ?? data));
+    }).catch(() => setOwners([]));
+  }, [multiInvoicingEnabled]);
 
   const load = async () => {
     setLoading(true);
@@ -145,6 +157,7 @@ export default function ComprasPage() {
         paymentMethod: form.paymentMethod,
         invoiceNumber: form.invoiceNumber || undefined,
         providerCuit: fiscalForm.providerCuit || undefined,
+        arcaConfigId: fiscalForm.arcaConfigId || undefined,
         invoiceType: fiscalForm.invoiceType || undefined,
         invoicePointOfSale: fiscalForm.invoicePointOfSale || undefined,
         nonTaxedAmount: fiscalForm.nonTaxedAmount || undefined,
@@ -325,6 +338,15 @@ export default function ComprasPage() {
                   <input value={fiscalForm.providerCuit} onChange={(e) => setFiscalForm((p) => ({ ...p, providerCuit: e.target.value }))} placeholder="20123456789" />
                 </div>
               </div>
+              {multiInvoicingEnabled && owners.length > 0 && (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">A nombre de qué dueño quedó esta compra</label>
+                  <select value={fiscalForm.arcaConfigId} onChange={(e) => setFiscalForm((p) => ({ ...p, arcaConfigId: e.target.value }))}>
+                    <option value="">Sin especificar</option>
+                    {owners.map((o) => <option key={o.id} value={o.id}>{o.businessName}</option>)}
+                  </select>
+                </div>
+              )}
               <button type="button" onClick={() => setShowFiscalExtra((v) => !v)} className="btn btn-ghost btn-xs" style={{ alignSelf: 'flex-start', gap: 4 }}>
                 {showFiscalExtra ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Percepciones / exento / impuestos internos
               </button>
@@ -482,6 +504,7 @@ export default function ComprasPage() {
                   ['Tipo de comprobante', PURCHASE_INVOICE_TYPES.find((t) => t.code === selected.invoiceType)?.label ?? '—'],
                   ['Punto de venta / Número', [selected.invoicePointOfSale, selected.invoiceNumber].filter(Boolean).join(' - ') || '—'],
                   ['CUIT proveedor', selected.providerCuit ?? selected.supplier?.cuit ?? '—'],
+                  ...(multiInvoicingEnabled ? [['A nombre de', owners.find((o) => o.id === selected.arcaConfigId)?.businessName ?? '—']] : []),
                   ['Total', fmtMoney(selected.totalAmount)],
                 ].map(([k, v]) => (
                   <div key={k}><div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>{k}</div><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{v}</div></div>

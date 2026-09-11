@@ -36,6 +36,11 @@ const arcaHttpsAgent = new https.Agent({
 type EmitirFacturaBaseParams = {
   saleId: string;
   cuit?: string;
+  // Que ArcaConfig (dueno/CUIT) usar para firmar/emitir -- si no viene, cae
+  // al comportamiento historico (config unica/activa del tenant). Pasarlo
+  // es lo que de verdad selecciona certificado+token, a diferencia de
+  // `cuit` (arriba) que solo pisa el dato que se manda en el XML.
+  arcaConfigId?: string;
   tipoComprobante: number;
   tipoDoc: number;
   nroDoc: number;
@@ -212,18 +217,22 @@ function parseCaeVto(vto: string | null) {
 
 export async function obtenerUltimoComprobanteAFIPBase({
   cuit,
+  arcaConfigId,
   puntoVenta,
   tipoComprobante,
 }: {
   cuit?: string;
+  arcaConfigId?: string;
   puntoVenta?: number;
   tipoComprobante: number;
 }): Promise<number> {
-  const arcaConfig = await arcaConfigService.getActive();
+  const arcaConfig = arcaConfigId
+    ? await arcaConfigService.getConfigById(arcaConfigId)
+    : await arcaConfigService.getActive();
   const cuitFinal = cuit || arcaConfig.cuit;
   const puntoVentaFinal = resolvePuntoVenta(arcaConfig, puntoVenta);
   const wsfeUrl = getWsfeUrl(arcaConfig.environment);
-  const { token, sign } = await getValidToken();
+  const { token, sign } = await getValidToken(arcaConfigId);
 
   const soapEnvelope = `
   <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ar="http://ar.gov.afip.dif.FEV1/">
@@ -282,6 +291,7 @@ export async function obtenerUltimoComprobanteAFIPBase({
 export async function emitirFacturaAFIPBase({
   saleId,
   cuit,
+  arcaConfigId,
   tipoComprobante,
   tipoDoc,
   nroDoc,
@@ -290,7 +300,9 @@ export async function emitirFacturaAFIPBase({
   concepto = 1,
   puntoVenta,
 }: EmitirFacturaBaseParams) {
-  const arcaConfig = await arcaConfigService.getActive();
+  const arcaConfig = arcaConfigId
+    ? await arcaConfigService.getConfigById(arcaConfigId)
+    : await arcaConfigService.getActive();
   const cuitFinal = cuit || arcaConfig.cuit;
   const puntoVentaFinal = resolvePuntoVenta(arcaConfig, puntoVenta);
   const wsfeUrl = getWsfeUrl(arcaConfig.environment);
@@ -322,6 +334,7 @@ export async function emitirFacturaAFIPBase({
 
   const ultimoAfip = await obtenerUltimoComprobanteAFIPBase({
     cuit: cuitFinal,
+    arcaConfigId: arcaConfig.id,
     puntoVenta: puntoVentaFinal,
     tipoComprobante,
   });
@@ -332,13 +345,14 @@ export async function emitirFacturaAFIPBase({
     await cbteCounterService.commitUsed(
       puntoVentaFinal,
       tipoComprobante,
-      ultimoAfip
+      ultimoAfip,
+      arcaConfig.id
     );
   } catch (e: any) {
     console.warn("⚠️ No pude sincronizar contador local:", e?.message || e);
   }
 
-  const { token, sign } = await getValidToken();
+  const { token, sign } = await getValidToken(arcaConfig.id);
   const fecha = afipFechaAR();
 
   const { neto, iva, impTotConc, impOpEx, impTrib, ivaXml } =
@@ -435,6 +449,7 @@ export async function emitirFacturaAFIPBase({
 
   const invoiceData = {
     cuit: cuitFinal,
+    arcaConfigId: arcaConfig.id,
     puntoVenta: puntoVentaFinal,
     tipoComprobante,
     tipoDoc,
@@ -473,7 +488,8 @@ export async function emitirFacturaAFIPBase({
     await cbteCounterService.commitUsed(
       puntoVentaFinal,
       tipoComprobante,
-      siguiente
+      siguiente,
+      arcaConfig.id
     );
 
     await prisma.sale.update({

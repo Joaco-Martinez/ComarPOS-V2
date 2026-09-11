@@ -6,6 +6,7 @@ import forge from "node-forge";
 import prisma from "../../prisma";
 import { arcaCryptoService } from "../arcaCrypto.service";
 import { tenantScope } from "../../utils/tenantScope";
+import { currentTenantId } from "../../context/tenantContext";
 
 export type ArcaEnvironment = "HOMOLOGACION" | "PRODUCCION";
 export type RemitoMode = "DIGITAL_FULL" | "PREPRINTED_FORM";
@@ -161,4 +162,38 @@ export async function getConfig() {
     },
     orderBy: { createdAt: "desc" },
   });
+}
+
+export async function isMultiInvoicingEnabled(): Promise<boolean> {
+  const tenantId = currentTenantId();
+  if (!tenantId) return false;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { multiInvoicingEnabled: true },
+  });
+  return !!tenant?.multiInvoicingEnabled;
+}
+
+// Variantes "por id explicito" de getConfig()/getActiveDecrypted(), para
+// cuando el CUIT a usar no es "el activo/el unico" sino uno elegido a mano
+// (modal de facturacion, compras, retry worker) -- no filtran por isActive
+// porque con multi-facturacion los 4 duenos pueden estar activos a la vez.
+export async function getConfigById(configId: string) {
+  const config = await prisma.arcaConfig.findFirst({
+    where: { id: configId, ...tenantScope() },
+    include: { pointsOfSale: true, tokens: true, remitoCais: true },
+  });
+
+  if (!config) throw new Error("Configuración ARCA no encontrada.");
+  return config;
+}
+
+export async function getActiveDecryptedById(configId: string) {
+  const config = await getConfigById(configId);
+
+  return {
+    ...config,
+    certPem: decryptRequired(config.certEncrypted, "el certificado"),
+    keyPem: decryptRequired(config.keyEncrypted, "la private key"),
+  };
 }

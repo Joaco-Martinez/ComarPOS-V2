@@ -11,6 +11,7 @@ import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
 import Pagination from '@/components/mobile/Pagination';
+import { usePlanFeaturesStore } from '@/store/planFeatures';
 import {
   Search, Download, RefreshCcw, X, FileText, Eye, MoreVertical, Check, Printer,
   Send, Plus, Trash2, AlertTriangle, CreditCard, Package, Undo2,
@@ -32,6 +33,7 @@ const ALL_PAYMENT_METHODS: { method: string; label: string }[] = [
   { method: 'CUENTA_CORRIENTE', label: 'Cta. Cte.' },
 ];
 
+type ArcaOwner = { id: string; businessName: string; cuit: string; ivaCondition?: string | null };
 type EditItem = { productId: string; productName: string; saleUnit?: string; quantity: number; quantityKg?: number; price: number };
 type ConfirmState = { title: string; message: string; danger?: boolean; confirmText?: string; onConfirm: () => void } | null;
 
@@ -79,9 +81,13 @@ export default function VentasPage() {
   const [productSearch, setProductSearch] = useState('');
   const [savingItems, setSavingItems] = useState(false);
 
-  const [invoiceModal, setInvoiceModal] = useState<{ sale: Sale; dni: string; invoiceType: InvoiceType } | null>(null);
+  const multiInvoicingEnabled = usePlanFeaturesStore((s) => s.multiInvoicingEnabled);
+  const [invoiceModal, setInvoiceModal] = useState<{ sale: Sale; dni: string; invoiceType: InvoiceType; arcaConfigId?: string } | null>(null);
   const [invoiceTypes, setInvoiceTypes] = useState<InvoiceType[]>([11]);
   const [invoicing, setInvoicing] = useState(false);
+  // Duenos disponibles para facturar (multi-facturacion) -- solo se pide si
+  // el tenant tiene el flag habilitado, ver /arca-config/all.
+  const [owners, setOwners] = useState<ArcaOwner[]>([]);
 
   const [ncModal, setNcModal] = useState<{ sale: Sale; motivo: string; importe: string } | null>(null);
   const [ncSubmitting, setNcSubmitting] = useState(false);
@@ -93,10 +99,25 @@ export default function VentasPage() {
   const hasApprovedCreditNote = (s: Sale) => (s.invoiceAfip?.creditNotes ?? []).some((nc) => nc.resultado === 'A' && nc.cae);
 
   useEffect(() => {
+    if (multiInvoicingEnabled) {
+      api.get('/arca-config/all').then(({ data }) => {
+        setOwners(normalizeArray<ArcaOwner>(data?.content ?? data));
+      }).catch(() => setOwners([]));
+      return;
+    }
     api.get('/arca-config/config').then(({ data }) => {
       setInvoiceTypes(allowedInvoiceTypes(data?.content?.ivaCondition));
     }).catch(() => setInvoiceTypes([11]));
-  }, []);
+  }, [multiInvoicingEnabled]);
+
+  // Con multi-facturacion, que tipos de comprobante puede emitir el dueno
+  // elegido en el modal (cada uno tiene su propia condicion de IVA) -- sin
+  // el flag, se usa invoiceTypes (config unica del tenant, como siempre).
+  const invoiceTypesForOwner = (arcaConfigId?: string): InvoiceType[] => {
+    if (!multiInvoicingEnabled) return invoiceTypes;
+    const owner = owners.find((o) => o.id === arcaConfigId);
+    return allowedInvoiceTypes(owner?.ivaCondition);
+  };
 
   const changeStatus = (s: Sale, next: 'COMPLETED' | 'CANCELLED') => {
     const run = async () => {
@@ -279,7 +300,15 @@ export default function VentasPage() {
     }
   };
 
-  const openInvoice = (s: Sale) => setInvoiceModal({ sale: s, dni: s.client?.dni ?? '', invoiceType: invoiceTypes[0] });
+  const openInvoice = (s: Sale) => {
+    const defaultOwnerId = multiInvoicingEnabled ? owners[0]?.id : undefined;
+    setInvoiceModal({
+      sale: s,
+      dni: s.client?.dni ?? '',
+      invoiceType: invoiceTypesForOwner(defaultOwnerId)[0],
+      arcaConfigId: defaultOwnerId,
+    });
+  };
 
   const submitInvoice = async () => {
     if (!invoiceModal) return;
@@ -289,6 +318,7 @@ export default function VentasPage() {
         saleId: invoiceModal.sale.id,
         tipoComprobante: invoiceModal.invoiceType,
         receiverDoc: invoiceModal.dni,
+        ...(invoiceModal.arcaConfigId ? { arcaConfigId: invoiceModal.arcaConfigId } : {}),
       });
       toast.success('Factura emitida correctamente');
       setInvoiceModal(null);
@@ -788,10 +818,32 @@ export default function VentasPage() {
                 <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
                 Esta acción emite el comprobante ante AFIP. No se puede revertir.
               </div>
+              {multiInvoicingEnabled && owners.length > 0 && (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Facturar a nombre de</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {owners.map((o) => (
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() => setInvoiceModal((p) => {
+                          if (!p) return p;
+                          const types = invoiceTypesForOwner(o.id);
+                          return { ...p, arcaConfigId: o.id, invoiceType: types[0] };
+                        })}
+                        className={`btn btn-sm ${invoiceModal.arcaConfigId === o.id ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ flex: '1 1 auto' }}
+                      >
+                        {o.businessName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Tipo de comprobante</label>
                 <select value={invoiceModal.invoiceType} onChange={(e) => setInvoiceModal((p) => p && ({ ...p, invoiceType: Number(e.target.value) as InvoiceType }))}>
-                  {invoiceTypes.map((t) => <option key={t} value={t}>{INVOICE_TYPE_LABEL[t]}</option>)}
+                  {invoiceTypesForOwner(invoiceModal.arcaConfigId).map((t) => <option key={t} value={t}>{INVOICE_TYPE_LABEL[t]}</option>)}
                 </select>
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>

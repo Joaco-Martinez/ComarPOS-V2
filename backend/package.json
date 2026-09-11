@@ -33,6 +33,7 @@
     "@sentry/node": "^10.68.0",
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",
+    "bwip-js": "^4.11.4",
     "cloudinary": "^2.7.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

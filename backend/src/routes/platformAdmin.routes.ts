@@ -71,6 +71,11 @@ router.patch(
   platformAuthMiddleware,
   platformAdminController.updateTenantPosCheckoutModal
 );
+router.patch(
+  "/tenants/:id/multi-invoicing",
+  platformAuthMiddleware,
+  platformAdminController.updateTenantMultiInvoicing
+);
 
 router.get("/mp-plans", platformAuthMiddleware, platformAdminController.listMpPlans);
 router.post("/mp-plans/sync", platformAuthMiddleware, platformAdminController.syncMpPlans);

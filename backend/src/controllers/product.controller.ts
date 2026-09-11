@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { productService } from "../services/product.service";
+import { barcodeService } from "../services/barcode.service";
 import multer from "multer";
 import path from "path";
 import { getParamAsString } from "../utils/params";
@@ -51,6 +52,21 @@ function parseJsonArray(value: any) {
   }
 
   return undefined;
+}
+
+function parseIdsParam(value: any): string[] | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  return value.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function parseQuantitiesParam(value: any): Record<string, number> | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeBoolean(value: any) {
@@ -426,6 +442,35 @@ export const productController = {
       });
 
       res.json(movements);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async barcodesPdf(req: Request, res: Response, next: NextFunction) {
+    try {
+      const productIds = parseIdsParam(req.query.productIds);
+      const quantities = parseQuantitiesParam(req.query.quantities);
+
+      const buffer = await barcodeService.exportPdf({ productIds, quantities });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'attachment; filename="codigos-de-barra.pdf"');
+      res.send(buffer);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async barcodesExcel(req: Request, res: Response, next: NextFunction) {
+    try {
+      const productIds = parseIdsParam(req.query.productIds);
+
+      const buffer = await barcodeService.exportExcel({ productIds });
+
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", 'attachment; filename="codigos-de-barra.xlsx"');
+      res.send(Buffer.from(buffer));
     } catch (err) {
       next(err);
     }

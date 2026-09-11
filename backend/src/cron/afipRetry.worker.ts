@@ -81,15 +81,22 @@ async function processSale(sale: any, now: Date) {
 
     const { saleId, products, metodoPago, ...facturaData } = payload;
 
+    // A nombre de que dueno se pidio originalmente esta factura (grabado en
+    // facturar.controller.ts antes de la primera llamada AFIP) -- sin esto
+    // el retry caeria al CUIT "activo" del tenant, que con multi-facturacion
+    // puede no ser el que el usuario eligio en el modal.
+    const arcaConfigId = sale.requestedArcaConfigId ?? undefined;
+
     const factura = await emitirFacturaAFIP({
       ...facturaData,
       saleId,
+      arcaConfigId,
     });
 
     // Si aprobó => PDF + estado OK
     if (factura.resultado === "A" && factura.cae) {
       const [arcaConfig, tenantForTicket] = await Promise.all([
-        arcaConfigService.getConfig().catch(() => null),
+        (arcaConfigId ? arcaConfigService.getConfigById(arcaConfigId) : arcaConfigService.getConfig()).catch(() => null),
         currentTenantId()
           ? prisma.tenant
               .findUnique({ where: { id: currentTenantId()! }, select: { ticketPhone: true } })

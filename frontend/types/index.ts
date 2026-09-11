@@ -386,6 +386,9 @@ export interface Purchase {
   updatedAt: string;
   // Datos fiscales del comprobante recibido, para el Libro IVA Digital.
   providerCuit?: string | null;
+  // A nombre de que dueno (ArcaConfig) quedo esta compra -- solo se usa con
+  // multi-facturacion habilitada, ver backend Purchase.arcaConfigId.
+  arcaConfigId?: string | null;
   invoiceType?: number | null;
   invoicePointOfSale?: number | null;
   nonTaxedAmount?: number;
@@ -716,6 +719,10 @@ export interface Tenant {
   // vuelto al confirmar), prendido por tenant puntual desde /platform-admin.
   // Default false -- ver backend Tenant.posCheckoutModalEnabled.
   posCheckoutModalEnabled?: boolean;
+  // Multi-facturacion: hasta 4 ArcaConfig (duenos/CUIT) para este tenant,
+  // prendido por tenant puntual desde /platform-admin. Default false -- ver
+  // backend Tenant.multiInvoicingEnabled.
+  multiInvoicingEnabled?: boolean;
   paymentLogs?: TenantPaymentLog[];
   users?: User[];
   // Uso real (ver platformTenant.service.ts): calculados server-side, no

@@ -29,6 +29,15 @@ function pickOnlyCertificate(req: Request) {
   return fileText(certFile) || req.body.certPem || req.body.certificate;
 }
 
+// Multi-facturacion: que ArcaConfig (dueno) opera esta request. Acepta
+// :id de ruta (rutas que ya lo tenian), o arcaConfigId en el body/query
+// (rutas planas que no tienen un segmento :id) -- sin ninguno de los dos,
+// undefined, y cada service cae al comportamiento single-CUIT de siempre.
+function getConfigIdFromRequest(req: Request): string | undefined {
+  const raw = req.params.id ?? req.body?.arcaConfigId ?? req.query?.arcaConfigId;
+  return raw ? getParamAsString(raw, "arcaConfigId") : undefined;
+}
+
 export const arcaConfigController = {
   async list(_req: Request, res: Response, next: NextFunction) {
     try {
@@ -39,9 +48,12 @@ export const arcaConfigController = {
     }
   },
 
-  async get(_req: Request, res: Response, next: NextFunction) {
+  async get(req: Request, res: Response, next: NextFunction) {
     try {
-      const config = await arcaConfigService.getConfig();
+      const configId = getConfigIdFromRequest(req);
+      const config = configId
+        ? await arcaConfigService.getConfigById(configId)
+        : await arcaConfigService.getConfig();
       res.json({ ok: true, content: config });
     } catch (error) {
       next(error);
@@ -50,7 +62,7 @@ export const arcaConfigController = {
 
   async upsert(req: Request, res: Response, next: NextFunction) {
     try {
-      const config = await arcaConfigService.upsertConfig(req.body);
+      const config = await arcaConfigService.upsertConfig(req.body, getConfigIdFromRequest(req));
       res.json({ ok: true, content: config });
     } catch (error) {
       next(error);
@@ -59,7 +71,7 @@ export const arcaConfigController = {
 
   async generateCsr(req: Request, res: Response, next: NextFunction) {
     try {
-      const config = await arcaConfigService.generateCsr(req.body);
+      const config = await arcaConfigService.generateCsr(req.body, getConfigIdFromRequest(req));
 
       res.status(201).json({
         ok: true,
@@ -89,12 +101,15 @@ export const arcaConfigController = {
     try {
       const { certPem, keyPem } = pickCertificateFiles(req);
 
-      const config = await arcaConfigService.create({
-        ...req.body,
-        pointOfSale: req.body.pointOfSale,
-        certPem,
-        keyPem,
-      });
+      const config = await arcaConfigService.create(
+        {
+          ...req.body,
+          pointOfSale: req.body.pointOfSale,
+          certPem,
+          keyPem,
+        },
+        getConfigIdFromRequest(req)
+      );
 
       res.status(201).json({ ok: true, content: config });
     } catch (error) {
@@ -113,10 +128,13 @@ export const arcaConfigController = {
         });
       }
 
-      const config = await arcaConfigService.uploadCertificate({
-        certPem,
-        certExpiresAt: req.body.certExpiresAt,
-      });
+      const config = await arcaConfigService.uploadCertificate(
+        {
+          certPem,
+          certExpiresAt: req.body.certExpiresAt,
+        },
+        getConfigIdFromRequest(req)
+      );
 
       res.json({ ok: true, content: config });
     } catch (error) {
@@ -135,11 +153,14 @@ export const arcaConfigController = {
         });
       }
 
-      const config = await arcaConfigService.uploadCertificates({
-        certPem,
-        keyPem,
-        certExpiresAt: req.body.certExpiresAt,
-      });
+      const config = await arcaConfigService.uploadCertificates(
+        {
+          certPem,
+          keyPem,
+          certExpiresAt: req.body.certExpiresAt,
+        },
+        getConfigIdFromRequest(req)
+      );
 
       res.json({ ok: true, content: config });
     } catch (error) {
@@ -147,9 +168,9 @@ export const arcaConfigController = {
     }
   },
 
-  async deleteCertificates(_req: Request, res: Response, next: NextFunction) {
+  async deleteCertificates(req: Request, res: Response, next: NextFunction) {
     try {
-      const config = await arcaConfigService.deleteCertificates();
+      const config = await arcaConfigService.deleteCertificates(getConfigIdFromRequest(req));
       res.json({ ok: true, content: config });
     } catch (error) {
       next(error);
@@ -181,7 +202,7 @@ async test(req: Request, res: Response) {
 
     await arcaConfigService.activate(id);
 
-    const token = await generarTokenAFIP();
+    const token = await generarTokenAFIP(id);
 
     return res.json({
       ok: true,
@@ -206,9 +227,9 @@ async test(req: Request, res: Response) {
   }
 },  
 
-  async testWsaa(_req: Request, res: Response) {
+  async testWsaa(req: Request, res: Response) {
     try {
-      const token = await generarTokenAFIP();
+      const token = await generarTokenAFIP(getConfigIdFromRequest(req));
       res.json({
         ok: true,
         message: "WSAA correcto. Token/sign generados.",
@@ -219,9 +240,9 @@ async test(req: Request, res: Response) {
     }
   },
 
-  async testWsfeDummy(_req: Request, res: Response) {
+  async testWsfeDummy(req: Request, res: Response) {
     try {
-      const token = await generarTokenAFIP();
+      const token = await generarTokenAFIP(getConfigIdFromRequest(req));
       res.json({
         ok: true,
         message: "Configuración activa y WSAA correctos. Listo para probar WSFE.",
@@ -241,9 +262,9 @@ async test(req: Request, res: Response) {
     }
   },
 
-  async listPointsOfSale(_req: Request, res: Response, next: NextFunction) {
+  async listPointsOfSale(req: Request, res: Response, next: NextFunction) {
     try {
-      const points = await arcaConfigService.listPointsOfSale();
+      const points = await arcaConfigService.listPointsOfSale(getConfigIdFromRequest(req));
       res.json({ ok: true, content: points });
     } catch (error) {
       next(error);
@@ -252,7 +273,7 @@ async test(req: Request, res: Response) {
 
   async upsertPointOfSale(req: Request, res: Response, next: NextFunction) {
     try {
-      const point = await arcaConfigService.upsertPointOfSale(req.body);
+      const point = await arcaConfigService.upsertPointOfSale(req.body, getConfigIdFromRequest(req));
       res.json({ ok: true, content: point });
     } catch (error) {
       next(error);
@@ -261,7 +282,10 @@ async test(req: Request, res: Response) {
 
   async deletePointOfSale(req: Request, res: Response, next: NextFunction) {
     try {
-      const point = await arcaConfigService.deletePointOfSale(getParamAsString(req.params.id, "id"));
+      const point = await arcaConfigService.deletePointOfSale(
+        getParamAsString(req.params.id, "id"),
+        req.body?.arcaConfigId ?? (req.query?.arcaConfigId as string | undefined)
+      );
       res.json({ ok: true, content: point });
     } catch (error) {
       next(error);
@@ -295,9 +319,9 @@ async test(req: Request, res: Response) {
     }
   },
 
-  async listAuditLogs(_req: Request, res: Response, next: NextFunction) {
+  async listAuditLogs(req: Request, res: Response, next: NextFunction) {
     try {
-      const logs = await arcaConfigService.listAuditLogs();
+      const logs = await arcaConfigService.listAuditLogs(getConfigIdFromRequest(req));
       res.json({ ok: true, content: logs });
     } catch (error) {
       next(error);

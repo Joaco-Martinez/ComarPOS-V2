@@ -54,12 +54,15 @@ export type VentasAlicuotaRow = {
   importeIva: number;
 };
 
-export async function getVentasLibroIvaDigital(params: { from: Date; to: Date }) {
+export async function getVentasLibroIvaDigital(params: { from: Date; to: Date; arcaConfigId?: string }) {
   const invoices = await prisma.invoiceAfip.findMany({
     where: {
       ...tenantScope(),
       fechaEmision: { gte: params.from, lte: params.to },
       resultado: "A", // Aprobado -- las rechazadas no forman parte del libro
+      // Con multi-facturacion, filtra el libro a un solo dueno -- sin esto
+      // vendria todo mezclado entre los 4 CUIT del tenant.
+      ...(params.arcaConfigId ? { arcaConfigId: params.arcaConfigId } : {}),
     },
     include: {
       sale: {

@@ -61,6 +61,7 @@ export const billingService = {
         planId: true,
         featureOverrides: true,
         posCheckoutModalEnabled: true,
+        multiInvoicingEnabled: true,
       },
     });
 

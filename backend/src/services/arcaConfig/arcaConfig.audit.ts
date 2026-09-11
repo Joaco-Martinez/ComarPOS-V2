@@ -3,12 +3,12 @@
  * Extraido de arcaConfig.service.ts (doc seccion 4 - modularizacion).
  */
 import prisma from "../../prisma";
-import { getConfig } from "./arcaConfig.helpers";
+import { getConfig, getConfigById } from "./arcaConfig.helpers";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
 
-export async function listAuditLogs() {
-  const config = await getConfig();
+export async function listAuditLogs(configId?: string) {
+  const config = configId ? await getConfigById(configId) : await getConfig();
   return prisma.arcaAuditLog.findMany({
     where: config ? { arcaConfigId: config.id, ...tenantScope() } : { ...tenantScope() },
     orderBy: { createdAt: "desc" },

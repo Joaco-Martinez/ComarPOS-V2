@@ -32,7 +32,7 @@ export async function facturarController(req: Request, res: Response) {
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const startedAt = Date.now();
 
-  const { saleId, ...facturaData } = req.body;
+  const { saleId, arcaConfigId: rawArcaConfigId, ...facturaData } = req.body;
 
   // El frontend historico mandaba "receiverDoc"; el resto del controller usa
   // "nroDoc" - normalizamos aca para no perder el dato.
@@ -40,11 +40,37 @@ export async function facturarController(req: Request, res: Response) {
     facturaData.nroDoc = facturaData.receiverDoc;
   }
 
+  // Multi-facturacion: a nombre de cual dueno (ArcaConfig) se factura esta
+  // venta puntual, elegido en el modal "Facturar en ARCA". Solo se honra si
+  // el tenant tiene el flag habilitado (super-admin) -- sin eso, cualquier
+  // arcaConfigId que mande el cliente se ignora y se usa el flujo de
+  // siempre (config unica del tenant), asi ningun tenant existente cambia
+  // de comportamiento.
+  const multiInvoicingEnabled = await arcaConfigService.isMultiInvoicingEnabled();
+  const selectedArcaConfigId =
+    multiInvoicingEnabled && rawArcaConfigId ? String(rawArcaConfigId) : undefined;
+
   // Que tipo de comprobante puede emitir este tenant segun su condicion frente
   // al IVA (ArcaConfig.ivaCondition): Responsable Inscripto -> A o B,
   // Monotributo/Exento/sin config -> solo C. Si el frontend no pide un tipo
   // puntual, se usa el primero permitido (compatibilidad con el flujo viejo).
-  const arcaConfig = await arcaConfigService.getConfig().catch(() => null);
+  // Con multi-facturacion, la condicion de IVA que manda es la del dueno
+  // elegido, no "la ultima config" del tenant.
+  let arcaConfig: Awaited<ReturnType<typeof arcaConfigService.getConfig>> | null = null;
+
+  if (selectedArcaConfigId) {
+    try {
+      arcaConfig = await arcaConfigService.getConfigById(selectedArcaConfigId);
+    } catch {
+      return res.status(400).json({
+        ok: false,
+        error: "La configuración ARCA (dueño) seleccionada no existe o no pertenece a este negocio.",
+      });
+    }
+  } else {
+    arcaConfig = await arcaConfigService.getConfig().catch(() => null);
+  }
+
   const allowedTipos = getAllowedCbteTipos(arcaConfig?.ivaCondition);
   const requestedTipo = Number(facturaData.tipoComprobante ?? allowedTipos[0]);
 
@@ -216,6 +242,10 @@ export async function facturarController(req: Request, res: Response) {
         afipPayloadJson: req.body,
         afipLastError: null,
         nextRetryAt: null,
+        // Se graba ANTES de llamar a AFIP para que afipRetry.worker.ts sepa
+        // con que dueno/CUIT reintentar si esta llamada falla por AFIP
+        // caido (ver isAfipUnavailable mas abajo).
+        requestedArcaConfigId: selectedArcaConfigId ?? null,
       },
     });
 
@@ -251,6 +281,7 @@ export async function facturarController(req: Request, res: Response) {
       factura = await emitirFacturaA({
         saleId,
         cuit: facturaData.cuit,
+        arcaConfigId: selectedArcaConfigId,
         nroDoc: docDetectado.nroDoc,
         importe: facturaData.importe,
         condicionIVAReceptor: facturaData.condicionIVAReceptor,
@@ -273,6 +304,7 @@ export async function facturarController(req: Request, res: Response) {
       factura = await emitirFacturaB({
         saleId,
         cuit: facturaData.cuit,
+        arcaConfigId: selectedArcaConfigId,
         tipoDoc: docDetectado.tipoDoc,
         nroDoc: docDetectado.nroDoc,
         importe: facturaData.importe,
@@ -309,6 +341,7 @@ export async function facturarController(req: Request, res: Response) {
         factura = await emitirFacturaCConsumidorFinal({
           saleId,
           cuit: facturaData.cuit,
+          arcaConfigId: selectedArcaConfigId,
           importe: facturaData.importe,
         });
 
@@ -339,6 +372,7 @@ export async function facturarController(req: Request, res: Response) {
         factura = await emitirFacturaCACliente({
           saleId,
           cuit: facturaData.cuit,
+          arcaConfigId: selectedArcaConfigId,
           tipoDoc: docDetectado.tipoDoc,
           nroDoc: docDetectado.nroDoc,
           importe: facturaData.importe,

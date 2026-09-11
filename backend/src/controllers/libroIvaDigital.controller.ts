@@ -25,6 +25,13 @@ function parsePeriod(req: Request) {
   return monthRangeAR(year, month);
 }
 
+// Multi-facturacion: filtra el libro a un solo dueno (ArcaConfig). Ausente
+// = libro combinado del tenant (comportamiento de siempre).
+function parseArcaConfigId(req: Request): string | undefined {
+  const raw = req.query.arcaConfigId;
+  return typeof raw === "string" && raw ? raw : undefined;
+}
+
 function parsePeriodBody(req: Request) {
   const year = Number(req.body?.year);
   const month = Number(req.body?.month);
@@ -45,9 +52,10 @@ export const libroIvaDigitalController = {
   async getResumen(req: Request, res: Response, next: NextFunction) {
     try {
       const { start, end } = parsePeriod(req);
+      const arcaConfigId = parseArcaConfigId(req);
       const [compras, ventas] = await Promise.all([
-        getComprasLibroIvaDigital({ from: start, to: end }),
-        getVentasLibroIvaDigital({ from: start, to: end }),
+        getComprasLibroIvaDigital({ from: start, to: end, arcaConfigId }),
+        getVentasLibroIvaDigital({ from: start, to: end, arcaConfigId }),
       ]);
       res.json({
         compras: {
@@ -68,7 +76,7 @@ export const libroIvaDigitalController = {
   async downloadComprasCbte(req: Request, res: Response, next: NextFunction) {
     try {
       const { start, end } = parsePeriod(req);
-      const { cbte } = await getComprasLibroIvaDigital({ from: start, to: end });
+      const { cbte } = await getComprasLibroIvaDigital({ from: start, to: end, arcaConfigId: parseArcaConfigId(req) });
       sendCsv(res, `libro_iva_compras_${req.query.year}_${req.query.month}.csv`, comprasCbteToCsv(cbte));
     } catch (err) {
       next(err);
@@ -78,7 +86,7 @@ export const libroIvaDigitalController = {
   async downloadComprasAlicuotas(req: Request, res: Response, next: NextFunction) {
     try {
       const { start, end } = parsePeriod(req);
-      const { alicuotas } = await getComprasLibroIvaDigital({ from: start, to: end });
+      const { alicuotas } = await getComprasLibroIvaDigital({ from: start, to: end, arcaConfigId: parseArcaConfigId(req) });
       sendCsv(res, `libro_iva_compras_alicuotas_${req.query.year}_${req.query.month}.csv`, comprasAlicuotasToCsv(alicuotas));
     } catch (err) {
       next(err);
@@ -88,7 +96,7 @@ export const libroIvaDigitalController = {
   async downloadVentasCbte(req: Request, res: Response, next: NextFunction) {
     try {
       const { start, end } = parsePeriod(req);
-      const { cbte } = await getVentasLibroIvaDigital({ from: start, to: end });
+      const { cbte } = await getVentasLibroIvaDigital({ from: start, to: end, arcaConfigId: parseArcaConfigId(req) });
       sendCsv(res, `libro_iva_ventas_${req.query.year}_${req.query.month}.csv`, ventasCbteToCsv(cbte));
     } catch (err) {
       next(err);
@@ -98,7 +106,7 @@ export const libroIvaDigitalController = {
   async downloadVentasAlicuotas(req: Request, res: Response, next: NextFunction) {
     try {
       const { start, end } = parsePeriod(req);
-      const { alicuotas } = await getVentasLibroIvaDigital({ from: start, to: end });
+      const { alicuotas } = await getVentasLibroIvaDigital({ from: start, to: end, arcaConfigId: parseArcaConfigId(req) });
       sendCsv(res, `libro_iva_ventas_alicuotas_${req.query.year}_${req.query.month}.csv`, ventasAlicuotasToCsv(alicuotas));
     } catch (err) {
       next(err);

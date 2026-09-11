@@ -3,6 +3,7 @@
  * Extraido de arcaConfig.service.ts (doc seccion 4 - modularizacion).
  */
 import forge from "node-forge";
+import { randomUUID } from "crypto";
 import prisma from "../../prisma";
 import { arcaCryptoService } from "../arcaCrypto.service";
 import {
@@ -16,6 +17,9 @@ import {
   validatePrivateKey,
   buildCsrSubject,
   getConfig,
+  getConfigById,
+  getActiveDecryptedById,
+  isMultiInvoicingEnabled,
   type UpdateArcaConfigInput,
   type GenerateCsrInput,
 } from "./arcaConfig.helpers";
@@ -24,7 +28,12 @@ import { businessLocationService } from "../businessLocation.service";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
 
-export { getConfig };
+export { getConfig, getConfigById, getActiveDecryptedById, isMultiInvoicingEnabled };
+
+// Con multi-facturacion habilitada, un tenant puede tener hasta 4
+// ArcaConfig (un CUIT por dueno). Sin el flag, el tope sigue siendo 1
+// (comportamiento historico, ver upsertConfig).
+const MAX_ARCA_CONFIGS_MULTI = 4;
 
 async function ensureDefaultBusinessLocation() {
   const existingCount = await prisma.businessLocation.count({ where: { ...tenantScope() } });
@@ -72,25 +81,51 @@ export async function getActiveDecrypted() {
   };
 }
 
-export async function create(data: UpdateArcaConfigInput) {
-  const config = await upsertConfig(data);
+export async function create(data: UpdateArcaConfigInput, configId?: string) {
+  const config = await upsertConfig(data, configId);
 
   if (data.certPem && data.keyPem) {
-    return uploadCertificates({
-      certPem: data.certPem,
-      keyPem: data.keyPem,
-      certExpiresAt: data.certExpiresAt,
-    });
+    return uploadCertificates(
+      {
+        certPem: data.certPem,
+        keyPem: data.keyPem,
+        certExpiresAt: data.certExpiresAt,
+      },
+      config?.id
+    );
   }
 
   return config;
 }
 
-export async function upsertConfig(data: UpdateArcaConfigInput) {
-  const existing = await prisma.arcaConfig.findFirst({
-    where: { ...tenantScope() },
-    orderBy: { createdAt: "desc" },
-  });
+export async function upsertConfig(data: UpdateArcaConfigInput, configId?: string) {
+  const multiEnabled = await isMultiInvoicingEnabled();
+
+  // Sin multi-facturacion: siempre "la" config del tenant (como antes,
+  // ningun cambio de comportamiento). Con multi-facturacion: un configId
+  // explicito edita esa config puntual; sin configId significa "cargar un
+  // dueno nuevo", nunca pisar uno existente por accidente.
+  let existing = configId
+    ? await prisma.arcaConfig.findFirst({ where: { id: configId, ...tenantScope() } })
+    : multiEnabled
+      ? null
+      : await prisma.arcaConfig.findFirst({
+          where: { ...tenantScope() },
+          orderBy: { createdAt: "desc" },
+        });
+
+  if (configId && !existing) {
+    throw new Error("Configuración ARCA no encontrada.");
+  }
+
+  if (!existing && multiEnabled) {
+    const count = await prisma.arcaConfig.count({ where: { ...tenantScope() } });
+    if (count >= MAX_ARCA_CONFIGS_MULTI) {
+      throw new Error(
+        `Este negocio ya tiene el máximo de ${MAX_ARCA_CONFIGS_MULTI} configuraciones ARCA (dueños).`
+      );
+    }
+  }
 
   const cuit = data.cuit ? normalizeCuit(data.cuit) : undefined;
   const activityStartValue = data.activityStart ?? data.activityStartDate;
@@ -125,10 +160,15 @@ export async function upsertConfig(data: UpdateArcaConfigInput) {
   } else {
     config = await prisma.arcaConfig.create({
       data: {
-        // "scope" es @unique en el modelo (legado pre-multi-tenant); para que un
-        // tenant nuevo pueda crear su propia config sin colisionar con la de
-        // "GRUPO_VJ" se usa su tenantId como scope (doc seccion 6).
-        scope: currentTenantId() ? `TENANT_${currentTenantId()}` : "GRUPO_VJ",
+        // "scope" es @unique en el modelo (legado pre-multi-tenant, no se lee
+        // en ningun lado activo del codigo) -- para que un tenant nuevo pueda
+        // crear su propia config sin colisionar con la de "GRUPO_VJ" se usa
+        // su tenantId como base (doc seccion 6). Con multi-facturacion un
+        // mismo tenant puede crear MAS de una ArcaConfig (un dueno cada una),
+        // asi que ademas del tenantId hace falta un sufijo unico por fila o
+        // la 2da/3ra/4ta config chocarian todas contra el mismo valor de
+        // scope que ya uso la primera.
+        scope: currentTenantId() ? `TENANT_${currentTenantId()}_${randomUUID()}` : "GRUPO_VJ",
         tenantId: currentTenantId(),
         businessName: data.businessName || "Mi Negocio",
         cuit: cuit || "",
@@ -171,7 +211,7 @@ export async function upsertConfig(data: UpdateArcaConfigInput) {
   });
 }
 
-export async function generateCsr(data: GenerateCsrInput) {
+export async function generateCsr(data: GenerateCsrInput, configId?: string) {
   const cuit = normalizeCuit(data.cuit);
   assertValidCuit(cuit);
 
@@ -184,12 +224,15 @@ export async function generateCsr(data: GenerateCsrInput) {
     throw new Error("El punto de venta es obligatorio para configurar ARCA.");
   }
 
-  const config = await upsertConfig({
-    ...data,
-    cuit,
-    defaultPointOfSale: point,
-    status: "INCOMPLETE",
-  });
+  const config = await upsertConfig(
+    {
+      ...data,
+      cuit,
+      defaultPointOfSale: point,
+      status: "INCOMPLETE",
+    },
+    configId
+  );
 
   if (!config) {
     throw new Error("No se pudo crear la configuración ARCA.");
@@ -253,11 +296,14 @@ export async function downloadCsr(configId?: string) {
   };
 }
 
-export async function uploadCertificate(params: {
-  certPem: string;
-  certExpiresAt?: string | Date | null;
-}) {
-  const config = await getConfig();
+export async function uploadCertificate(
+  params: {
+    certPem: string;
+    certExpiresAt?: string | Date | null;
+  },
+  configId?: string
+) {
+  const config = configId ? await getConfigById(configId) : await getConfig();
   if (!config) throw new Error("Primero tenés que crear la configuración ARCA.");
   if (!config.keyEncrypted) {
     throw new Error("Primero generá el pedido CSR desde el sistema.");
@@ -283,12 +329,15 @@ export async function uploadCertificate(params: {
   });
 }
 
-export async function uploadCertificates(params: {
-  certPem: string;
-  keyPem?: string;
-  certExpiresAt?: string | Date | null;
-}) {
-  const config = await getConfig();
+export async function uploadCertificates(
+  params: {
+    certPem: string;
+    keyPem?: string;
+    certExpiresAt?: string | Date | null;
+  },
+  configId?: string
+) {
+  const config = configId ? await getConfigById(configId) : await getConfig();
   if (!config) throw new Error("Primero tenés que crear la configuración ARCA.");
 
   const certExpiresAt = params.certExpiresAt
@@ -320,8 +369,8 @@ export async function uploadCertificates(params: {
   });
 }
 
-export async function deleteCertificates() {
-  const config = await getConfig();
+export async function deleteCertificates(configId?: string) {
+  const config = configId ? await getConfigById(configId) : await getConfig();
   if (!config) throw new Error("No hay configuración ARCA creada.");
 
   await prisma.afipToken.deleteMany({ where: { arcaConfigId: config.id } });
@@ -358,10 +407,16 @@ export async function activate(configId?: string) {
 
   if (pointsCount === 0) throw new Error("Falta configurar al menos un punto de venta.");
 
-  await prisma.arcaConfig.updateMany({
-    where: { ...tenantScope() },
-    data: { isActive: false },
-  });
+  // Con multi-facturacion cada dueno mantiene su propio estado activo en
+  // paralelo (los 4 CUIT pueden estar "activos" a la vez, cada uno emite
+  // con su propio certificado). Sin el flag, activar una desactiva las
+  // demas -- comportamiento historico, un solo CUIT "vigente" por tenant.
+  if (!(await isMultiInvoicingEnabled())) {
+    await prisma.arcaConfig.updateMany({
+      where: { ...tenantScope() },
+      data: { isActive: false },
+    });
+  }
 
   return prisma.arcaConfig.update({
     where: { id: config.id },

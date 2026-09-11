@@ -37,8 +37,16 @@ export async function regenerarFacturaPDFService(
 
   const invoice = sale.invoiceAfip;
 
+  // Multi-facturacion: razon social/domicilio/condicion IVA tienen que ser
+  // los del dueno que REALMENTE emitio esta factura (invoice.arcaConfigId),
+  // no "la" config generica del tenant -- el CUIT de abajo (empresa.cuit) ya
+  // usaba invoice.cuit como prioridad, pero name/address/ivaCondition solo
+  // salian de arcaConfig, asi que sin este fix un re-descargo podia mostrar
+  // el CUIT correcto con la razon social de OTRO dueno.
   const [arcaConfig, tenant] = await Promise.all([
-    arcaConfigService.getConfig().catch(() => null),
+    invoice.arcaConfigId
+      ? arcaConfigService.getConfigById(invoice.arcaConfigId).catch(() => arcaConfigService.getConfig().catch(() => null))
+      : arcaConfigService.getConfig().catch(() => null),
     currentTenantId()
       ? prisma.tenant.findUnique({
           where: { id: currentTenantId()! },

@@ -9,7 +9,7 @@ import { X, Sparkles } from 'lucide-react';
 // navegador. No usa el store de notificaciones (Notification model) a
 // proposito: esto es un anuncio de producto para TODOS los usuarios, no un
 // evento de negocio individual.
-const LATEST_ID = 'proveedores-stock-inicial-2026-09-02';
+const LATEST_ID = 'multi-facturacion-sku-codigos-barra-2026-09-11';
 const STORAGE_KEY = 'comarpos-whatsnew-seen';
 
 export default function WhatsNewModal() {
@@ -38,16 +38,16 @@ export default function WhatsNewModal() {
             </div>
             <div>
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Novedades</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Proveedores vinculados y stock inicial</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Multi-facturación, SKU automático y códigos de barra</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-xs" onClick={dismiss}><X size={14} /></button>
         </div>
 
         <ul style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.9, margin: '0 0 18px', paddingLeft: 18 }}>
-          <li><strong>Productos vinculados a proveedores</strong>: cada producto puede tener un proveedor asignado (desde el alta o editándolo).</li>
-          <li><strong>Aumento de precios en bloque</strong>: si un proveedor te sube un %, entrá a Proveedores → botón "Productos" y aplicalo a todos sus productos de una sola vez, sin tocar uno por uno.</li>
-          <li><strong>Stock inicial al crear un producto</strong>: ya no hace falta crear el producto y después ir a Stock a cargarle cantidad — ahora se puede cargar ahí mismo, por ubicación, en el mismo formulario.</li>
+          <li><strong>Multi-facturación</strong>: si el negocio factura a nombre de más de un CUIT, ahora se puede cargar hasta 4 y elegir con cuál facturar cada venta o compra.</li>
+          <li><strong>SKU automático</strong>: si al crear un producto no cargás un SKU, ahora se genera uno solo — ya no es obligatorio completarlo a mano.</li>
+          <li><strong>Códigos de barra para imprimir</strong>: nuevo botón "Códigos de barra" en Productos para descargar un PDF con etiquetas listas para imprimir o un Excel con los códigos, eligiendo qué productos y cuántas etiquetas de cada uno.</li>
         </ul>
 
         <button className="btn btn-primary btn-sm" onClick={dismiss} style={{ width: '100%' }}>Entendido</button>

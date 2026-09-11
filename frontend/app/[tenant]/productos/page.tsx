@@ -12,7 +12,7 @@ import type { Product, ProductCategory, Supplier, BusinessLocation } from '@/typ
 import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
-import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, ScanBarcode } from 'lucide-react';
+import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, AlertTriangle, ScanBarcode, Barcode, Download, FileSpreadsheet } from 'lucide-react';
 
 const emptyForm = {
   name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '', supplierId: '',
@@ -53,6 +53,15 @@ export default function ProductosPage() {
   const [stockModal, setStockModal] = useState<Product | null>(null);
   const [stockForm, setStockForm] = useState({ businessLocationId: '', quantity: '', reason: '' });
   const [addingStock, setAddingStock] = useState(false);
+
+  // Módulo de códigos de barra: seleccionar productos (con SKU) y cuántas
+  // etiquetas de cada uno, para descargar un PDF listo para imprimir en hojas
+  // de stickers o un Excel con el código embebido.
+  const [barcodeModal, setBarcodeModal] = useState(false);
+  const [barcodeSelected, setBarcodeSelected] = useState<Record<string, boolean>>({});
+  const [barcodeQty, setBarcodeQty] = useState<Record<string, string>>({});
+  const [barcodeSearch, setBarcodeSearch] = useState('');
+  const [barcodeDownloading, setBarcodeDownloading] = useState<'pdf' | 'excel' | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -233,6 +242,68 @@ export default function ProductosPage() {
     }
   };
 
+  const barcodeProducts = useMemo(
+    () => products.filter((p) => p.sku && p.sku.trim() && p.isActive !== false),
+    [products]
+  );
+
+  const barcodeFiltered = useMemo(() => {
+    if (!barcodeSearch.trim()) return barcodeProducts;
+    const q = barcodeSearch.toLowerCase();
+    return barcodeProducts.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q));
+  }, [barcodeProducts, barcodeSearch]);
+
+  const openBarcodeModal = () => {
+    const selected: Record<string, boolean> = {};
+    const qty: Record<string, string> = {};
+    barcodeProducts.forEach((p) => { selected[p.id] = true; qty[p.id] = '1'; });
+    setBarcodeSelected(selected);
+    setBarcodeQty(qty);
+    setBarcodeSearch('');
+    setBarcodeModal(true);
+  };
+
+  const toggleBarcodeAll = (checked: boolean) => {
+    const next: Record<string, boolean> = { ...barcodeSelected };
+    barcodeFiltered.forEach((p) => { next[p.id] = checked; });
+    setBarcodeSelected(next);
+  };
+
+  const barcodeSelectedIds = useMemo(
+    () => Object.entries(barcodeSelected).filter(([, v]) => v).map(([id]) => id),
+    [barcodeSelected]
+  );
+
+  const downloadBarcodes = async (type: 'pdf' | 'excel') => {
+    if (barcodeSelectedIds.length === 0) {
+      toast.error('Seleccioná al menos un producto');
+      return;
+    }
+    setBarcodeDownloading(type);
+    try {
+      const params: Record<string, string> = { productIds: barcodeSelectedIds.join(',') };
+      if (type === 'pdf') {
+        const quantities: Record<string, number> = {};
+        barcodeSelectedIds.forEach((id) => { quantities[id] = Math.max(1, num(barcodeQty[id] ?? '1') || 1); });
+        params.quantities = JSON.stringify(quantities);
+      }
+      const res = await api.get(`/products/barcodes/${type === 'pdf' ? 'pdf' : 'excel'}`, {
+        params,
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `codigos-de-barra.${type === 'pdf' ? 'pdf' : 'xlsx'}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al generar el archivo');
+    } finally {
+      setBarcodeDownloading(null);
+    }
+  };
+
   const isKg = form.saleUnit === 'KG';
 
   return (
@@ -240,9 +311,14 @@ export default function ProductosPage() {
       title="Productos"
       subtitle={`${filtered.length} de ${products.length} productos`}
       actions={
-        <button onClick={openCreate} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
-          <Plus size={13} /> Nuevo producto
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={openBarcodeModal} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+            <Barcode size={13} /> Códigos de barra
+          </button>
+          <button onClick={openCreate} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+            <Plus size={13} /> Nuevo producto
+          </button>
+        </div>
       }
     >
       {/* Filters */}
@@ -422,7 +498,12 @@ export default function ProductosPage() {
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">SKU</label>
                   <div style={{ position: 'relative' }}>
-                    <input value={form.sku} onChange={f('sku')} placeholder="Código de producto" style={{ paddingRight: 38 }} />
+                    <input
+                      value={form.sku}
+                      onChange={f('sku')}
+                      placeholder={modal === 'create' ? 'Se genera automáticamente si lo dejás vacío' : 'Código de producto'}
+                      style={{ paddingRight: 38 }}
+                    />
                     <button
                       type="button"
                       onClick={() => setFormScannerOpen(true)}
@@ -672,6 +753,98 @@ export default function ProductosPage() {
                 className="btn btn-primary btn-sm"
               >
                 {addingStock ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Agregar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Códigos de barra */}
+      {barcodeModal && (
+        <div className="modal-overlay" onClick={() => !barcodeDownloading && setBarcodeModal(false)}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '92vh' }}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800, fontSize: 15 }}>Códigos de barra</span>
+              <button onClick={() => setBarcodeModal(false)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>
+                Elegí los productos y cuántas etiquetas de cada uno querés imprimir. Solo se listan los productos activos con SKU cargado.
+              </p>
+              <input
+                value={barcodeSearch}
+                onChange={(e) => setBarcodeSearch(e.target.value)}
+                placeholder="Buscar por nombre o SKU..."
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={barcodeFiltered.length > 0 && barcodeFiltered.every((p) => barcodeSelected[p.id])}
+                    onChange={(e) => toggleBarcodeAll(e.target.checked)}
+                  />
+                  Seleccionar todos
+                </label>
+                <span>· {barcodeSelectedIds.length} seleccionados</span>
+              </div>
+
+              <div style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid var(--border2)', borderRadius: 6 }}>
+                {barcodeFiltered.length === 0 ? (
+                  <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
+                    No hay productos con SKU que coincidan.
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <tbody>
+                      {barcodeFiltered.map((p) => (
+                        <tr key={p.id} style={{ borderBottom: '1px solid var(--border2)' }}>
+                          <td style={{ padding: '6px 8px', width: 28 }}>
+                            <input
+                              type="checkbox"
+                              checked={!!barcodeSelected[p.id]}
+                              onChange={(e) => setBarcodeSelected((prev) => ({ ...prev, [p.id]: e.target.checked }))}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 8px', fontSize: 12 }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{p.name}</div>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text3)' }}>{p.sku}</div>
+                          </td>
+                          <td style={{ padding: '6px 8px', width: 90, textAlign: 'right' }}>
+                            <input
+                              type="number" min="1" step="1"
+                              value={barcodeQty[p.id] ?? '1'}
+                              disabled={!barcodeSelected[p.id]}
+                              onChange={(e) => setBarcodeQty((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                              style={{ width: 70, textAlign: 'center' }}
+                              title="Cantidad de etiquetas"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setBarcodeModal(false)} className="btn btn-secondary btn-sm">Cerrar</button>
+              <button
+                onClick={() => downloadBarcodes('excel')}
+                disabled={!!barcodeDownloading || barcodeSelectedIds.length === 0}
+                className="btn btn-secondary btn-sm"
+                style={{ gap: 6 }}
+              >
+                {barcodeDownloading === 'excel' ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <FileSpreadsheet size={13} />}
+                Excel
+              </button>
+              <button
+                onClick={() => downloadBarcodes('pdf')}
+                disabled={!!barcodeDownloading || barcodeSelectedIds.length === 0}
+                className="btn btn-primary btn-sm"
+                style={{ gap: 6 }}
+              >
+                {barcodeDownloading === 'pdf' ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <Download size={13} />}
+                PDF para imprimir
               </button>
             </div>
           </div>

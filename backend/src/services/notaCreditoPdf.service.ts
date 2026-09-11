@@ -144,8 +144,14 @@ export async function regenerarNotaCreditoPDFService(
     throw new Error("La nota de crédito no está aprobada por AFIP");
   }
 
+  // Multi-facturacion: razon social/domicilio/condicion IVA tienen que ser
+  // los del dueno que REALMENTE emitio esta nota de credito
+  // (notaCredito.arcaConfigId, ya seteado en emitirNotaCreditoAFIP a partir
+  // de la factura original), no "la" config generica del tenant.
   const [arcaConfig, tenant] = await Promise.all([
-    arcaConfigService.getConfig().catch(() => null),
+    notaCredito.arcaConfigId
+      ? arcaConfigService.getConfigById(notaCredito.arcaConfigId).catch(() => arcaConfigService.getConfig().catch(() => null))
+      : arcaConfigService.getConfig().catch(() => null),
     currentTenantId()
       ? prisma.tenant.findUnique({
           where: { id: currentTenantId()! },

@@ -75,12 +75,14 @@ function requiredFieldsMissing(p: {
   return missing;
 }
 
-export async function getComprasLibroIvaDigital(params: { from: Date; to: Date }) {
+export async function getComprasLibroIvaDigital(params: { from: Date; to: Date; arcaConfigId?: string }) {
   const purchases = await prisma.purchase.findMany({
     where: {
       ...tenantScope(),
       status: PurchaseStatus.COMPLETED,
       date: { gte: params.from, lte: params.to },
+      // Con multi-facturacion, filtra el libro a un solo dueno.
+      ...(params.arcaConfigId ? { arcaConfigId: params.arcaConfigId } : {}),
     },
     include: {
       items: true,

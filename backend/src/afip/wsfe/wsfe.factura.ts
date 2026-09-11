@@ -15,14 +15,16 @@ import { tenantScope } from "../../utils/tenantScope";
 
 export async function obtenerUltimoComprobanteAFIP({
   cuit,
+  arcaConfigId,
   puntoVenta,
   tipoComprobante,
 }: {
   cuit: string;
+  arcaConfigId?: string;
   puntoVenta: number;
   tipoComprobante: number;
 }): Promise<number> {
-  const { token, sign } = await getValidToken();
+  const { token, sign } = await getValidToken(arcaConfigId);
 
   const soapEnvelope = `
   <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ar="http://ar.gov.afip.dif.FEV1/">
@@ -78,6 +80,7 @@ export async function obtenerUltimoComprobanteAFIP({
 export async function emitirFacturaAFIP({
   saleId,
   cuit,
+  arcaConfigId,
   // lo dejamos para no romper llamadas existentes, pero NO lo usamos
   puntoVenta: _puntoVenta,
   tipoComprobante,
@@ -88,6 +91,7 @@ export async function emitirFacturaAFIP({
 }: {
   saleId: string;
   cuit: string;
+  arcaConfigId?: string;
   puntoVenta: number;
   tipoComprobante: number;
   tipoDoc: number;
@@ -117,6 +121,7 @@ export async function emitirFacturaAFIP({
   // ✅ 1) SIEMPRE tomar el número desde AFIP para evitar 10016
   const ultimoAfip = await obtenerUltimoComprobanteAFIP({
     cuit,
+    arcaConfigId,
     puntoVenta,
     tipoComprobante,
   });
@@ -125,13 +130,13 @@ export async function emitirFacturaAFIP({
   // ✅ 1b) Sync contador local si quedó atrás (evita que tu cbteCounter te vuelva a dar números viejos)
   try {
     // Si tu servicio no tiene esto, no rompe nada (por eso el try)
-    await cbteCounterService.commitUsed(puntoVenta, tipoComprobante, ultimoAfip);
+    await cbteCounterService.commitUsed(puntoVenta, tipoComprobante, ultimoAfip, arcaConfigId);
   } catch (e) {
     console.warn("⚠️ No pude sincronizar cbteCounterService con AFIP (no es crítico):", (e as any)?.message || e);
   }
 
   // 2) Token/sign
-  const { token, sign } = await getValidToken();
+  const { token, sign } = await getValidToken(arcaConfigId);
 
   // 3) Importes
   let neto = importe;
@@ -272,6 +277,7 @@ export async function emitirFacturaAFIP({
       where: { id: existingBySale.id },
       data: {
         cuit,
+        arcaConfigId,
         puntoVenta,
         tipoComprobante,
         tipoDoc,
@@ -295,8 +301,13 @@ export async function emitirFacturaAFIP({
     });
   } else {
     // 8b) Si no existe por saleId, puede existir por cbte (puntoVenta+tipoComprobante+numero)
+    // cuit incluido en el where: con multi-facturacion, distintos duenos
+    // (CUIT) del mismo tenant pueden reutilizar el mismo numero de punto de
+    // venta -- sin este filtro, el comprobante de un dueno podria pisar/
+    // "conflictuar" con el de otro por casualidad numerica.
     const existingByCbte = await prisma.invoiceAfip.findFirst({
       where: {
+        cuit,
         puntoVenta,
         tipoComprobante,
         numero: siguiente,
@@ -316,8 +327,9 @@ export async function emitirFacturaAFIP({
       factura = await prisma.invoiceAfip.update({
         where: { id: existingByCbte.id },
         data: {
-          sale: { connect: { id: saleId } },
+          saleId,
           cuit,
+          arcaConfigId,
           tipoDoc,
           nroDoc: BigInt(nroDoc),
           fechaEmision: new Date(),
@@ -343,6 +355,7 @@ export async function emitirFacturaAFIP({
           saleId,
           tenantId: currentTenantId(),
           cuit,
+          arcaConfigId,
           puntoVenta,
           tipoComprobante,
           tipoDoc,
@@ -369,7 +382,7 @@ export async function emitirFacturaAFIP({
 
   // 9) SOLO si aprobó: marcar facturada + confirmar contador
   if (resultado === "A" && cae) {
-    await cbteCounterService.commitUsed(puntoVenta, tipoComprobante, siguiente);
+    await cbteCounterService.commitUsed(puntoVenta, tipoComprobante, siguiente, arcaConfigId);
 
     await prisma.sale.update({
       where: { id: saleId },

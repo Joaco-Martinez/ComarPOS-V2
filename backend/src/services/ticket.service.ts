@@ -314,8 +314,8 @@ function buildTicketPayload(sale: any, tenant: any, arcaConfig: any) {
     // lo cachea en flash, no se manda de nuevo en cada ticket.
     business: {
       name: tenant?.ticketBusinessName || tenant?.name || process.env.BUSINESS_NAME || "Mi Negocio",
-      cuit: tenant?.ticketCuit || process.env.BUSINESS_CUIT || "",
-      address: tenant?.ticketAddress || process.env.BUSINESS_ADDRESS || "",
+      cuit: arcaConfig?.cuit || tenant?.ticketCuit || process.env.BUSINESS_CUIT || "",
+      address: arcaConfig?.fiscalAddress || tenant?.ticketAddress || process.env.BUSINESS_ADDRESS || "",
       phone: tenant?.ticketPhone || process.env.BUSINESS_PHONE || "",
       // Estos 3 solo existen en ArcaConfig (no hay campo espejo en Tenant,
       // a diferencia de name/cuit/address/phone) -- sin ArcaConfig
@@ -324,6 +324,11 @@ function buildTicketPayload(sale: any, tenant: any, arcaConfig: any) {
       ivaCondition: arcaConfig?.ivaCondition || "",
       iibb: arcaConfig?.iibb || "",
       activityStart: arcaConfig?.activityStart ? formatFechaCorta(arcaConfig.activityStart) : "",
+      // cuit/address: prioridad al ArcaConfig del dueno que REALMENTE
+      // facturo esta venta puntual (ver printSaleTicket, que ahora resuelve
+      // arcaConfig por invoiceAfip.arcaConfigId en vez de "la" config unica
+      // del tenant) -- Tenant.ticketCuit/ticketAddress quedan solo como
+      // fallback para tickets no fiscales o tenants sin ARCA configurado.
       logoUrl: tenant?.logoUrl || null,
       // Bitmap ESC/POS ya listo para imprimir (ver logoRaster.service.ts).
       // Solo viaja si el tenant subió un logo -- el printbox lo cachea y
@@ -485,9 +490,19 @@ export const ticketService = {
       throw new Error("Venta no encontrada");
     }
 
-    // getConfig() usa tenantScope() (currentTenantId() de la request) --
-    // no hace falta pasarle el tenantId de la venta a mano.
-    const arcaConfig = await arcaConfigService.getConfig().catch(() => null);
+    // Multi-facturacion: el ticket tiene que mostrar el CUIT/condicion IVA
+    // del dueno que REALMENTE facturo esta venta (InvoiceAfip.arcaConfigId),
+    // no "la" config generica del tenant -- dos dueños del mismo negocio
+    // tienen CUIT distinto. Si la venta todavia no esta facturada (ticket no
+    // fiscal, o eligieron un dueno en el modal pero AFIP esta en cola de
+    // reintento) cae a Sale.requestedArcaConfigId y despues al fallback de
+    // siempre (getConfig(), que usa tenantScope() / currentTenantId()).
+    const invoicingArcaConfigId = sale.invoiceAfip?.arcaConfigId ?? sale.requestedArcaConfigId ?? null;
+    const arcaConfig = invoicingArcaConfigId
+      ? await arcaConfigService
+          .getConfigById(invoicingArcaConfigId)
+          .catch(() => arcaConfigService.getConfig().catch(() => null))
+      : await arcaConfigService.getConfig().catch(() => null);
     const payload = buildTicketPayload(sale, sale.tenant, arcaConfig);
 
     if (sale.tenantId) {

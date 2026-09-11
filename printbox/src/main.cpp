@@ -89,8 +89,8 @@ enum class DeviceStatus { BOOTING, PAIRING, CONNECTING, READY, PRINTING, ERROR_ 
   // muchos DevKitV1 de 30 pines estan reservados para el PSRAM/flash
   // (variante WROVER) o directamente no salen al header. 25/26/27 son
   // GPIO de proposito general sin restricciones de boot en esta placa.
-  #define LED_RED_PIN   25
-  #define LED_BLUE_PIN  26
+  #define LED_RED_PIN   26
+  #define LED_BLUE_PIN  25
   #define LED_GREEN_PIN 27
 #else
   #define LED_RED_PIN   15

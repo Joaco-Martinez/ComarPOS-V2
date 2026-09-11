@@ -205,6 +205,24 @@ export const platformTenantService = {
   },
 
   /**
+   * Prende/apaga multi-facturacion (hasta 4 ArcaConfig/duenos-CUIT) para UN
+   * tenant puntual. Mismo criterio que setPosCheckoutModal: no es un modulo
+   * de navConfig.ts, sin cache propio (se lee en vivo via billing.service.ts
+   * #getStatus). Apagarlo no borra ArcaConfig ya cargados -- solo bloquea
+   * cargar uno nuevo mas alla del primero (ver arcaConfig.core.ts) y oculta
+   * los selectores de dueno en ventas/compras.
+   */
+  async setMultiInvoicing(id: string, enabled: boolean) {
+    const tenant = await prisma.tenant.update({
+      where: { id },
+      data: { multiInvoicingEnabled: enabled },
+      select: { multiInvoicingEnabled: true },
+    });
+
+    return tenant;
+  },
+
+  /**
    * Alta manual desde el panel de super-admin. A diferencia del alta
    * self-service (trialSignup.service.ts), este tenant arranca directo en
    * subscriptionStatus=ACTIVE (nunca TRIAL) y sin paidUntil -- getTenantBlock
