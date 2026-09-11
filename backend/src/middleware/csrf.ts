@@ -15,7 +15,10 @@ function csrfCookieOptions() {
     sameSite: isProd ? ("none" as const) : ("lax" as const),
     domain: isProd ? COOKIE_DOMAIN : undefined,
     path: "/",
-    maxAge: 24 * 60 * 60 * 1000,
+    // Debe vivir al menos tanto como la cookie de sesion mas larga
+    // (auth.service.ts, 30 dias) -- si expira antes, el primer POST/PUT/DELETE
+    // con sesion todavia valida pegaria un 403 CSRF_TOKEN_INVALID.
+    maxAge: 30 * 24 * 60 * 60 * 1000,
   };
 }
 
