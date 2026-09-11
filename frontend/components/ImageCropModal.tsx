@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Cropper from 'react-easy-crop';
 import { X, ZoomIn, Check } from 'lucide-react';
 
@@ -118,7 +119,13 @@ export default function ImageCropModal({
 
   if (!open || !imageUrl) return null;
 
-  return (
+  // Portal a document.body: igual que SkuScannerModal, se abre casi siempre
+  // anidado dentro de OTRO modal (el de alta/edición de producto), y
+  // renderizado inline ahi queda atrapado por el mismo problema de
+  // containing-block documentado en productos/page.tsx.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -169,6 +176,7 @@ export default function ImageCropModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

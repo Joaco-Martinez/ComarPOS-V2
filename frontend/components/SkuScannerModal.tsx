@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, ScanBarcode, X } from 'lucide-react';
 
 let instanceCounter = 0;
@@ -112,7 +113,13 @@ export default function SkuScannerModal({ open, onClose, onDetected, title = 'Es
 
   if (!open) return null;
 
-  return (
+  // Portal a document.body: este modal se abre casi siempre anidado dentro
+  // de OTRO modal (ej. el de alta de producto) -- renderizado inline ahi
+  // queda atrapado por el mismo problema de containing-block que documenta
+  // productos/page.tsx, y no llega a cubrir toda la pantalla.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div className="modal-overlay" onClick={handleClose}>
       <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -149,6 +156,7 @@ export default function SkuScannerModal({ open, onClose, onDetected, title = 'Es
           <button onClick={handleClose} className="btn btn-secondary btn-sm">Cancelar</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

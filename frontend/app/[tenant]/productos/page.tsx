@@ -3,6 +3,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
 import ImageCropModal, { PRODUCT_IMAGE_SIZE } from '@/components/ImageCropModal';
@@ -488,7 +489,16 @@ export default function ProductosPage() {
       </div>
 
       {/* Create/Edit Modal */}
-      {modal && (
+      {/* Portal a document.body: renderizado inline (como el resto de los
+          modales de esta página) queda anidado dentro de #main-content/<main>,
+          y por algún ancestro intermedio (sin identificar del todo, mismo
+          problema que ya documentado más abajo con .bottom-nav) el
+          position:fixed del overlay no termina cubriendo el viewport
+          completo -- se ve el header de la página (título, botones,
+          campanita) por encima del modal en vez de tapado. Portalear al
+          <body>, como ya hace HelpCenter.tsx, sortea esos ancestros y deja
+          el overlay realmente fijo contra el viewport. */}
+      {modal && typeof document !== 'undefined' && createPortal(
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal modal-lg modal-mobile-full" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -712,7 +722,8 @@ export default function ProductosPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <SkuScannerModal
