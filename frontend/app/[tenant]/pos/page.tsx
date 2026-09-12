@@ -82,6 +82,7 @@ export default function PosPage() {
   const [kgModal, setKgModal] = useState<KgModal>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [successMsg, setSuccessMsg] = useState('');
+  const [cartWarning, setCartWarning] = useState('');
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [mobileCartStep, setMobileCartStep] = useState<'items' | 'checkout'>('items');
 
@@ -232,10 +233,33 @@ export default function PosPage() {
     return num(p.saleUnit === 'KG' ? row.quantityKg : row.quantity);
   };
 
-  const addToCart = (product: Product, priceType: QuickPriceType) => {
+  // Cantidad de un producto ya cargada en el carrito, sumando todas sus
+  // líneas (puede estar repetido con distinto priceType) -- para saber
+  // cuánto más se puede agregar sin pasarse del stock disponible.
+  const cartQtyForProduct = (productId: string) => cart.reduce((acc, item) => {
+    if (item.product.id !== productId) return acc;
+    return acc + (item.product.saleUnit === 'KG' ? num(item.quantityKg) : item.quantity);
+  }, 0);
+
+  const warnNoStock = (name: string, available: number) => {
+    setCartWarning(`No hay más stock de "${name}" (disponible: ${available})`);
+    window.setTimeout(() => setCartWarning(''), 2500);
+  };
+
+  // Devuelve false si no agregó nada (sin stock) -- los llamadores que dan
+  // feedback de éxito (scanner, lector físico) necesitan saber si en
+  // realidad no pasó nada.
+  const addToCart = (product: Product, priceType: QuickPriceType): boolean => {
     if (product.saleUnit === 'KG') {
       setKgModal({ product, qty: '', priceType });
-      return;
+      return true;
+    }
+    if (!product.isService && !product.unlimitedStock) {
+      const available = productStock(product);
+      if (cartQtyForProduct(product.id) + 1 > available) {
+        warnNoStock(product.name, available);
+        return false;
+      }
     }
     // Si hay una lista de precios elegida con override para este producto,
     // se fija ese precio al agregarlo (mismo mecanismo que ya usaba el
@@ -251,12 +275,20 @@ export default function PosPage() {
       }
       return [...prev, { product, quantity: 1, priceType, ...(override !== undefined ? { manualPrice: override } : {}) }];
     });
+    return true;
   };
 
   const confirmKgAdd = () => {
     if (!kgModal) return;
     const qty = parseFloat(kgModal.qty);
     if (!qty || qty <= 0) { setKgModal(null); return; }
+    if (!kgModal.product.isService && !kgModal.product.unlimitedStock) {
+      const available = productStock(kgModal.product);
+      if (cartQtyForProduct(kgModal.product.id) + qty > available) {
+        warnNoStock(kgModal.product.name, available);
+        return;
+      }
+    }
     const override = priceOverrides[kgModal.product.id]?.pricePerKg ?? undefined;
     setCart((prev) => {
       const idx = prev.findIndex((i) => i.product.id === kgModal.product.id && i.priceType === kgModal.priceType);
@@ -319,7 +351,7 @@ export default function PosPage() {
     const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
     if (!product || product.isService) return false;
 
-    addToCart(product, 'price');
+    if (!addToCart(product, 'price')) return false;
     if (product.saleUnit !== 'KG') {
       setSuccessMsg(`Agregado: ${product.name}`);
       window.setTimeout(() => setSuccessMsg(''), 1200);
@@ -408,7 +440,12 @@ export default function PosPage() {
     }
 
     setScannerError('');
-    addToCart(product, 'price');
+    if (!addToCart(product, 'price')) {
+      // Sin stock: addToCart ya mostró el aviso (cartWarning) -- solo
+      // permitimos reintentar con otro código.
+      scannerHandledRef.current = false;
+      return;
+    }
 
     // Productos por KG necesitan cantidad manual: cerramos el scanner para
     // no tapar el modal de cantidad. Los demás siguen escaneándose seguido.
@@ -481,11 +518,21 @@ export default function PosPage() {
   }, [skuScannerOpen]);
 
   const updateQty = (idx: number, delta: number) => {
+    const current = cart[idx];
+    if (!current) return;
+    const newQty = current.quantity + delta;
+    if (delta > 0 && newQty > 0 && !current.product.isService && !current.product.unlimitedStock) {
+      const available = productStock(current.product);
+      if (cartQtyForProduct(current.product.id) + delta > available) {
+        warnNoStock(current.product.name, available);
+        return;
+      }
+    }
     setCart((prev) => {
       const next = [...prev];
-      const newQty = next[idx].quantity + delta;
-      if (newQty <= 0) return prev.filter((_, i) => i !== idx);
-      next[idx] = { ...next[idx], quantity: newQty };
+      const qty = next[idx].quantity + delta;
+      if (qty <= 0) return prev.filter((_, i) => i !== idx);
+      next[idx] = { ...next[idx], quantity: qty };
       return next;
     });
   };
@@ -728,6 +775,18 @@ export default function PosPage() {
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <Check size={16} /> {successMsg}
+        </div>
+      )}
+
+      {cartWarning && (
+        <div style={{
+          position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 14px)', left: '50%', transform: 'translateX(-50%)', zIndex: 200,
+          background: 'rgba(230,80,80,0.15)', border: '1px solid rgba(230,80,80,0.4)',
+          color: 'var(--danger)', borderRadius: 8, padding: '10px 22px',
+          fontSize: 14, fontWeight: 600, animation: 'fadeIn 0.3s ease',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <AlertTriangle size={16} /> {cartWarning}
         </div>
       )}
 
