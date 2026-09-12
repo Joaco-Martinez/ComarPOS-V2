@@ -310,7 +310,22 @@ export default function PosPage() {
   // Lectores de código de barra físicos (USB/bluetooth) actúan como teclado:
   // "tipean" el código y mandan Enter al final. Como el SKU es lo que se
   // imprime como código de barra (ver barcode.service.ts), alcanza con
-  // escuchar el Enter sobre el buscador y matchear por SKU exacto.
+  // matchear por SKU exacto lo que hayan tipeado. Devuelve true si encontró
+  // y agregó el producto.
+  const addProductBySku = (rawSku: string) => {
+    const sku = rawSku.trim();
+    if (!sku) return false;
+    const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
+    if (!product || product.isService) return false;
+
+    addToCart(product, 'price');
+    if (product.saleUnit !== 'KG') {
+      setSuccessMsg(`Agregado: ${product.name}`);
+      window.setTimeout(() => setSuccessMsg(''), 1200);
+    }
+    return true;
+  };
+
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
     const sku = search.trim();
@@ -330,17 +345,46 @@ export default function PosPage() {
       return;
     }
 
-    const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
-    if (!product || product.isService) return;
-
+    if (!addProductBySku(sku)) return;
     e.preventDefault();
-    addToCart(product, 'price');
     setSearch('');
-    if (product.saleUnit !== 'KG') {
-      setSuccessMsg(`Agregado: ${product.name}`);
-      window.setTimeout(() => setSuccessMsg(''), 1200);
-    }
   };
+
+  // Escaneo sin tener que clickear el buscador primero: mientras no haya
+  // foco en un campo editable (input/textarea/select), un lector físico que
+  // "tipea" rapidísimo un código y Enter igual llega acá por bubbling al
+  // window, así que lo bufferizamos y lo resolvemos igual que el buscador.
+  useEffect(() => {
+    const physicalScanBuffer = { current: '', lastAt: 0 };
+
+    const isEditableTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (skuScannerOpen || checkoutModalOpen || kgModal || isEditableTarget(e.target)) return;
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      const now = Date.now();
+      // Más de 400ms entre teclas: no es un lector (tipeo humano), reiniciar.
+      if (now - physicalScanBuffer.lastAt > 400) physicalScanBuffer.current = '';
+      physicalScanBuffer.lastAt = now;
+
+      if (e.key === 'Enter') {
+        const scanned = physicalScanBuffer.current;
+        physicalScanBuffer.current = '';
+        if (scanned && addProductBySku(scanned)) e.preventDefault();
+        return;
+      }
+      if (e.key.length === 1) physicalScanBuffer.current += e.key;
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [skuScannerOpen, checkoutModalOpen, kgModal, products, priceOverrides]);
 
   const handleScannedSku = async (rawSku: string) => {
     const sku = rawSku.trim();
