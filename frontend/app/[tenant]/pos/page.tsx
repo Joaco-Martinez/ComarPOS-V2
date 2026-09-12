@@ -74,6 +74,9 @@ export default function PosPage() {
   // Cuanto pago el cliente en modo "Un método" dentro del modal -- el modo
   // "Varios métodos" ya trackea montos por método en `payments`/`totalPaid`.
   const [modalAmount, setModalAmount] = useState('');
+  // Si imprimir ticket al confirmar la venta desde el modal de cobro rapido
+  // (atajo de Enter) -- default Sí, es el caso comun.
+  const [wantsTicket, setWantsTicket] = useState(true);
 
   const [kgModal, setKgModal] = useState<KgModal>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
@@ -311,7 +314,22 @@ export default function PosPage() {
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
     const sku = search.trim();
-    if (!sku) return;
+
+    // Buscador vacío + Enter: ya terminó de escanear productos, así que este
+    // Enter es el atajo para abrir el modal de cobro rápido (método de pago +
+    // ¿imprimir ticket?) en vez de agregar algo al carrito.
+    if (!sku) {
+      if (cart.length === 0 || submitting || checkoutModalOpen) return;
+      e.preventDefault();
+      setPaymentMode('single');
+      setPaymentMethod('EFECTIVO');
+      setPayments([{ method: 'EFECTIVO', amount: 0 }]);
+      setModalAmount('');
+      setWantsTicket(true);
+      setCheckoutModalOpen(true);
+      return;
+    }
+
     const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
     if (!product || product.isService) return;
 
@@ -493,6 +511,10 @@ export default function PosPage() {
     : payments.reduce((a, p) => a + num(p.amount), 0);
   const change = paymentMode === 'multi' ? Math.max(0, totalPaid - total) : 0;
 
+  const checkoutSubmitDisabled = submitting
+    || (paymentMode === 'single' && paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient)
+    || (paymentMode === 'multi' && totalPaid < total && !selectedClient);
+
   const addPaymentMethod = () => {
     setPayments((p) => [...p, { method: 'EFECTIVO', amount: 0 }]);
   };
@@ -526,6 +548,7 @@ export default function PosPage() {
     setDeliveryAmountInput('');
     setCheckoutModalOpen(false);
     setModalAmount('');
+    setWantsTicket(true);
     searchRef.current?.focus();
   };
 
@@ -571,7 +594,16 @@ export default function PosPage() {
         }),
       };
 
-      await api.post('/sales', body);
+      const { data: newSale } = await api.post('/sales', body);
+
+      if (status === 'COMPLETED' && wantsTicket) {
+        try {
+          await api.post(`/tickets/sale/${newSale.id}/print`);
+        } catch (printErr: any) {
+          alert(printErr?.response?.data?.error ?? printErr?.response?.data?.message ?? 'La venta se registró pero no se pudo imprimir el ticket.');
+        }
+      }
+
       setSuccessMsg(status === 'PENDING' ? `Venta guardada como pendiente — ${fmtMoney(total)}` : `Venta registrada — ${fmtMoney(total)}`);
       resetPOS();
       setTimeout(() => setSuccessMsg(''), 3000);
@@ -1226,6 +1258,7 @@ export default function PosPage() {
                     setPaymentMethod('EFECTIVO');
                     setPayments([{ method: 'EFECTIVO', amount: 0 }]);
                     setModalAmount('');
+                    setWantsTicket(true);
                     setCheckoutModalOpen(true);
                     return;
                   }
@@ -1271,7 +1304,16 @@ export default function PosPage() {
       {/* Modal de cobro (posCheckoutModalEnabled): metodo + monto recibido + vuelto */}
       {checkoutModalOpen && (
         <div className="modal-overlay" onClick={() => !submitting && setCheckoutModalOpen(false)}>
-          <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal"
+            style={{ maxWidth: 380 }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || checkoutSubmitDisabled) return;
+              e.preventDefault();
+              submitSale('COMPLETED');
+            }}
+          >
             <div className="modal-header">
               <span style={{ fontSize: 15, fontWeight: 700 }}>Cobrar</span>
               <button onClick={() => setCheckoutModalOpen(false)} disabled={submitting} className="btn btn-ghost btn-xs"><X size={14} /></button>
@@ -1328,7 +1370,11 @@ export default function PosPage() {
                           onChange={(e) => setModalAmount(e.target.value)}
                           placeholder={fmtMoney(total).replace('$', '')}
                           style={{ fontSize: 20, fontWeight: 700, padding: '10px 12px', fontFamily: 'var(--mono)' }}
-                          onKeyDown={(e) => e.key === 'Enter' && num(modalAmount) >= total && submitSale('COMPLETED')}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            e.stopPropagation();
+                            if (num(modalAmount) >= total) submitSale('COMPLETED');
+                          }}
                         />
                       </div>
                       {num(modalAmount) > 0 && (
@@ -1394,16 +1440,34 @@ export default function PosPage() {
                   )}
                 </>
               )}
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">¿Imprimir ticket?</label>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => setWantsTicket(true)}
+                    className={`btn btn-xs ${wantsTicket ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ flex: 1 }}
+                  >
+                    Sí
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWantsTicket(false)}
+                    className={`btn btn-xs ${!wantsTicket ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ flex: 1 }}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
             </div>
             <div className="modal-footer">
               <button onClick={() => setCheckoutModalOpen(false)} disabled={submitting} className="btn btn-secondary btn-sm">Cancelar</button>
               <button
                 onClick={() => submitSale('COMPLETED')}
-                disabled={
-                  submitting ||
-                  (paymentMode === 'single' && paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient) ||
-                  (paymentMode === 'multi' && totalPaid < total && !selectedClient)
-                }
+                disabled={checkoutSubmitDisabled}
                 className="btn btn-primary btn-sm"
                 style={{ gap: 6 }}
               >
