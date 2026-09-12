@@ -451,8 +451,9 @@ export const productController = {
     try {
       const productIds = parseIdsParam(req.query.productIds);
       const quantities = parseQuantitiesParam(req.query.quantities);
+      const sizes = parseQuantitiesParam(req.query.sizes) as Record<string, string> | undefined;
 
-      const buffer = await barcodeService.exportPdf({ productIds, quantities });
+      const buffer = await barcodeService.exportPdf({ productIds, quantities, sizes });
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", 'attachment; filename="codigos-de-barra.pdf"');

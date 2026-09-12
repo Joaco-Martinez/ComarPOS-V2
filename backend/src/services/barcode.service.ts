@@ -48,24 +48,43 @@ async function getProducts(productIds?: string[]): Promise<BarcodeProduct[]> {
     }));
 }
 
-// Grilla de etiquetas: 3 columnas por hoja A4, tamano pensado para hojas de
-// stickers autoadhesivos estandar (aprox 63x38mm por etiqueta).
-const COLS = 3;
-const LABEL_W = 178;
-const LABEL_H = 108;
+// Tamanos de etiqueta disponibles (en puntos, 1mm ~= 2.83pt). "mediano" es el
+// tamano original pensado para hojas de stickers autoadhesivos estandar
+// (aprox 63x38mm) - los otros dos son variantes para productos chicos o para
+// etiquetas mas grandes con mas lugar para el nombre.
+export type LabelSize = "chico" | "mediano" | "grande";
 
-async function exportPdf(params: { productIds?: string[]; quantities?: Record<string, number> }): Promise<Buffer> {
+const LABEL_SIZES: Record<LabelSize, { w: number; h: number }> = {
+  chico: { w: 122, h: 76 }, // ~43x27mm
+  mediano: { w: 178, h: 108 }, // ~63x38mm (tamano original)
+  grande: { w: 232, h: 140 }, // ~82x49mm
+};
+
+const SIZE_ORDER: LabelSize[] = ["chico", "mediano", "grande"];
+
+function normalizeSize(value: unknown): LabelSize {
+  return value === "chico" || value === "grande" ? value : "mediano";
+}
+
+type BarcodeLabel = BarcodeProduct & { size: LabelSize };
+
+async function exportPdf(params: {
+  productIds?: string[];
+  quantities?: Record<string, number>;
+  sizes?: Record<string, string>;
+}): Promise<Buffer> {
   const products = await getProducts(params.productIds);
 
   if (products.length === 0) {
     throw new Error("No hay productos con SKU para generar códigos de barra");
   }
 
-  const labels: BarcodeProduct[] = [];
+  const labels: BarcodeLabel[] = [];
   for (const p of products) {
     const rawQty = params.quantities?.[p.id];
     const qty = Number.isFinite(Number(rawQty)) && Number(rawQty) > 0 ? Math.floor(Number(rawQty)) : 1;
-    for (let i = 0; i < qty; i++) labels.push(p);
+    const size = normalizeSize(params.sizes?.[p.id]);
+    for (let i = 0; i < qty; i++) labels.push({ ...p, size });
   }
 
   const doc = new PDFDocument({ size: "A4", margin: 20 });
@@ -75,43 +94,78 @@ async function exportPdf(params: { productIds?: string[]; quantities?: Record<st
 
   const marginX = doc.page.margins.left;
   const marginY = doc.page.margins.top;
-  const rowsPerPage = Math.floor((doc.page.height - marginY * 2) / LABEL_H);
+  const usableWidth = doc.page.width - marginX * 2;
+  const pageBottom = doc.page.height - marginY;
 
-  let col = 0;
-  let row = 0;
+  // Se agrupan las etiquetas por tamano (cada grupo arma su propia grilla de
+  // columnas) para no mezclar tamanos distintos en una misma fila.
+  const groups = SIZE_ORDER.map((size) => ({ size, items: labels.filter((l) => l.size === size) })).filter(
+    (g) => g.items.length > 0
+  );
 
-  for (const label of labels) {
-    if (row >= rowsPerPage) {
+  let y = marginY;
+
+  for (const group of groups) {
+    const { w, h } = LABEL_SIZES[group.size];
+    const cols = Math.max(1, Math.floor(usableWidth / w));
+    let col = 0;
+
+    if (y + h > pageBottom) {
       doc.addPage();
-      row = 0;
-      col = 0;
+      y = marginY;
     }
 
-    const x = marginX + col * LABEL_W;
-    const y = marginY + row * LABEL_H;
+    for (const label of group.items) {
+      if (y + h > pageBottom) {
+        doc.addPage();
+        y = marginY;
+        col = 0;
+      }
 
-    const png = await renderBarcodePng(label.sku);
+      const x = marginX + col * w;
+      await drawLabel(doc, label, x, y, w, h);
 
-    doc.rect(x, y, LABEL_W - 8, LABEL_H - 8).stroke("#dddddd");
-    doc
-      .fontSize(8)
-      .fillColor("#000")
-      .text(label.name, x + 6, y + 6, { width: LABEL_W - 20, height: 22, ellipsis: true });
-    doc.image(png, x + 10, y + 26, { width: LABEL_W - 36, height: 36 });
-    doc.fontSize(9).text(label.sku, x + 6, y + 66, { width: LABEL_W - 20, align: "center" });
-    doc
-      .fontSize(10)
-      .text(`$${label.price.toFixed(2)}`, x + 6, y + 80, { width: LABEL_W - 20, align: "center" });
-
-    col += 1;
-    if (col >= COLS) {
-      col = 0;
-      row += 1;
+      col += 1;
+      if (col >= cols) {
+        col = 0;
+        y += h;
+      }
     }
+
+    if (col !== 0) y += h; // cierra la fila parcial antes de pasar al siguiente grupo
   }
 
   doc.end();
   return finished;
+}
+
+async function drawLabel(doc: PDFKit.PDFDocument, label: BarcodeLabel, x: number, y: number, w: number, h: number) {
+  // Todo se escala en proporcion al tamano "mediano" original (108pt de alto)
+  // para que el contenido no se vea desproporcionado en etiquetas chicas o grandes.
+  const k = h / LABEL_SIZES.mediano.h;
+  const png = await renderBarcodePng(label.sku);
+
+  const nameSize = Math.max(6, Math.round(8 * k));
+  const skuSize = Math.max(6, Math.round(9 * k));
+  const priceSize = Math.max(7, Math.round(10 * k));
+  const imgHeight = Math.max(20, Math.round(36 * k));
+  const imgY = y + Math.round(26 * k);
+
+  doc.rect(x, y, w - 8, h - 8).stroke("#dddddd");
+  doc
+    .fontSize(nameSize)
+    .fillColor("#000")
+    .text(label.name, x + 6, y + 6, { width: w - 20, height: Math.round(22 * k), ellipsis: true });
+  doc.image(png, x + 10, imgY, { width: w - 36, height: imgHeight });
+  doc
+    .fontSize(skuSize)
+    .text(label.sku, x + 6, imgY + imgHeight + 4, { width: w - 20, align: "center" });
+  doc
+    .fontSize(priceSize)
+    .text(`$${label.price.toFixed(2)}`, x + 6, imgY + imgHeight + 4 + Math.round(skuSize * 1.4), {
+      width: w - 20,
+      align: "center",
+    });
 }
 
 async function exportExcel(params: { productIds?: string[] }): Promise<ExcelJS.Buffer> {

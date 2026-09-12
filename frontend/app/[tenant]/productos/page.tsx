@@ -25,6 +25,13 @@ const emptyForm = {
 
 type Form = typeof emptyForm;
 
+type BarcodeSize = 'chico' | 'mediano' | 'grande';
+const BARCODE_SIZE_LABELS: Record<BarcodeSize, string> = {
+  chico: 'Chico',
+  mediano: 'Mediano',
+  grande: 'Grande',
+};
+
 export default function ProductosPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -61,6 +68,7 @@ export default function ProductosPage() {
   const [barcodeModal, setBarcodeModal] = useState(false);
   const [barcodeSelected, setBarcodeSelected] = useState<Record<string, boolean>>({});
   const [barcodeQty, setBarcodeQty] = useState<Record<string, string>>({});
+  const [barcodeSize, setBarcodeSize] = useState<Record<string, BarcodeSize>>({});
   const [barcodeSearch, setBarcodeSearch] = useState('');
   const [barcodeDownloading, setBarcodeDownloading] = useState<'pdf' | 'excel' | null>(null);
 
@@ -263,9 +271,11 @@ export default function ProductosPage() {
   const openBarcodeModal = () => {
     const selected: Record<string, boolean> = {};
     const qty: Record<string, string> = {};
-    barcodeProducts.forEach((p) => { selected[p.id] = true; qty[p.id] = '1'; });
+    const size: Record<string, BarcodeSize> = {};
+    barcodeProducts.forEach((p) => { selected[p.id] = true; qty[p.id] = '1'; size[p.id] = 'mediano'; });
     setBarcodeSelected(selected);
     setBarcodeQty(qty);
+    setBarcodeSize(size);
     setBarcodeSearch('');
     setBarcodeModal(true);
   };
@@ -291,8 +301,13 @@ export default function ProductosPage() {
       const params: Record<string, string> = { productIds: barcodeSelectedIds.join(',') };
       if (type === 'pdf') {
         const quantities: Record<string, number> = {};
-        barcodeSelectedIds.forEach((id) => { quantities[id] = Math.max(1, num(barcodeQty[id] ?? '1') || 1); });
+        const sizes: Record<string, BarcodeSize> = {};
+        barcodeSelectedIds.forEach((id) => {
+          quantities[id] = Math.max(1, num(barcodeQty[id] ?? '1') || 1);
+          sizes[id] = barcodeSize[id] ?? 'mediano';
+        });
         params.quantities = JSON.stringify(quantities);
+        params.sizes = JSON.stringify(sizes);
       }
       const res = await api.get(`/products/barcodes/${type === 'pdf' ? 'pdf' : 'excel'}`, {
         params,
@@ -812,7 +827,7 @@ export default function ProductosPage() {
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>
-                Elegí los productos y cuántas etiquetas de cada uno querés imprimir. Solo se listan los productos activos con SKU cargado.
+                Elegí los productos, el tamaño de etiqueta y cuántas querés imprimir de cada uno. Solo se listan los productos activos con SKU cargado.
               </p>
               <input
                 value={barcodeSearch}
@@ -851,6 +866,19 @@ export default function ProductosPage() {
                           <td style={{ padding: '6px 8px', fontSize: 12 }}>
                             <div style={{ fontWeight: 600, color: 'var(--text)' }}>{p.name}</div>
                             <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text3)' }}>{p.sku}</div>
+                          </td>
+                          <td style={{ padding: '6px 8px', width: 100 }}>
+                            <select
+                              value={barcodeSize[p.id] ?? 'mediano'}
+                              disabled={!barcodeSelected[p.id]}
+                              onChange={(e) => setBarcodeSize((prev) => ({ ...prev, [p.id]: e.target.value as BarcodeSize }))}
+                              style={{ width: '100%', fontSize: 11 }}
+                              title="Tamaño de la etiqueta"
+                            >
+                              {(Object.keys(BARCODE_SIZE_LABELS) as BarcodeSize[]).map((s) => (
+                                <option key={s} value={s}>{BARCODE_SIZE_LABELS[s]}</option>
+                              ))}
+                            </select>
                           </td>
                           <td style={{ padding: '6px 8px', width: 90, textAlign: 'right' }}>
                             <input
