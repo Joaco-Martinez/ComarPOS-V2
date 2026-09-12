@@ -62,6 +62,7 @@ export default function PosPage() {
   const [discountType, setDiscountType] = useState<DiscountType>('PERCENTAGE');
   const [discountValue, setDiscountValue] = useState('');
   const [discountMode, setDiscountMode] = useState<'DISCOUNT' | 'SURCHARGE'>('DISCOUNT');
+  const [promoPreview, setPromoPreview] = useState<{ id: string; name: string; discount: number } | null>(null);
   const [paymentMode, setPaymentMode] = useState<'single' | 'multi'>('single');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
   const [payments, setPayments] = useState<SalePayment[]>([{ method: 'EFECTIVO', amount: 0 }]);
@@ -544,7 +545,50 @@ export default function PosPage() {
     return Math.min(amount, subtotal);
   }, [subtotal, discountType, discountValue, discountMode]);
 
-  const total = Math.max(0, subtotal - discountAmount);
+  // Preview de la promoción automática que el backend va a aplicar al
+  // confirmar (ver promotionService.applyToCart en sale.create.ts) — sin
+  // esto el POS no mostraba ningún aviso y el descuento aparecía "de la
+  // nada" recién en el ticket. Solo corre cuando no hay descuento manual
+  // cargado, igual que la condición del backend (son excluyentes).
+  const deliverySubtotal = cart
+    .filter((i) => i.product.sku === DELIVERY_SKU)
+    .reduce((acc, item) => acc + (item.manualPrice ?? productPrice(item.product, item.priceType)) * item.quantity, 0);
+  const promoBaseSubtotal = subtotal - deliverySubtotal;
+  const cartProductIds = useMemo(() => cart.map((i) => i.product.id), [cart]);
+  const cartCategoryIds = useMemo(
+    () => [...new Set(cart.map((i) => i.product.categoryId).filter((id): id is string => !!id))],
+    [cart]
+  );
+
+  useEffect(() => {
+    if (num(discountValue) > 0 || promoBaseSubtotal <= 0) {
+      setPromoPreview(null);
+      return;
+    }
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const { data } = await api.post('/promotions/apply', {
+          cartTotal: promoBaseSubtotal,
+          productIds: cartProductIds,
+          categoryIds: cartCategoryIds,
+          clientCategory: selectedClient?.category ?? undefined,
+        });
+        if (cancelled) return;
+        setPromoPreview(
+          data.bestPromotion && data.discount > 0
+            ? { id: data.bestPromotion.id, name: data.bestPromotion.name, discount: data.discount }
+            : null
+        );
+      } catch {
+        if (!cancelled) setPromoPreview(null);
+      }
+    }, 300);
+    return () => { cancelled = true; window.clearTimeout(timeoutId); };
+  }, [discountValue, promoBaseSubtotal, cartProductIds, cartCategoryIds, selectedClient]);
+
+  const promoDiscount = promoPreview?.discount ?? 0;
+  const total = Math.max(0, subtotal - discountAmount - promoDiscount);
 
   // Modo simple (default): un solo método, se asume que cubre el total exacto
   // (o queda todo como deuda si es cuenta corriente) - no hace falta tipear
@@ -593,6 +637,7 @@ export default function PosPage() {
     setCheckoutModalOpen(false);
     setModalAmount('');
     setWantsTicket(true);
+    setPromoPreview(null);
     searchRef.current?.focus();
   };
 
@@ -1180,6 +1225,12 @@ export default function PosPage() {
                       <span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(ivaAmt)}</span>
                     </div>
                   ))}
+                  {promoPreview && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--success)' }}>
+                      <span>Promo: {promoPreview.name}</span>
+                      <span style={{ fontFamily: 'var(--mono)' }}>−{fmtMoney(promoPreview.discount)}</span>
+                    </div>
+                  )}
                   {discountAmount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--warn)' }}>
                       <span>Descuento</span>
@@ -1367,9 +1418,17 @@ export default function PosPage() {
               <button onClick={() => setCheckoutModalOpen(false)} disabled={submitting} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 13, color: 'var(--text3)' }}>Total a cobrar</span>
-                <span style={{ fontSize: 24, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--accent)' }}>{fmtMoney(total)}</span>
+              <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text3)' }}>Total a cobrar</span>
+                  <span style={{ fontSize: 24, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--accent)' }}>{fmtMoney(total)}</span>
+                </div>
+                {promoPreview && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--success)', marginTop: 4 }}>
+                    <span>Promo aplicada: {promoPreview.name}</span>
+                    <span style={{ fontFamily: 'var(--mono)' }}>−{fmtMoney(promoPreview.discount)}</span>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: 4 }}>
