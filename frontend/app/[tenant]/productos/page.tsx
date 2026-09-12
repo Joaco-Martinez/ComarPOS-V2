@@ -286,6 +286,12 @@ export default function ProductosPage() {
     setBarcodeSelected(next);
   };
 
+  const applyBarcodeSizeToAll = (size: BarcodeSize) => {
+    const next: Record<string, BarcodeSize> = { ...barcodeSize };
+    barcodeFiltered.forEach((p) => { next[p.id] = size; });
+    setBarcodeSize(next);
+  };
+
   const barcodeSelectedIds = useMemo(
     () => Object.entries(barcodeSelected).filter(([, v]) => v).map(([id]) => id),
     [barcodeSelected]
@@ -844,6 +850,22 @@ export default function ProductosPage() {
                   Seleccionar todos
                 </label>
                 <span>· {barcodeSelectedIds.length} seleccionados</span>
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  Tamaño para todos:
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) applyBarcodeSizeToAll(e.target.value as BarcodeSize);
+                      e.target.value = '';
+                    }}
+                    style={{ fontSize: 11 }}
+                  >
+                    <option value="" disabled>Elegir...</option>
+                    {(Object.keys(BARCODE_SIZE_LABELS) as BarcodeSize[]).map((s) => (
+                      <option key={s} value={s}>{BARCODE_SIZE_LABELS[s]}</option>
+                    ))}
+                  </select>
+                </span>
               </div>
 
               <div style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid var(--border2)', borderRadius: 6 }}>
