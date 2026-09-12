@@ -84,8 +84,10 @@ export default function PosPage() {
   const [skuScannerOpen, setSkuScannerOpen] = useState(false);
   const [scannerLoading, setScannerLoading] = useState(false);
   const [scannerError, setScannerError] = useState('');
+  const [scannerFeedback, setScannerFeedback] = useState('');
   const scannerInstanceRef = useRef<any>(null);
   const scannerHandledRef = useRef(false);
+  const scannerResumeTimeoutRef = useRef<number | null>(null);
 
   const [businessLocations, setBusinessLocations] = useState<BusinessLocation[]>([]);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
@@ -267,6 +269,10 @@ export default function PosPage() {
   const stopSkuScanner = async () => {
     const scanner = scannerInstanceRef.current;
     scannerHandledRef.current = false;
+    if (scannerResumeTimeoutRef.current) {
+      window.clearTimeout(scannerResumeTimeoutRef.current);
+      scannerResumeTimeoutRef.current = null;
+    }
     if (!scanner) return;
     try {
       const state = scanner.getState?.();
@@ -285,15 +291,37 @@ export default function PosPage() {
   const closeSkuScanner = async () => {
     await stopSkuScanner();
     setScannerError('');
+    setScannerFeedback('');
     setScannerLoading(false);
     setSkuScannerOpen(false);
   };
 
   const openSkuScanner = () => {
     setScannerError('');
+    setScannerFeedback('');
     setScannerLoading(true);
     scannerHandledRef.current = false;
     setSkuScannerOpen(true);
+  };
+
+  // Lectores de código de barra físicos (USB/bluetooth) actúan como teclado:
+  // "tipean" el código y mandan Enter al final. Como el SKU es lo que se
+  // imprime como código de barra (ver barcode.service.ts), alcanza con
+  // escuchar el Enter sobre el buscador y matchear por SKU exacto.
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    const sku = search.trim();
+    if (!sku) return;
+    const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
+    if (!product || product.isService) return;
+
+    e.preventDefault();
+    addToCart(product, 'price');
+    setSearch('');
+    if (product.saleUnit !== 'KG') {
+      setSuccessMsg(`Agregado: ${product.name}`);
+      window.setTimeout(() => setSuccessMsg(''), 1200);
+    }
   };
 
   const handleScannedSku = async (rawSku: string) => {
@@ -305,17 +333,33 @@ export default function PosPage() {
 
     if (!product) {
       scannerHandledRef.current = false;
+      setScannerFeedback('');
       setScannerError(`No encontré ningún producto con SKU: ${sku}`);
       return;
     }
     if (product.isService) {
       scannerHandledRef.current = false;
+      setScannerFeedback('');
       setScannerError('Ese SKU pertenece a un servicio y no se agrega desde el scanner.');
       return;
     }
 
+    setScannerError('');
     addToCart(product, 'price');
-    await closeSkuScanner();
+
+    // Productos por KG necesitan cantidad manual: cerramos el scanner para
+    // no tapar el modal de cantidad. Los demás siguen escaneándose seguido.
+    if (product.saleUnit === 'KG') {
+      await closeSkuScanner();
+      return;
+    }
+
+    setScannerFeedback(`Agregado: ${product.name}`);
+    if (scannerResumeTimeoutRef.current) window.clearTimeout(scannerResumeTimeoutRef.current);
+    scannerResumeTimeoutRef.current = window.setTimeout(() => {
+      scannerHandledRef.current = false;
+      setScannerFeedback('');
+    }, 1200);
   };
 
   useEffect(() => {
@@ -574,6 +618,7 @@ export default function PosPage() {
                 ref={searchRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 placeholder="Buscar producto por nombre o SKU..."
                 style={{ paddingLeft: 34, paddingRight: search ? 62 : 36 }}
                 autoFocus
@@ -1428,12 +1473,17 @@ export default function PosPage() {
                   <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
                   <span>{scannerError}</span>
                 </div>
+              ) : scannerFeedback ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--success, #16a34a)', fontWeight: 600 }}>
+                  <ScanBarcode size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>{scannerFeedback}</span>
+                </div>
               ) : (
                 <p style={{ fontSize: 11, color: 'var(--text3)' }}>Tip: acercá el código, evitá reflejos y usá buena luz.</p>
               )}
             </div>
             <div className="modal-footer">
-              <button onClick={closeSkuScanner} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={closeSkuScanner} className="btn btn-secondary btn-sm">Listo</button>
             </div>
           </div>
         </div>
