@@ -594,7 +594,11 @@ export default function PosPage() {
         }),
       };
 
-      const { data: newSale } = await api.post('/sales', body);
+      // POST /sales devuelve { sale, invoice, pdfQueued } (ver
+      // sale.create.ts), no la venta directo -- ojo si se vuelve a leer esta
+      // respuesta en otro lado.
+      const { data } = await api.post('/sales', body);
+      const newSale = data.sale;
 
       if (status === 'COMPLETED' && wantsTicket) {
         try {
