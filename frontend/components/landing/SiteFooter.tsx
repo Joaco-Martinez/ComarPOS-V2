@@ -57,9 +57,15 @@ export default function SiteFooter({ productLinks }: { productLinks?: Array<{ hr
           </div>
         </div>
       </Section>
-      <Section style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+      <Section style={{ borderTop: '1px solid var(--border)', paddingTop: 20, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
           © {new Date().getFullYear()} ComarPOS · Sistema de gestión para comercios
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+          Desarrollado por{' '}
+          <a href="https://www.byjoaco.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text2)', fontWeight: 600 }}>
+            www.byjoaco.com
+          </a>
         </span>
       </Section>
     </footer>
