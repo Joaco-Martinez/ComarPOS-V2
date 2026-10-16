@@ -63,8 +63,8 @@ export default function SiteFooter({ productLinks }: { productLinks?: Array<{ hr
         </span>
         <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
           Desarrollado por{' '}
-          <a href="https://www.byjoaco.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text2)', fontWeight: 600 }}>
-            www.byjoaco.com
+          <a href="https://www.joacodev.com.ar" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text2)', fontWeight: 600 }}>
+            www.joacodev.com.ar
           </a>
         </span>
       </Section>
