@@ -133,6 +133,16 @@ export const HELP_CATEGORIES: HelpCategory[] = [
         a: 'Desde Productos → Nuevo producto: nombre, categoría, precio, si se vende por unidad o por kilo, y el stock inicial por sucursal. Un producto también puede marcarse como compuesto (hecho de otros productos) para combos o kits.',
       },
       {
+        q: '¿Cómo cargo un producto con talles, colores o sabores (variantes)?',
+        a: 'En Productos → Nuevo producto tildá "Tiene variantes" y cargá las opciones con sus valores (por ejemplo Talle: S, M, L y Color: Rojo, Negro). Se arma una variante por cada combinación, cada una con su SKU, foto y stock por sucursal.\n- Precio: se cargan el precio y el costo generales y se copian a todas las variantes. Si cambiás el de una variante queda como "personalizado" y los cambios del general ya no la pisan; "volver al precio general" lo revierte.\n- Lo común (nombre, categoría, proveedor, IVA, unidad y descripción) se edita en el producto principal y se aplica a todas.\n- Al vender, comprar o hacer un cambio elegís la variante (o escaneás su SKU). El stock, las alertas, los tickets y las facturas son por variante.\n- Agregar un valor nuevo (ej. talle XL) crea las combinaciones que faltan; quitar uno desactiva las variantes con historial y borra las que no tienen.\n- El producto principal cuenta para el límite de tu plan; las variantes no.',
+        keywords: 'variantes talle talles color colores sabor molienda combinaciones sku',
+      },
+      {
+        q: 'Ya tengo un producto cargado, ¿lo puedo pasar a variantes?',
+        a: 'Sí, con el botón "Convertir a producto con variantes" del listado de Productos. Hay dos opciones:\n- Convertirlo en la primera variante: el producto pasa a ser una de las variantes y conserva su SKU, su stock, sus ventas y movimientos; las demás combinaciones se crean sin stock.\n- Empezar de cero: se crea un producto nuevo con variantes sin stock y el original queda como está (o lo desactivás si querés).',
+        keywords: 'convertir variantes producto existente',
+      },
+      {
         q: '¿El stock es el mismo en todas las sucursales?',
         a: 'No, cada sucursal (o depósito) tiene su propio stock independiente. Un producto puede tener 10 unidades en un local y 3 en otro; las ventas y compras descuentan o suman stock solo en la sucursal elegida.',
       },
