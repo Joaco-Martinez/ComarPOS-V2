@@ -234,6 +234,7 @@ async function resolveSaleItems(
       saleUnit: true,
       isService: true,
       unlimitedStock: true,
+      ivaRate: true,
 
       price: true,
       pricePerKg: true,
@@ -358,7 +359,7 @@ async function resolveSaleItems(
       priceType: itemPriceType,
       subtotal,
       purchasePriceSnapshot,
-      ivaRate: (product as any).ivaRate ?? 21,
+      ivaRate: product.ivaRate ?? 21,
       costTotal,
       profit: 0,
       components,
