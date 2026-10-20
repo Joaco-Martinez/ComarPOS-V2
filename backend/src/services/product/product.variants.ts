@@ -384,10 +384,11 @@ export async function createParentWithVariants(params: {
     throw new Error("Un producto con variantes no puede ser COMPUESTO");
   }
 
-  // Si el front mando solo algunas combinaciones, se crean esas; si no
-  // mando ninguna, se crean todas.
+  // Si el front mando la lista de combinaciones, se crean esas; si no mando
+  // lista, se crean todas.
   const allCombos = buildCombinations(options);
-  const combos = inputs.length
+  const explicitList = params.variants !== undefined && params.variants !== null && params.variants !== "";
+  const combos = explicitList
     ? allCombos.filter((c) => Boolean(findInputFor(inputs, c, options)))
     : allCombos;
 
@@ -454,8 +455,10 @@ export async function syncVariants(
 
   const { keep, create, remove } = diffVariants(parent.variants, previousOptions, options);
 
-  // Si mandaron la lista de combinaciones, solo se crean las tildadas.
-  const toCreate = inputs.some((i) => !i.id && i.attributes)
+  // Si mandaron la lista de variantes (aunque venga vacia), solo se crean
+  // las combinaciones nuevas que vienen en ella; sin lista, se crean todas.
+  const explicitList = payload.variants !== undefined && payload.variants !== null;
+  const toCreate = explicitList
     ? create.filter((c) => Boolean(findInputFor(inputs.filter((i) => !i.id), c, options)))
     : create;
 

@@ -13,7 +13,12 @@ import type { Product, ProductCategory, Supplier, BusinessLocation } from '@/typ
 import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
-import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, Camera, AlertTriangle, ScanBarcode, Barcode, Download, FileSpreadsheet } from 'lucide-react';
+import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, Camera, AlertTriangle, ScanBarcode, Barcode, Download, FileSpreadsheet, ChevronRight, ChevronDown, Layers } from 'lucide-react';
+import type { VariantOption } from '@/types';
+import VariantOptionsEditor from '@/components/products/VariantOptionsEditor';
+import VariantGrid, { reconcileRows, rowsFromVariants, rowToVariantInput, type VariantRow } from '@/components/products/VariantGrid';
+import ConvertToVariantsModal from '@/components/products/ConvertToVariantsModal';
+import { combinationsCount, MAX_VARIANT_COMBINATIONS, matchesSearch, parentStock, priceRange, productImage, sortedVariants, valuesKey, variantValues } from '@/lib/variants';
 
 const emptyForm = {
   name: '', description: '', sku: '', type: 'SIMPLE', categoryId: '', supplierId: '',
@@ -21,6 +26,7 @@ const emptyForm = {
   price: '', purchasePrice: '',
   ivaRate: '21',
   pricePerKg: '',
+  hasVariants: 'false',
 };
 
 type Form = typeof emptyForm;
@@ -72,11 +78,18 @@ export default function ProductosPage() {
   const [barcodeSearch, setBarcodeSearch] = useState('');
   const [barcodeDownloading, setBarcodeDownloading] = useState<'pdf' | 'excel' | null>(null);
 
+  // Variantes: opciones + grilla de combinaciones del form, padres
+  // desplegados en el listado y el modal de "convertir".
+  const [variantOptions, setVariantOptions] = useState<VariantOption[]>([]);
+  const [variantRows, setVariantRows] = useState<VariantRow[]>([]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [convertTarget, setConvertTarget] = useState<Product | null>(null);
+
   const load = async () => {
     setLoading(true);
     try {
       const [pr, cr, sr, lr] = await Promise.all([
-        api.get('/products', { params: { limit: 500 } }),
+        api.get('/products', { params: { limit: 500, grouped: true } }),
         api.get('/categories'),
         api.get('/suppliers').catch(() => null),
         api.get('/business-locations', { params: { onlyActive: true } }).catch(() => null),
@@ -99,18 +112,54 @@ export default function ProductosPage() {
     return () => URL.revokeObjectURL(url);
   }, [imgFile]);
 
+  // El listado viene agrupado (?grouped=true): padres y productos simples,
+  // con las variantes adentro. La búsqueda por nombre/SKU de una variante
+  // encuentra a su padre (y lo despliega).
   const filtered = useMemo(() => {
     let p = products;
     if (catFilter) p = p.filter((x) => x.categoryId === catFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      p = p.filter((x) => x.name.toLowerCase().includes(q) || x.sku?.toLowerCase().includes(q));
-    }
+    if (search.trim()) p = p.filter((x) => matchesSearch(x, search));
     return p;
   }, [products, catFilter, search]);
 
-  const openCreate = () => { setForm(emptyForm); setEditing(null); setImgFile(null); setCropSourceFile(null); setInitialStock({}); setInitialMinStock({}); setModal('create'); };
-  const openEdit = (p: Product) => {
+  // Filas de la tabla: cada padre desplegado lleva sus variantes debajo.
+  const tableRows = useMemo(() => {
+    const searching = search.trim().length > 0;
+    return filtered.flatMap((p) => {
+      if (!p.hasVariants) return [p];
+      const open = expanded[p.id] ?? (searching && !matchesSearch({ ...p, variants: [] }, search));
+      if (!open) return [p];
+      const parentRef = { id: p.id, name: p.name, sku: p.sku, imageUrl: p.imageUrl, variantOptions: p.variantOptions, hasVariants: true };
+      return [p, ...sortedVariants(p).map((v) => ({ ...v, parent: v.parent ?? parentRef }))];
+    });
+  }, [filtered, expanded, search]);
+
+  const resetVariantState = () => { setVariantOptions([]); setVariantRows([]); };
+
+  const changeVariantOptions = (next: VariantOption[]) => {
+    setVariantOptions(next);
+    setVariantRows((prev) => reconcileRows(prev, next));
+  };
+
+  const openCreate = () => { setForm(emptyForm); setEditing(null); setImgFile(null); setCropSourceFile(null); setInitialStock({}); setInitialMinStock({}); resetVariantState(); setModal('create'); };
+  const openEdit = async (target: Product) => {
+    // Una variante se edita desde la grilla de su padre (precio, SKU, foto,
+    // activa); el padre trae todas sus variantes, incluso las inactivas.
+    let p = target;
+    if (target.parentId || target.hasVariants) {
+      try {
+        const { data } = await api.get(`/products/${target.parentId ?? target.id}`);
+        p = data;
+      } catch {
+        toast.error('No se pudo cargar el producto');
+        return;
+      }
+    }
+    resetVariantState();
+    if (p.hasVariants) {
+      setVariantOptions(p.variantOptions ?? []);
+      setVariantRows(rowsFromVariants(p));
+    }
     setEditing(p);
     setForm({
       name: p.name, description: p.description ?? '', sku: p.sku ?? '',
@@ -121,6 +170,7 @@ export default function ProductosPage() {
       purchasePrice: String(p.purchasePrice ?? ''),
       ivaRate: String((p as any).ivaRate ?? 21),
       pricePerKg: String(p.pricePerKg ?? ''),
+      hasVariants: String(Boolean(p.hasVariants)),
     });
     setImgFile(null);
     setCropSourceFile(null);
@@ -135,7 +185,8 @@ export default function ProductosPage() {
 
   const handleScannedSku = (rawSku: string) => {
     const sku = rawSku.trim().toLowerCase();
-    const found = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
+    const all = products.flatMap((p) => [p, ...(p.variants ?? [])]);
+    const found = all.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
     if (!found) {
       toast.error(`No encontré ningún producto con SKU: ${rawSku}`);
       return;
@@ -160,15 +211,74 @@ export default function ProductosPage() {
     e.target.value = '';
   };
 
+  const withVariants = form.hasVariants === 'true';
+  const validVariantOptions = variantOptions.filter((o) => o.name.trim() && o.values.length > 0);
+  const includedRows = variantRows.filter((r) => !r.toRemove && (r.id || r.include));
+  const variantsInvalid =
+    withVariants &&
+    (validVariantOptions.length === 0 ||
+      validVariantOptions.length !== variantOptions.length ||
+      combinationsCount(validVariantOptions) > MAX_VARIANT_COMBINATIONS ||
+      includedRows.length === 0);
+
+  // Sube las fotos elegidas en la grilla, una por variante (el endpoint de
+  // imagen ya funciona por id de producto).
+  const uploadVariantImages = async (parent: Product) => {
+    const options = parent.variantOptions ?? validVariantOptions;
+    const idByKey = new Map((parent.variants ?? []).map((v) => [valuesKey(variantValues(v.variantAttributes, options)), v.id]));
+    const pending = variantRows.filter((r) => r.imageFile && !r.toRemove);
+    let failed = 0;
+    for (const row of pending) {
+      const id = row.id ?? idByKey.get(row.key);
+      if (!id || !row.imageFile) continue;
+      const imgBody = new FormData();
+      imgBody.append('image', row.imageFile);
+      await api.patch(`/products/${id}/image`, imgBody).catch(() => { failed += 1; });
+    }
+    if (failed > 0) toast.error(`No se pudieron subir ${failed} foto(s) de variantes`);
+  };
+
   const save = async () => {
     if (!form.name.trim()) return;
+    if (variantsInvalid) {
+      toast.error('Revisá las variantes: cada opción necesita nombre y al menos un valor, y tiene que quedar al menos una combinación');
+      return;
+    }
     setSaving(true);
     try {
       const body = new FormData();
       Object.entries(form).forEach(([k, v]) => { if (v !== '') body.append(k, v); });
+      if (withVariants) body.set('type', 'SIMPLE');
+      // El SKU del padre es opcional: vacío en la edición lo borra.
+      if (withVariants && modal === 'edit') body.set('sku', form.sku);
       if (imgFile) body.append('image', imgFile);
 
-      if (modal === 'create') {
+      const isKgForm = form.saleUnit === 'KG';
+      const variantPayload = () =>
+        variantRows
+          .filter((r) => !r.toRemove && (r.id || r.include))
+          .map((r) => rowToVariantInput(r, validVariantOptions, isKgForm, !r.id));
+
+      if (modal === 'create' && withVariants) {
+        body.append('variantOptions', JSON.stringify(validVariantOptions));
+        body.append('variants', JSON.stringify(variantPayload()));
+        const { data } = await api.post('/products', body);
+        await uploadVariantImages(data);
+        toast.success(`Producto creado con ${data?.variants?.length ?? includedRows.length} variantes`);
+      } else if (modal === 'edit' && editing?.hasVariants) {
+        await api.put(`/products/${editing.id}`, body);
+        const { data } = await api.post(`/products/${editing.id}/variants/sync`, {
+          variantOptions: validVariantOptions,
+          variants: variantPayload(),
+        });
+        if (data?.product) await uploadVariantImages(data.product);
+        const extra = [
+          data?.created ? `${data.created} variantes nuevas` : '',
+          data?.deactivated ? `${data.deactivated} desactivadas` : '',
+          data?.deleted ? `${data.deleted} borradas` : '',
+        ].filter(Boolean).join(', ');
+        toast.success(extra ? `Producto actualizado (${extra})` : 'Producto actualizado');
+      } else if (modal === 'create') {
         const isKg = form.saleUnit === 'KG';
         const locationIds = new Set([...Object.keys(initialStock), ...Object.keys(initialMinStock)]);
         const stockEntries = Array.from(locationIds)
@@ -221,7 +331,41 @@ export default function ProductosPage() {
     }
   };
 
-  const canAddStock = (p: Product) => p.isService !== true && p.unlimitedStock !== true && p.type !== 'COMPUESTO';
+  const canAddStock = (p: Product) => p.isService !== true && p.unlimitedStock !== true && p.type !== 'COMPUESTO' && !p.hasVariants;
+  const canConvert = (p: Product) => !p.hasVariants && !p.parentId && p.type !== 'COMPUESTO';
+
+  // Celdas que cambian si la fila es un padre (rango de precios / stock
+  // sumado de sus variantes) o una variante (indentada, con su label).
+  const priceText = (p: Product) => {
+    const suffix = p.saleUnit === 'KG' ? '/kg' : '';
+    if (p.hasVariants) {
+      const range = priceRange(p.variants ?? []);
+      if (!range) return '—';
+      return range.min === range.max ? `${fmtMoney(range.min)}${suffix}` : `${fmtMoney(range.min)} – ${fmtMoney(range.max)}${suffix}`;
+    }
+    return `${fmtMoney(p.saleUnit === 'KG' ? num(p.pricePerKg) : p.price)}${suffix}`;
+  };
+  const totalStock = (p: Product) => (p.hasVariants ? parentStock(p) : productStock(p));
+  const totalMinStock = (p: Product) => (p.hasVariants ? (p.variants ?? []).reduce((acc, v) => acc + productMinStock(v), 0) : productMinStock(p));
+  const hasLowStock = (p: Product) => (p.hasVariants ? (p.variants ?? []).some(productHasLowStockLocation) : productHasLowStockLocation(p));
+  const stockByLocationText = (p: Product) => {
+    const isKgRow = p.saleUnit === 'KG';
+    const sources = p.hasVariants ? p.variants ?? [] : [p];
+    const byLocation = new Map<string, { name: string; qty: number }>();
+    for (const src of sources) {
+      for (const s of src.stock ?? []) {
+        const entry = byLocation.get(s.businessLocationId) ?? { name: s.businessLocation?.name ?? '?', qty: 0 };
+        entry.qty += num(isKgRow ? s.quantityKg : s.quantity);
+        byLocation.set(s.businessLocationId, entry);
+      }
+    }
+    return Array.from(byLocation.values())
+      .filter((x) => x.qty > 0)
+      .map((x) => `${x.name}: ${isKgRow ? fmtKg(x.qty) : x.qty}`)
+      .join(' · ');
+  };
+  const toggleExpanded = (p: Product) => setExpanded((prev) => ({ ...prev, [p.id]: !(prev[p.id] ?? false) }));
+  const isExpanded = (p: Product) => tableRows.some((r) => r.parentId === p.id);
 
   const openStockModal = (p: Product) => {
     setStockModal(p);
@@ -257,15 +401,21 @@ export default function ProductosPage() {
     }
   };
 
+  // Una etiqueta por variante (con su SKU); los padres sin SKU no generan
+  // etiqueta. Las variantes se listan con el nombre de su padre.
   const barcodeProducts = useMemo(
-    () => products.filter((p) => p.sku && p.sku.trim() && p.isActive !== false),
+    () => products
+      .flatMap((p) => (p.hasVariants
+        ? sortedVariants(p).map((v) => ({ ...v, parent: { id: p.id, name: p.name, sku: p.sku, imageUrl: p.imageUrl, variantOptions: p.variantOptions, hasVariants: true } }))
+        : [p]))
+      .filter((p) => p.sku && p.sku.trim() && p.isActive !== false),
     [products]
   );
 
   const barcodeFiltered = useMemo(() => {
     if (!barcodeSearch.trim()) return barcodeProducts;
     const q = barcodeSearch.toLowerCase();
-    return barcodeProducts.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q));
+    return barcodeProducts.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || Boolean(p.parent?.name.toLowerCase().includes(q)));
   }, [barcodeProducts, barcodeSearch]);
 
   const openBarcodeModal = () => {
@@ -378,35 +528,48 @@ export default function ProductosPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>
         ) : (
           <ResponsiveTable
-            data={filtered}
+            data={tableRows}
             keyFor={(p) => p.id}
             emptyIcon={Package}
             emptyMessage="Sin productos"
             columns={[
               {
-                key: 'producto', header: 'Producto', render: (p) => (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {p.imageUrl ? (
-                      <img src={p.imageUrl} alt={p.name} style={{ width: 32, height: 32, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }} />
-                    ) : (
-                      <div style={{ width: 32, height: 32, borderRadius: 5, background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Package size={14} style={{ color: 'var(--text3)' }} />
+                key: 'producto', header: 'Producto', render: (p) => {
+                  const img = productImage(p);
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: p.parentId ? 26 : 0 }}>
+                      {p.hasVariants && (
+                        <button onClick={() => toggleExpanded(p)} className="btn btn-ghost btn-xs" title={isExpanded(p) ? 'Ocultar variantes' : 'Ver variantes'} style={{ padding: 2 }}>
+                          {isExpanded(p) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                      )}
+                      {img ? (
+                        <img src={img} alt={p.name} style={{ width: p.parentId ? 26 : 32, height: p.parentId ? 26 : 32, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: p.parentId ? 26 : 32, height: p.parentId ? 26 : 32, borderRadius: 5, background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Package size={14} style={{ color: 'var(--text3)' }} />
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize: p.parentId ? 12 : 13, fontWeight: 600, color: 'var(--text)' }}>
+                          {p.parentId ? p.variantLabel ?? p.name : p.name}
+                          {p.parentId && p.customPrice && <span className="badge badge-amber" style={{ fontSize: 9, padding: '0 4px', marginLeft: 6 }}>precio propio</span>}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                          {p.hasVariants
+                            ? `${p.variants?.length ?? 0} variantes · ${(p.variantOptions ?? []).map((o) => o.name).join(' / ')} · ${p.saleUnit}`
+                            : p.parentId ? 'Variante' : `${p.type} · ${p.saleUnit}`}
+                        </div>
                       </div>
-                    )}
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p.name}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>{p.type} · {p.saleUnit}</div>
                     </div>
-                  </div>
-                ),
+                  );
+                },
               },
               { key: 'sku', header: 'SKU', render: (p) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{p.sku ?? '—'}</span> },
-              { key: 'categoria', header: 'Categoría', render: (p) => <span style={{ fontSize: 12 }}>{categoryName(p)}</span> },
+              { key: 'categoria', header: 'Categoría', render: (p) => <span style={{ fontSize: 12 }}>{p.parentId ? '' : categoryName(p)}</span> },
               {
                 key: 'precio', header: 'Precio', render: (p) => (
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text)' }}>
-                    {fmtMoney(p.saleUnit === 'KG' ? num(p.pricePerKg) : p.price)}{p.saleUnit === 'KG' ? '/kg' : ''}
-                  </span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text)' }}>{priceText(p)}</span>
                 ),
               },
               {
@@ -414,8 +577,8 @@ export default function ProductosPage() {
                   if (p.unlimitedStock) {
                     return <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text3)' }}>Sin límite</span>;
                   }
-                  const stockVal = productStock(p);
-                  const low = productHasLowStockLocation(p);
+                  const stockVal = totalStock(p);
+                  const low = hasLowStock(p);
                   return (
                     <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: low ? 'var(--warn)' : 'var(--text2)' }}>
                       {low && <AlertTriangle size={11} style={{ display: 'inline', marginRight: 4 }} />}
@@ -426,11 +589,7 @@ export default function ProductosPage() {
               },
               {
                 key: 'ubicaciones', header: 'Por ubicación', render: (p) => (
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                    {(p.stock ?? []).filter((s) => (p.saleUnit === 'KG' ? s.quantityKg : s.quantity) > 0)
-                      .map((s) => `${s.businessLocation?.name ?? '?'}: ${p.saleUnit === 'KG' ? s.quantityKg : s.quantity}`)
-                      .join(' · ') || '—'}
-                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{stockByLocationText(p) || '—'}</span>
                 ),
               },
               {
@@ -448,30 +607,42 @@ export default function ProductosPage() {
                         <PackagePlus size={12} />
                       </button>
                     )}
-                    <button onClick={() => openEdit(p)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
-                    <button onClick={() => setConfirmDelete(p)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                    {canConvert(p) && (
+                      <button onClick={() => setConvertTarget(p)} className="btn btn-ghost btn-xs" title="Convertir a producto con variantes">
+                        <Layers size={12} />
+                      </button>
+                    )}
+                    <button onClick={() => openEdit(p)} className="btn btn-ghost btn-xs" title={p.parentId ? 'Editar (desde el producto principal)' : 'Editar'}><Edit2 size={12} /></button>
+                    {!p.parentId && (
+                      <button onClick={() => setConfirmDelete(p)} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                    )}
                   </div>
                 ),
               },
             ] as ResponsiveTableColumn<Product>[]}
             renderMobileCard={(p) => {
-              const stockVal = productStock(p);
-              const minVal = productMinStock(p);
-              const low = productHasLowStockLocation(p);
+              const stockVal = totalStock(p);
+              const minVal = totalMinStock(p);
+              const low = hasLowStock(p);
+              const img = productImage(p);
               return (
-                <>
+                <div style={{ paddingLeft: p.parentId ? 14 : 0, borderLeft: p.parentId ? '2px solid var(--border2)' : undefined }}>
                   <div className="mobile-card-head">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                      {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                      {img ? (
+                        <img src={img} alt={p.name} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
                       ) : (
                         <div style={{ width: 36, height: 36, borderRadius: 6, background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <Package size={16} style={{ color: 'var(--text3)' }} />
                         </div>
                       )}
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                        <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{p.sku ?? '—'} · {categoryName(p)}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.parentId ? p.variantLabel ?? p.name : p.name}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                          {p.hasVariants ? `${p.variants?.length ?? 0} variantes` : p.sku ?? '—'}{p.parentId ? '' : ` · ${categoryName(p)}`}
+                        </div>
                       </div>
                     </div>
                     <button onClick={() => toggleActive(p)} className={`badge ${p.isActive !== false ? 'badge-green' : 'badge-gray'}`} style={{ cursor: 'pointer', border: 'none', flexShrink: 0 }}>
@@ -480,9 +651,7 @@ export default function ProductosPage() {
                   </div>
                   <div className="mobile-card-row">
                     <span>Precio</span>
-                    <span style={{ fontFamily: 'var(--mono)', color: 'var(--text)', fontWeight: 700 }}>
-                      {fmtMoney(p.saleUnit === 'KG' ? num(p.pricePerKg) : p.price)}{p.saleUnit === 'KG' ? '/kg' : ''}
-                    </span>
+                    <span style={{ fontFamily: 'var(--mono)', color: 'var(--text)', fontWeight: 700 }}>{priceText(p)}</span>
                   </div>
                   <div className="mobile-card-row">
                     <span>Stock / mínimo</span>
@@ -496,13 +665,23 @@ export default function ProductosPage() {
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    {p.hasVariants && (
+                      <button onClick={() => toggleExpanded(p)} className="btn btn-secondary btn-xs" style={{ flex: 1, gap: 4 }}>
+                        {isExpanded(p) ? <ChevronDown size={12} /> : <ChevronRight size={12} />} Variantes
+                      </button>
+                    )}
                     {canAddStock(p) && (
                       <button onClick={() => openStockModal(p)} className="btn btn-secondary btn-xs" style={{ flex: 1, gap: 4, color: 'var(--success)' }}><PackagePlus size={12} /> Stock</button>
                     )}
+                    {canConvert(p) && (
+                      <button onClick={() => setConvertTarget(p)} className="btn btn-secondary btn-xs" title="Convertir a producto con variantes" style={{ gap: 4 }}><Layers size={12} /></button>
+                    )}
                     <button onClick={() => openEdit(p)} className="btn btn-secondary btn-xs" style={{ flex: 1, gap: 4 }}><Edit2 size={12} /> Editar</button>
-                    <button onClick={() => setConfirmDelete(p)} className="btn btn-secondary btn-xs" style={{ color: 'var(--danger)', gap: 4 }}><Trash2 size={12} /></button>
+                    {!p.parentId && (
+                      <button onClick={() => setConfirmDelete(p)} className="btn btn-secondary btn-xs" style={{ color: 'var(--danger)', gap: 4 }}><Trash2 size={12} /></button>
+                    )}
                   </div>
-                </>
+                </div>
               );
             }}
           />
@@ -523,7 +702,9 @@ export default function ProductosPage() {
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal modal-lg modal-mobile-full" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <span style={{ fontWeight: 800, fontSize: 15 }}>{modal === 'create' ? 'Nuevo producto' : 'Editar producto'}</span>
+              <span style={{ fontWeight: 800, fontSize: 15 }}>
+                {modal === 'create' ? 'Nuevo producto' : withVariants ? 'Editar producto con variantes' : 'Editar producto'}
+              </span>
               <button onClick={() => setModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -533,12 +714,16 @@ export default function ProductosPage() {
                   <input value={form.name} onChange={f('name')} placeholder="Nombre del producto" />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">SKU</label>
+                  <label className="form-label">{withVariants ? 'SKU base (opcional)' : 'SKU'}</label>
                   <div style={{ position: 'relative' }}>
                     <input
                       value={form.sku}
                       onChange={f('sku')}
-                      placeholder={modal === 'create' ? 'Se genera automáticamente si lo dejás vacío' : 'Código de producto'}
+                      placeholder={
+                        withVariants
+                          ? 'Ej: REM — arma el SKU de cada variante (REM-M-ROJO)'
+                          : modal === 'create' ? 'Se genera automáticamente si lo dejás vacío' : 'Código de producto'
+                      }
                       style={{ paddingRight: 38 }}
                     />
                     <button
@@ -582,14 +767,46 @@ export default function ProductosPage() {
                 </select>
               </div>
 
+              {/* Variantes: solo se elige al crear; un producto existente se
+                  convierte desde el listado ("Convertir a producto con
+                  variantes"), para elegir qué pasa con su stock e historial. */}
+              {modal === 'create' && (
+                <label
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                    background: 'var(--surface2)', border: `1px solid ${withVariants ? 'var(--accent)' : 'var(--border2)'}`,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={withVariants}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setForm((prev) => ({ ...prev, hasVariants: String(on), type: on ? 'SIMPLE' : prev.type }));
+                      if (on && variantOptions.length === 0) changeVariantOptions([{ name: 'Talle', values: [] }]);
+                    }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Layers size={14} /> Tiene variantes
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                      Talle, color, sabor, molienda… Cada combinación tiene su SKU, precio, foto y stock.
+                    </div>
+                  </div>
+                </label>
+              )}
+
               <div className="form-grid-3">
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Tipo</label>
-                  <select value={form.type} onChange={f('type')}>
-                    <option value="SIMPLE">Simple</option>
-                    <option value="COMPUESTO">Compuesto</option>
-                  </select>
-                </div>
+                {!withVariants && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Tipo</label>
+                    <select value={form.type} onChange={f('type')}>
+                      <option value="SIMPLE">Simple</option>
+                      <option value="COMPUESTO">Compuesto</option>
+                    </select>
+                  </div>
+                )}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Es servicio</label>
                   <select value={form.isService} onChange={f('isService')}>
@@ -615,10 +832,11 @@ export default function ProductosPage() {
               <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: -6, marginBottom: 4 }}>
                 Este es el precio de la lista Minorista. Para mayoristas u otros precios especiales,
                 creá listas de precios adicionales en Productos → Listas de precios.
+                {withVariants && ' Es el precio general: se copia a todas las variantes, salvo las que tengan un precio propio.'}
               </div>
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">{isKg ? 'Precio lista/kg' : 'Precio lista'}</label>
+                  <label className="form-label">{withVariants ? (isKg ? 'Precio general/kg' : 'Precio general') : isKg ? 'Precio lista/kg' : 'Precio lista'}</label>
                   <input
                     type="number" min="0" step="any"
                     value={form[isKg ? 'pricePerKg' : 'price']}
@@ -627,7 +845,7 @@ export default function ProductosPage() {
                   />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Costo de compra</label>
+                  <label className="form-label">{withVariants ? 'Costo general' : 'Costo de compra'}</label>
                   <input type="number" min="0" step="any" value={form.purchasePrice} onChange={f('purchasePrice')} placeholder="0" />
                 </div>
               </div>
@@ -643,9 +861,35 @@ export default function ProductosPage() {
                 </div>
               </div>
 
+              {/* Variantes (opciones + combinaciones) */}
+              {withVariants && (
+                <>
+                  <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Opciones de variantes</div>
+                  <VariantOptionsEditor options={variantOptions} onChange={changeVariantOptions} />
+                  <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Variantes</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -6 }}>
+                    Dejá el precio y el costo vacíos para usar los generales. Si cambiás el de una variante, queda como &quot;personalizado&quot; y los cambios del precio general ya no la pisan.
+                    {modal === 'create' && form.unlimitedStock === 'false' ? ' Podés cargar el stock inicial y el mínimo de cada variante por sucursal.' : ''}
+                  </div>
+                  <VariantGrid
+                    rows={variantRows}
+                    onChange={setVariantRows}
+                    isKg={isKg}
+                    generalPrice={form[isKg ? 'pricePerKg' : 'price']}
+                    generalCost={form.purchasePrice}
+                    generalSku={form.sku}
+                    generalImageUrl={imgPreviewUrl ?? editing?.imageUrl ?? null}
+                    locations={locations}
+                    showStockInputs={form.unlimitedStock === 'false'}
+                  />
+                </>
+              )}
+
               {/* Stock */}
+              {!withVariants && (
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Stock</div>
-              {modal === 'create' && form.unlimitedStock === 'false' && locations.length > 0 ? (
+              )}
+              {withVariants ? null : modal === 'create' && form.unlimitedStock === 'false' && locations.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -4 }}>
                     Opcional: cargá la cantidad inicial y el mínimo por ubicación para no tener que ir después a <b>Stock</b>. El mínimo dispara las alertas y notificaciones de stock bajo.
@@ -684,9 +928,10 @@ export default function ProductosPage() {
 
               {/* Image */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Imagen</label>
+                <label className="form-label">{withVariants ? 'Foto general' : 'Imagen'}</label>
                 <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: -2, marginBottom: 8 }}>
                   Se guarda cuadrada, {PRODUCT_IMAGE_SIZE}×{PRODUCT_IMAGE_SIZE}px — vas a poder encuadrarla antes de subirla.
+                  {withVariants && ' Se muestra en las variantes que no tengan foto propia.'}
                 </p>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                   {(imgPreviewUrl || editing?.imageUrl) && (
@@ -738,7 +983,7 @@ export default function ProductosPage() {
             </div>
             <div className="modal-footer">
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
-              <button onClick={save} disabled={saving || !form.name.trim()} className="btn btn-primary btn-sm">
+              <button onClick={save} disabled={saving || !form.name.trim() || variantsInvalid} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : modal === 'create' ? 'Crear producto' : 'Guardar cambios'}
               </button>
             </div>
@@ -754,6 +999,18 @@ export default function ProductosPage() {
         title="Escanear SKU"
         hint="Cuando lo detecte, completa el campo SKU."
       />
+
+      {convertTarget && (
+        <ConvertToVariantsModal
+          product={convertTarget}
+          onClose={() => setConvertTarget(null)}
+          onConverted={(parent) => {
+            setConvertTarget(null);
+            setExpanded((prev) => ({ ...prev, [parent.id]: true }));
+            load();
+          }}
+        />
+      )}
 
       <ImageCropModal
         open={cropSourceFile !== null}
@@ -886,7 +1143,8 @@ export default function ProductosPage() {
                             />
                           </td>
                           <td style={{ padding: '6px 8px', fontSize: 12 }}>
-                            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{p.name}</div>
+                            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{p.parent ? p.parent.name : p.name}</div>
+                            {p.parent && <div style={{ fontSize: 11, color: 'var(--text2)' }}>{p.variantLabel}</div>}
                             <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text3)' }}>{p.sku}</div>
                           </td>
                           <td style={{ padding: '6px 8px', width: 100 }}>
@@ -955,6 +1213,7 @@ export default function ProductosPage() {
             <div className="modal-body">
               <p style={{ fontSize: 14, color: 'var(--text2)' }}>
                 ¿Eliminar <strong style={{ color: 'var(--text)' }}>{confirmDelete.name}</strong>? Esta acción no se puede deshacer.
+                {confirmDelete.hasVariants && ` También se desactivan sus ${confirmDelete.variants?.length ?? 0} variantes.`}
               </p>
             </div>
             <div className="modal-footer">
