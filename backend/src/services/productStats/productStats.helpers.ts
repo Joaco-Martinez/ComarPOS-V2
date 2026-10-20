@@ -29,6 +29,9 @@ export type GroupedRow = {
 export type ReportProductStat = {
   productId: string;
   name: string;
+  // Variantes: nombre del padre y label (null en modo agrupado por producto).
+  parentName?: string | null;
+  variantLabel?: string | null;
   saleUnit: SaleUnit;
   unitsSold: number;
   kgSold: number;

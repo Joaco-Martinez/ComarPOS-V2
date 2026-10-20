@@ -43,7 +43,7 @@ export const exportService = {
         client: { select: { nombre: true, apellido: true, dni: true } },
         user: { select: { name: true } },
         items: {
-          include: { product: { select: { name: true, sku: true } } },
+          include: { product: { select: { name: true, sku: true, variantLabel: true, parent: { select: { name: true } } } } },
         },
         payments: true,
       },
@@ -109,6 +109,10 @@ export const exportService = {
       { header: "Venta ID", key: "saleId", width: 36 },
       { header: "Fecha", key: "date", width: 22 },
       { header: "Producto", key: "product", width: 30 },
+      // Variantes: el producto principal y la variante por separado, para
+      // poder filtrar/agrupar en Excel.
+      { header: "Producto padre", key: "parentProduct", width: 26 },
+      { header: "Variante", key: "variant", width: 18 },
       { header: "SKU", key: "sku", width: 14 },
       { header: "Cantidad", key: "qty", width: 12 },
       { header: "Precio unit.", key: "price", width: 14 },
@@ -124,8 +128,10 @@ export const exportService = {
         wsItems.addRow({
           saleId: s.id,
           date: formatDate(s.createdAt),
-          product: item.product?.name ?? item.productNameSnapshot ?? "",
-          sku: item.product?.sku ?? item.productSkuSnapshot ?? "",
+          product: item.productNameSnapshot ?? item.product?.name ?? "",
+          parentProduct: item.product?.parent?.name ?? "",
+          variant: item.product?.variantLabel ?? "",
+          sku: item.productSkuSnapshot ?? item.product?.sku ?? "",
           qty,
           price: toARS(item.price),
           subtotal: toARS(item.subtotal),
@@ -150,10 +156,11 @@ export const exportService = {
       orderBy: { createdAt: "asc" },
     });
 
+    // Sin padres de productos con variantes: el stock está en cada variante.
     const products = await prisma.product.findMany({
-      where: { ...tenantScope() },
+      where: { ...tenantScope(), hasVariants: false },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      include: { category: { select: { name: true } }, stock: true },
+      include: { category: { select: { name: true } }, stock: true, parent: { select: { name: true } } },
     });
 
     const wb = new ExcelJS.Workbook();
@@ -161,6 +168,8 @@ export const exportService = {
     const ws = wb.addWorksheet("Inventario");
     ws.columns = [
       { header: "Nombre", key: "name", width: 32 },
+      { header: "Producto padre", key: "parentProduct", width: 26 },
+      { header: "Variante", key: "variant", width: 18 },
       { header: "SKU", key: "sku", width: 14 },
       { header: "Categoría", key: "category", width: 20 },
       { header: "Tipo", key: "type", width: 12 },
@@ -181,6 +190,8 @@ export const exportService = {
 
       const rowData: Record<string, unknown> = {
         name: p.name,
+        parentProduct: p.parent?.name ?? "",
+        variant: p.variantLabel ?? "",
         sku: p.sku ?? "",
         category: p.category?.name ?? "",
         type: p.type,
@@ -231,7 +242,7 @@ export const exportService = {
       include: {
         supplier: { select: { name: true, cuit: true } },
         user: { select: { name: true } },
-        items: { include: { product: { select: { name: true, sku: true } } } },
+        items: { include: { product: { select: { name: true, sku: true, variantLabel: true, parent: { select: { name: true } } } } } },
       },
     });
 
@@ -269,6 +280,8 @@ export const exportService = {
       { header: "Compra ID", key: "purchaseId", width: 36 },
       { header: "Fecha", key: "date", width: 22 },
       { header: "Producto", key: "product", width: 30 },
+      { header: "Producto padre", key: "parentProduct", width: 26 },
+      { header: "Variante", key: "variant", width: 18 },
       { header: "SKU", key: "sku", width: 14 },
       { header: "Cantidad", key: "qty", width: 12 },
       { header: "Precio unit.", key: "unitPrice", width: 14 },
@@ -281,8 +294,10 @@ export const exportService = {
         wsItems.addRow({
           purchaseId: p.id,
           date: formatDate(p.createdAt),
-          product: item.product?.name ?? "",
-          sku: item.product?.sku ?? "",
+          product: item.productNameSnapshot ?? item.product?.name ?? "",
+          parentProduct: item.product?.parent?.name ?? "",
+          variant: item.product?.variantLabel ?? "",
+          sku: item.productSkuSnapshot ?? item.product?.sku ?? "",
           qty: item.quantity,
           unitPrice: toARS(item.unitCost),
           subtotal: toARS(item.subtotal),

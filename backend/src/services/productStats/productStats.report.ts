@@ -2,6 +2,7 @@
  * Construccion del reporte base de productos vendidos (agregacion por producto).
  * Extraido de productStats.service.ts (doc seccion 4 - modularizacion).
  */
+import { displayProductFor, groupKeyFor, type ReportGroupBy } from "../reports/variantGrouping";
 import prisma from "../../prisma";
 import { SaleStatus, SaleUnit } from "@prisma/client";
 import { startOfDayAR, endOfDayAR } from "../../utils/dateAR";
@@ -131,7 +132,10 @@ export async function buildProductReport(params?: {
   startDate?: Date;
   endDate?: Date;
   unit?: "UNIT" | "KG";
+  // "product": suma las variantes en una fila con el nombre del padre.
+  groupBy?: ReportGroupBy;
 }): Promise<ReportProductStat[]> {
+  const groupBy: ReportGroupBy = params?.groupBy ?? "variant";
   const where: any = {
     sale: {
       status: SaleStatus.COMPLETED,
@@ -171,6 +175,9 @@ export async function buildProductReport(params?: {
           id: true,
           name: true,
           saleUnit: true,
+          parentId: true,
+          variantLabel: true,
+          parent: { select: { id: true, name: true, sku: true } },
         },
       },
       sale: {
@@ -233,12 +240,16 @@ export async function buildProductReport(params?: {
     const collectedRevenue = round2(grossRevenue * collectedRatio);
     const pendingRevenue = round2(Math.max(grossRevenue - collectedRevenue, 0));
 
-    const current = map.get(item.productId);
+    const key = groupKeyFor(product, groupBy);
+    const shown = displayProductFor(product, groupBy);
+    const current = map.get(key);
 
     if (!current) {
-      map.set(item.productId, {
-        productId: item.productId,
-        name: product.name,
+      map.set(key, {
+        productId: key,
+        name: shown.name,
+        parentName: shown.parentName ?? null,
+        variantLabel: shown.variantLabel ?? null,
         saleUnit,
         unitsSold,
         kgSold,
@@ -251,7 +262,7 @@ export async function buildProductReport(params?: {
         pendingRevenue,
 
         rankValue: soldQty,
-        product,
+        product: { id: shown.id, name: shown.name, saleUnit: product.saleUnit },
       });
     } else {
       current.unitsSold = round2(current.unitsSold + unitsSold);
