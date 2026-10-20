@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
@@ -219,15 +219,27 @@ export default function ConteoStockPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((it: any) => {
+                {items.map((it: any, idx: number) => {
                   const counted = dirtyItems[it.productId] !== undefined ? Number(dirtyItems[it.productId]) : num(it.countedStock);
                   const system = num(it.systemStock);
                   const d = counted - system;
+                  // Variantes: se agrupan bajo una fila con el nombre del
+                  // producto principal (vienen contiguas, ordenadas por nombre).
+                  const parentId = it.product?.parentId ?? null;
+                  const startsGroup = parentId && items[idx - 1]?.product?.parentId !== parentId;
                   return (
-                    <tr key={it.productId} style={{ borderBottom: '1px solid var(--border)' }}
+                    <Fragment key={it.productId}>
+                    {startsGroup && (
+                      <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface2)' }}>
+                        <td colSpan={5} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{it.product?.parent?.name ?? 'Producto con variantes'}</td>
+                      </tr>
+                    )}
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(13,89,231,0.04)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
-                      <td style={{ padding: '8px 14px', color: 'var(--text)' }}>{it.product?.name ?? it.product?.nombre ?? it.productId}</td>
+                      <td style={{ padding: parentId ? '8px 14px 8px 30px' : '8px 14px', color: 'var(--text)' }}>
+                        {parentId ? it.product?.variantLabel ?? it.product?.name : it.product?.name ?? it.product?.nombre ?? it.productId}
+                      </td>
                       <td style={{ padding: '8px 14px', color: 'var(--text3)', fontFamily: 'var(--mono)', fontSize: 11 }}>{it.product?.sku ?? '—'}</td>
                       <td style={{ padding: '8px 14px', color: 'var(--text2)', fontFamily: 'var(--mono)' }}>{system}</td>
                       <td style={{ padding: '8px 14px' }}>
@@ -250,6 +262,7 @@ export default function ConteoStockPage() {
                         {d > 0 ? `+${d}` : d === 0 ? '—' : d}
                       </td>
                     </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>

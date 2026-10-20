@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
+import VariantQuantityModal, { type VariantQuantityLine } from '@/components/products/VariantQuantityModal';
+import { matchesSearch } from '@/lib/variants';
 import toast from 'react-hot-toast';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { todayInputAR } from '@/lib/dateAR';
@@ -99,7 +101,7 @@ export default function OrdenesCompraPage() {
       const [ordRes, supRes, prodRes, locRes] = await Promise.all([
         api.get('/purchase-orders', { params }),
         api.get('/suppliers', { params: { isActive: true } }),
-        api.get('/products', { params: { limit: 500, isActive: true } }),
+        api.get('/products', { params: { limit: 500, isActive: true, grouped: true } }),
         api.get('/business-locations', { params: { onlyActive: true } }),
       ]);
       setOrders(normalizeArray<any>(ordRes.data));
@@ -137,6 +139,28 @@ export default function OrdenesCompraPage() {
     }
   };
 
+  // Variantes: el listado viene agrupado. Un padre no se pide: al elegirlo
+  // se abre la grilla para cargar cantidades por variante y se genera una
+  // línea por cada una.
+  const [variantPick, setVariantPick] = useState<{ parent: any; rowIndex: number } | null>(null);
+
+  const addVariantLines = (rowIndex: number, lines: VariantQuantityLine[]) => {
+    setItems((prev) => {
+      const rest = prev.filter((_, idx) => idx !== rowIndex);
+      const already = new Set(rest.map((it) => it.productId).filter(Boolean));
+      const fresh = lines
+        .filter(({ variant }) => !already.has(variant.id))
+        .map(({ variant, quantity }) => ({
+          productId: variant.id,
+          quantityOrdered: String(quantity),
+          unitCost: String(variant.purchasePrice ?? 0),
+          ivaRate: String(variant.ivaRate ?? 21),
+          search: variant.name,
+        }));
+      return [...rest.slice(0, rowIndex), ...fresh, ...rest.slice(rowIndex)];
+    });
+  };
+
   const addItem = () => setItems((p) => [...p, { productId: '', quantityOrdered: '1', unitCost: '', ivaRate: '21', search: '' }]);
   const removeItem = (i: number) => setItems((p) => p.filter((_, idx) => idx !== i));
   const updateItem = (i: number, k: string, v: string) =>
@@ -154,7 +178,7 @@ export default function OrdenesCompraPage() {
     const q = query.trim().toLowerCase();
     if (!q) return [];
     return supplierProducts
-      .filter((p: any) => p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q))
+      .filter((p: any) => matchesSearch(p, q))
       .slice(0, 20);
   };
 
@@ -162,6 +186,11 @@ export default function OrdenesCompraPage() {
   // compra cargado en el producto (Product.purchasePrice) — editable si el
   // proveedor lo aumentó desde la última vez.
   const selectItemProduct = (i: number, product: any) => {
+    if (product.hasVariants) {
+      setVariantPick({ parent: product, rowIndex: i });
+      setOpenSuggestIndex(null);
+      return;
+    }
     setItems((prev) => {
       const n = [...prev];
       n[i] = {
@@ -215,7 +244,9 @@ export default function OrdenesCompraPage() {
     if (!sku || scannerHandledRef.current || scannerForIndex === null) return;
     scannerHandledRef.current = true;
 
-    const product = supplierProducts.find((p: any) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
+    // El SKU de una variante la elige directo (no al padre).
+    const leaves = supplierProducts.flatMap((p: any) => (p.hasVariants ? p.variants ?? [] : [p]));
+    const product = leaves.find((p: any) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
 
     if (!product) {
       scannerHandledRef.current = false;
@@ -569,7 +600,9 @@ export default function OrdenesCompraPage() {
                           >
                             <div style={{ fontWeight: 600, color: 'var(--text)' }}>{p.name}</div>
                             <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                              {p.sku ? `SKU: ${p.sku}` : 'Sin SKU'} · Costo: {fmtMoney(p.purchasePrice ?? 0)}
+                              {p.hasVariants
+                                ? `${p.variants?.length ?? 0} variantes — elegir cantidades`
+                                : `${p.sku ? `SKU: ${p.sku}` : 'Sin SKU'} · Costo: ${fmtMoney(p.purchasePrice ?? 0)}`}
                             </div>
                           </div>
                         ))}
@@ -788,6 +821,17 @@ export default function OrdenesCompraPage() {
         </div>
       )}
       <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
+      {variantPick && (
+        <VariantQuantityModal
+          parent={variantPick.parent}
+          title="Cantidades a pedir por variante"
+          onConfirm={(lines) => {
+            addVariantLines(variantPick.rowIndex, lines);
+            setVariantPick(null);
+          }}
+          onClose={() => setVariantPick(null)}
+        />
+      )}
     </AppLayout>
   );
 }

@@ -299,7 +299,7 @@ export function pricesDifferFromParent(
   );
 }
 
-export function costDiffersFromParent(parent: ParentLike, cost: number | null | undefined) {
+export function costDiffersFromParent(parent: { purchasePrice?: number | null }, cost: number | null | undefined) {
   if (cost === undefined || cost === null) return false;
   return Math.abs(Number(cost) - Number(parent.purchasePrice ?? 0)) >= 0.005;
 }

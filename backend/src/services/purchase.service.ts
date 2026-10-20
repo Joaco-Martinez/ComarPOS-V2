@@ -14,6 +14,7 @@ import { currentTenantId } from "../context/tenantContext";
 import { cashSessionService } from "./cashSession.service";
 import { parseDateInputAR } from "../utils/dateAR";
 import { addSupplierDebtTx, reverseSupplierDebtForPurchaseTx } from "./supplierAccount.service";
+import { costDiffersFromParent } from "./product/product.variants.helpers";
 
 type PurchaseItemInput = {
   productId: string;
@@ -48,7 +49,56 @@ type CreatePurchaseInput = {
   iibbPerceptionAmount?: number | string;
   municipalPerceptionAmount?: number | string;
   internalTaxAmount?: number | string;
+  // Variantes: ademas del costo de la variante comprada, actualizar el costo
+  // general del producto (padre) y el de las variantes sin costo propio.
+  updateGeneralCost?: boolean | string;
 };
+
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/**
+ * Actualiza el costo de compra del producto comprado. Para una variante:
+ * - por defecto solo cambia la variante, que queda customCost=true si su
+ *   costo ahora difiere del de su padre;
+ * - con updateGeneralCost, tambien pasa a ser el costo general: se actualiza
+ *   el padre y todas sus variantes sin costo propio.
+ */
+async function applyPurchaseCostTx(
+  tx: Tx,
+  product: { id: string; parentId: string | null },
+  unitCost: number,
+  updateGeneralCost: boolean,
+  parents: Map<string, { id: string; purchasePrice: number }>
+) {
+  if (!product.parentId) {
+    await tx.product.update({ where: { id: product.id }, data: { purchasePrice: unitCost } });
+    return;
+  }
+
+  let parent = parents.get(product.parentId);
+  if (!parent) {
+    const found = await tx.product.findUnique({
+      where: { id: product.parentId },
+      select: { id: true, purchasePrice: true },
+    });
+    if (!found) throw new Error("No se encontró el producto principal de la variante");
+    parent = found;
+    parents.set(found.id, found);
+  }
+
+  if (updateGeneralCost) {
+    await tx.product.update({ where: { id: parent.id }, data: { purchasePrice: unitCost } });
+    await tx.product.updateMany({ where: { parentId: parent.id, customCost: false }, data: { purchasePrice: unitCost } });
+    await tx.product.update({ where: { id: product.id }, data: { purchasePrice: unitCost, customCost: false } });
+    parent.purchasePrice = unitCost;
+    return;
+  }
+
+  await tx.product.update({
+    where: { id: product.id },
+    data: { purchasePrice: unitCost, customCost: costDiffersFromParent(parent, unitCost) },
+  });
+}
 
 function toMoneyOrZero(value: unknown): number {
   const n = Number(value);
@@ -212,6 +262,9 @@ export const purchaseService = {
         toLocationId: string; quantity?: number | null; quantityKg?: number | null;
         reason: string; reference: string; tenantId: string | null | undefined;
       }> = [];
+      const updateGeneralCost = data.updateGeneralCost === true || data.updateGeneralCost === "true";
+      const parentsById = new Map<string, { id: string; purchasePrice: number }>();
+
       const purchaseItemRows: Array<{
         purchaseId: string; productId: string; quantity: number | null; quantityKg: number | null;
         unitCost: number; subtotal: number; ivaRate: number;
@@ -224,6 +277,7 @@ export const purchaseService = {
         const product = productsById.get(item.productId);
         if (!product) throw new Error(`Producto no encontrado: ${item.productId}`);
         if (!product.isActive) throw new Error(`El producto "${product.name}" está inactivo`);
+        if (product.hasVariants) throw new Error(`Elegí una variante de "${product.name}"`);
         if ((product as any).isService) throw new Error(`"${product.name}" es un servicio, no puede ingresar stock`);
         if (product.type === ProductType.COMPUESTO) {
           throw new Error(`No se puede comprar stock directo de "${product.name}" porque es un producto compuesto`);
@@ -259,7 +313,7 @@ export const purchaseService = {
           quantity = Math.trunc(qty);
           subtotal = roundMoney(quantity * unitCost);
 
-          await tx.product.update({ where: { id: product.id }, data: { purchasePrice: unitCost } });
+          await applyPurchaseCostTx(tx, product, unitCost, updateGeneralCost, parentsById);
           await tx.productStock.upsert({
             where: { productId_businessLocationId: { productId: product.id, businessLocationId } },
             update: { quantity: { increment: quantity } },
@@ -286,7 +340,7 @@ export const purchaseService = {
           quantityKg = qtyKg;
           subtotal = roundMoney(quantityKg * unitCost);
 
-          await tx.product.update({ where: { id: product.id }, data: { purchasePrice: unitCost } });
+          await applyPurchaseCostTx(tx, product, unitCost, updateGeneralCost, parentsById);
           await tx.productStock.upsert({
             where: { productId_businessLocationId: { productId: product.id, businessLocationId } },
             update: { quantityKg: { increment: quantityKg } },

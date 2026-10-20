@@ -43,6 +43,18 @@ export const purchaseOrderService = {
     const supplier = await prisma.supplier.findFirst({ where: { id: data.supplierId, ...scope } });
     if (!supplier) throw new Error("Proveedor no encontrado.");
 
+    // El padre de un producto con variantes no se compra: se pide por variante.
+    const products = await prisma.product.findMany({
+      where: { id: { in: [...new Set(data.items.map((i) => i.productId))] }, ...scope },
+      select: { id: true, name: true, hasVariants: true },
+    });
+    const productsById = new Map(products.map((p) => [p.id, p]));
+    for (const item of data.items) {
+      const product = productsById.get(item.productId);
+      if (!product) throw new Error("Producto no encontrado.");
+      if (product.hasVariants) throw new Error(`Elegí una variante de "${product.name}".`);
+    }
+
     const totalAmount = data.items.reduce(
       (sum, i) => sum + (i.unitCost ?? 0) * i.quantity,
       0

@@ -7,6 +7,7 @@ import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { BusinessLocation, Product, Purchase, Supplier } from '@/types';
+import VariantQuantityModal, { type VariantQuantityLine } from '@/components/products/VariantQuantityModal';
 import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
@@ -74,7 +75,7 @@ export default function ComprasPage() {
       const [pr, sup, prod, loc] = await Promise.all([
         api.get('/purchases', { params: { limit: 100 } }),
         api.get('/suppliers', { params: { isActive: true } }),
-        api.get('/products', { params: { limit: 500, isActive: true } }),
+        api.get('/products', { params: { limit: 500, isActive: true, grouped: true } }),
         api.get('/business-locations', { params: { onlyActive: true } }),
       ]);
       setPurchases(normalizeArray<Purchase>(pr.data));
@@ -89,6 +90,39 @@ export default function ComprasPage() {
   useEffect(() => { load(); }, []);
 
 
+  // Variantes: el listado viene agrupado; un padre no se compra, al
+  // elegirlo se abre la grilla para cargar cantidades por variante y se
+  // genera un item por cada una. `variantQueue` encola los padres tildados
+  // en el selector múltiple para pedirlos de a uno.
+  const [variantQueue, setVariantQueue] = useState<{ parent: Product; rowIndex: number | null }[]>([]);
+  const [updateGeneralCost, setUpdateGeneralCost] = useState(false);
+  const productById = useMemo(() => {
+    const map = new Map<string, Product>();
+    for (const p of products) {
+      map.set(p.id, p);
+      for (const v of p.variants ?? []) map.set(v.id, v);
+    }
+    return map;
+  }, [products]);
+
+  const addVariantLines = (rowIndex: number | null, lines: VariantQuantityLine[]) => {
+    setItems((prev) => {
+      const isKg = (v: Product) => v.saleUnit === 'KG';
+      const newRows = lines.map(({ variant, quantity }) => ({
+        productId: variant.id,
+        quantity: isKg(variant) ? '1' : String(quantity),
+        quantityKg: isKg(variant) ? String(quantity) : '',
+        unitCost: String(variant.purchasePrice ?? 0),
+        ivaRate: String(variant.ivaRate ?? 21),
+      }));
+      const base = rowIndex === null ? prev.filter((i) => i.productId) : prev.filter((_, idx) => idx !== rowIndex);
+      const already = new Set(base.map((i) => i.productId));
+      const at = rowIndex === null ? base.length : rowIndex;
+      const fresh = newRows.filter((r) => !already.has(r.productId));
+      return [...base.slice(0, at), ...fresh, ...base.slice(at)];
+    });
+  };
+
   const addItem = () => setItems((p) => [...p, { productId: '', quantity: '1', quantityKg: '', unitCost: '', ivaRate: '21' }]);
   const removeItem = (i: number) => setItems((p) => p.filter((_, idx) => idx !== i));
   const updateItem = (i: number, k: string, v: string) => setItems((p) => { const n = [...p]; n[i] = { ...n[i], [k]: v }; return n; });
@@ -97,7 +131,11 @@ export default function ComprasPage() {
   // costo cargado en el producto (Product.purchasePrice) — el usuario lo
   // puede pisar a mano si el proveedor se lo aumentó desde la última compra.
   const selectItemProduct = (i: number, productId: string) => {
-    const p = products.find((x) => x.id === productId);
+    const p = productById.get(productId);
+    if (p?.hasVariants) {
+      setVariantQueue((q) => [...q, { parent: p, rowIndex: i }]);
+      return;
+    }
     setItems((prev) => { const n = [...prev]; n[i] = { ...n[i], productId, unitCost: p ? String(p.purchasePrice ?? 0) : '' }; return n; });
   };
 
@@ -132,10 +170,12 @@ export default function ComprasPage() {
   // tildó "Seleccionar todos") que todavía no están en la lista, con el
   // costo de compra precargado desde cada producto.
   const addPickedProducts = () => {
+    const pickedParents = supplierProducts.filter((p) => pickedIds.has(p.id) && p.hasVariants);
+    if (pickedParents.length) setVariantQueue((q) => [...q, ...pickedParents.map((parent) => ({ parent, rowIndex: null }))]);
     setItems((prev) => {
       const already = new Set(prev.map((i) => i.productId).filter(Boolean));
       const toAdd = supplierProducts
-        .filter((p) => pickedIds.has(p.id) && !already.has(p.id))
+        .filter((p) => pickedIds.has(p.id) && !already.has(p.id) && !p.hasVariants)
         .map((p) => ({ productId: p.id, quantity: '1', quantityKg: p.saleUnit === 'KG' ? '1' : '', unitCost: String(p.purchasePrice ?? 0), ivaRate: String(p.ivaRate ?? 21) }));
       const base = prev.filter((i) => i.productId);
       return [...base, ...toAdd];
@@ -143,6 +183,8 @@ export default function ComprasPage() {
     setPickerOpen(false);
     setPickedIds(new Set());
   };
+
+  const hasVariantItems = items.some((i) => Boolean(productById.get(i.productId)?.parentId));
 
   const save = async () => {
     if (!items.length) return;
@@ -167,8 +209,9 @@ export default function ComprasPage() {
         iibbPerceptionAmount: fiscalForm.iibbPerceptionAmount || undefined,
         municipalPerceptionAmount: fiscalForm.municipalPerceptionAmount || undefined,
         internalTaxAmount: fiscalForm.internalTaxAmount || undefined,
+        updateGeneralCost: hasVariantItems && updateGeneralCost ? true : undefined,
         items: items.filter((i) => i.productId).map((i) => {
-          const p = products.find((x) => x.id === i.productId);
+          const p = productById.get(i.productId);
           return {
             productId: i.productId,
             quantity: p?.saleUnit === 'KG' ? 1 : Number(i.quantity),
@@ -181,6 +224,7 @@ export default function ComprasPage() {
       toast.success('Compra registrada');
       setModal(null);
       setItems([]);
+      setUpdateGeneralCost(false);
       setFiscalForm(emptyFiscalForm);
       setShowFiscalExtra(false);
       setForm((p) => ({ supplierId: '', date: todayInputAR(), notes: '', invoiceNumber: '', businessLocationId: p.businessLocationId, paymentMethod: 'TRANSFERENCIA' }));
@@ -394,14 +438,15 @@ export default function ComprasPage() {
               </div>
               <div className="line-item-scroll">
                 {items.map((item, idx) => {
-                  const prod = products.find((x) => x.id === item.productId);
+                  const prod = productById.get(item.productId);
                   return (
                     <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 8 }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">Producto</label>
                         <select value={item.productId} onChange={(e) => selectItemProduct(idx, e.target.value)}>
                           <option value="">Seleccionar...</option>
-                          {supplierProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          {prod?.parentId && <option value={prod.id}>{prod.name}</option>}
+                          {supplierProducts.map((p) => <option key={p.id} value={p.id}>{p.hasVariants ? `${p.name} (elegir variantes…)` : p.name}</option>)}
                         </select>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
@@ -456,7 +501,7 @@ export default function ComprasPage() {
                     {supplierProducts.map((p) => (
                       <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer', padding: '3px 2px' }}>
                         <input type="checkbox" checked={pickedIds.has(p.id)} onChange={() => togglePicked(p.id)} style={{ width: 14, height: 14, flexShrink: 0 }} />
-                        <span style={{ flex: 1 }}>{p.name}</span>
+                        <span style={{ flex: 1 }}>{p.name}{p.hasVariants ? ` (${p.variants?.length ?? 0} variantes)` : ''}</span>
                         <span style={{ color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
                           Costo: {fmtMoney(p.purchasePrice ?? 0)}
                         </span>
@@ -470,6 +515,18 @@ export default function ComprasPage() {
                     <button onClick={() => { setPickerOpen(false); setPickedIds(new Set()); }} className="btn btn-ghost btn-xs">Cancelar</button>
                   </div>
                 </div>
+              )}
+
+              {hasVariantItems && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: 'var(--text2)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={updateGeneralCost} onChange={(e) => setUpdateGeneralCost(e.target.checked)} style={{ marginTop: 2 }} />
+                  <span>
+                    Actualizar el costo general del producto
+                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text3)' }}>
+                      Si no lo tildás, el costo nuevo queda solo en las variantes compradas (marcadas con costo propio si difiere del general).
+                    </span>
+                  </span>
+                </label>
               )}
 
               <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 800, color: 'var(--accent)' }}>
@@ -529,6 +586,19 @@ export default function ComprasPage() {
             </div>
           </div>
         </div>
+      )}
+      {variantQueue[0] && (
+        <VariantQuantityModal
+          key={variantQueue[0].parent.id}
+          parent={variantQueue[0].parent}
+          title="Cantidades a comprar por variante"
+          locationId={form.businessLocationId || null}
+          onConfirm={(lines) => {
+            addVariantLines(variantQueue[0].rowIndex, lines);
+            setVariantQueue((q) => q.slice(1));
+          }}
+          onClose={() => setVariantQueue((q) => q.slice(1))}
+        />
       )}
     </AppLayout>
   );
