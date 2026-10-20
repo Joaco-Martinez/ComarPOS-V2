@@ -1,4 +1,4 @@
-import { normalizarDocumento, detectarTipoDocumento } from "../afipMappers";
+import { normalizarDocumento, detectarTipoDocumento, mapProductsFromSaleOrBody } from "../afipMappers";
 
 describe("normalizarDocumento", () => {
   it("saca todo lo que no sea digito", () => {
@@ -42,5 +42,19 @@ describe("detectarTipoDocumento", () => {
   it("numeros que no matchean CUIT/CUIL/DNI caen al fallback CUIT", () => {
     const doc = detectarTipoDocumento("123");
     expect(doc).toEqual({ tipoDoc: 80, nroDoc: 123, label: "CUIT" });
+  });
+});
+
+describe("mapProductsFromSaleOrBody", () => {
+  it("usa el nombre guardado en la venta (con la variante) antes que el nombre actual del producto", () => {
+    const sale = {
+      items: [
+        { productNameSnapshot: "Remera - M / Rojo", product: { name: "Remera - M / Rojo (renombrada)" }, quantity: 2, price: 1000 },
+        { product: { name: "Pan" }, quantity: 1, price: 500 },
+      ],
+    };
+    const result = mapProductsFromSaleOrBody({}, sale);
+    expect(result.map((r) => r.descripcion)).toEqual(["Remera - M / Rojo", "Pan"]);
+    expect(result[0].subtotal).toBe(2000);
   });
 });

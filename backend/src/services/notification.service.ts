@@ -95,7 +95,9 @@ export const notificationService = {
   async checkLowStock() {
     const scope = tenantScope();
     const products = await prisma.product.findMany({
-      where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
+      // Sin padres de productos con variantes: la notificacion sale por
+      // variante, con su nombre completo y la sucursal.
+      where: { isActive: true, isService: false, unlimitedStock: false, hasVariants: false, ...scope },
       select: {
         id: true,
         name: true,

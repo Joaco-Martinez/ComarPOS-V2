@@ -104,7 +104,7 @@ doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
 doc.moveDown(0.5);
 
 sale.items.forEach((item) => {
-  doc.text(`${item.quantity}x ${item.product.name}`, 60, doc.y, { continued: true });
+  doc.text(`${item.quantity}x ${(item as any).productNameSnapshot ?? item.product.name}`, 60, doc.y, { continued: true });
   doc.text(`$${item.price.toFixed(2)}`, { align: "right" });
 });
 

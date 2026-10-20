@@ -84,7 +84,7 @@ export async function notaCreditoController(req: Request, res: Response) {
         direccion: arcaConfig?.fiscalAddress || undefined,
         qrBase64: notaCredito.qrBase64 || null,
         products: facturaOriginal.sale?.items.map((i: any) => ({
-          name: i.product.name,
+          name: i.productNameSnapshot ?? i.product.name,
           quantity: i.quantity,
           quantityKg: i.quantityKg ?? undefined,
           price: i.price,

@@ -266,7 +266,7 @@ function buildWhatsappMessage(params: {
 
   const lines = sale.items.map((item: any) => {
     const productName =
-      item.product?.name || item.productNameSnapshot || "Producto";
+      item.productNameSnapshot || item.product?.name || "Producto";
     const saleUnit = item.product?.saleUnit || "UNIT";
     const qty =
       saleUnit === SaleUnit.KG

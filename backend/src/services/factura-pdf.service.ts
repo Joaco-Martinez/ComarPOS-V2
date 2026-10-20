@@ -124,8 +124,8 @@ export async function regenerarFacturaPDFService(
 
       return {
         name:
-          item.product?.name ||
           (item as any).productNameSnapshot ||
+          item.product?.name ||
           "Producto",
         quantity,
         quantityKg,

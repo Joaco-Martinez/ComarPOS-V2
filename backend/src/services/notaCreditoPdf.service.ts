@@ -222,7 +222,7 @@ export async function regenerarNotaCreditoPDFService(
           : quantity * price;
 
       return {
-        name: item.product?.name || item.productNameSnapshot || "Producto",
+        name: item.productNameSnapshot || item.product?.name || "Producto",
         quantity,
         quantityKg,
         price,

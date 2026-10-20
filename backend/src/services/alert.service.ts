@@ -77,6 +77,9 @@ class AlertService {
     if (product.isService) return alerts;
     if (product.unlimitedStock) return alerts;
     if (!product.isActive) return alerts;
+    // El padre de un producto con variantes no tiene stock: la alerta sale
+    // por variante (su name ya incluye la variante, ej. "Remera - M / Rojo").
+    if (product.hasVariants) return alerts;
 
     const isKg = product.saleUnit === SaleUnit.KG;
     const unit = isKg ? "kg" : "unidades";
@@ -110,6 +113,7 @@ class AlertService {
       where: {
         isActive: true,
         isService: false,
+        hasVariants: false,
         ...tenantScope(),
       },
       include: stockInclude,
