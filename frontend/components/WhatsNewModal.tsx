@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Sparkles } from 'lucide-react';
+import { X, Sparkles, History } from 'lucide-react';
+import { useParams } from 'next/navigation';
 
 // Bump LATEST_ID (fecha + slug corto) cada vez que haya una novedad nueva
 // para anunciar -- comparamos contra lo guardado en localStorage, asi que
@@ -14,6 +15,7 @@ const STORAGE_KEY = 'comarpos-whatsnew-seen';
 
 export default function WhatsNewModal() {
   const [open, setOpen] = useState(false);
+  const { tenant } = useParams<{ tenant: string }>();
 
   useEffect(() => {
     try {
@@ -59,7 +61,19 @@ export default function WhatsNewModal() {
           <li>Solo el producto principal cuenta para el límite de tu plan; las variantes no.</li>
         </ul>
 
-        <button className="btn btn-primary btn-sm" onClick={dismiss} style={{ width: '100%' }}>Entendido</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {tenant && (
+            <a
+              href={`/${tenant}/ayuda#versiones`}
+              onClick={dismiss}
+              className="btn btn-secondary btn-sm"
+              style={{ flex: 1, gap: 6, textDecoration: 'none', justifyContent: 'center' }}
+            >
+              <History size={13} /> Historial de versiones
+            </a>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={dismiss} style={{ flex: 1 }}>Entendido</button>
+        </div>
       </div>
     </div>
   );

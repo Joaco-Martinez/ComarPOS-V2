@@ -148,6 +148,10 @@ export default function HelpCenter() {
                 <a href={`/${tenant}/ayuda`} onClick={close} style={{ color: 'var(--accent)', fontWeight: 600 }}>
                   Ir a Ayuda y contacto
                 </a>
+                {' · '}
+                <a href={`/${tenant}/ayuda#versiones`} onClick={close} style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                  Historial de versiones
+                </a>
               </span>
             </div>
           </div>

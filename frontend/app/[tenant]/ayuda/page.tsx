@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { MessageCircle, Mail, Printer, Search } from 'lucide-react';
+import { MessageCircle, Mail, Printer, Search, History } from 'lucide-react';
+import VersionHistory from '@/components/help/VersionHistory';
 import AppLayout from '@/components/AppLayout';
 import { HELP_CATEGORIES, normalizeForSearch } from '@/lib/helpContent';
 import { EntryRow } from '@/components/help/HelpEntry';
@@ -151,6 +152,19 @@ export default function AyudaPage() {
             })
           )}
         </div>
+      </div>
+
+      {/* Historial de versiones (lib/changelog.ts) -- el modal de Novedades
+          linkea acá con #versiones. */}
+      <div id="versiones" className="card" style={{ padding: 18, marginTop: 16, scrollMarginTop: 80 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <History size={15} style={{ color: 'var(--accent)' }} />
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>Historial de versiones</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
+          Todo lo nuevo y lo que se corrigió en ComarPOS, de lo más reciente a lo más viejo.
+        </div>
+        <VersionHistory />
       </div>
     </AppLayout>
   );
