@@ -6,6 +6,15 @@ import prisma from "../../prisma";
 import { normalizeSku, productInclude, type GetProductsOptions } from "./product.helpers";
 import { tenantScope } from "../../utils/tenantScope";
 
+// Variantes activas (con su stock) adentro de cada padre, para ?grouped=true.
+const groupedVariantsInclude = {
+  variants: {
+    where: { isActive: true },
+    include: { stock: { include: { businessLocation: true } } },
+    orderBy: { createdAt: "asc" as const },
+  },
+};
+
 export async function getAll(options?: GetProductsOptions) {
   const page = Number(options?.page);
   const limit = Number(options?.limit);
@@ -25,7 +34,27 @@ export async function getAll(options?: GetProductsOptions) {
     ...tenantScope(),
   };
 
+  // Sin grouped/sellable el listado queda exactamente como antes (padres y
+  // variantes mezclados) para no romper pantallas que no se migraron.
+  if (options?.grouped) {
+    where.parentId = null;
+  } else if (options?.sellable) {
+    where.hasVariants = false;
+  }
+
   if (search) {
+    const variantMatch = {
+      variants: {
+        some: {
+          isActive: true,
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { sku: { contains: search, mode: "insensitive" } },
+          ],
+        },
+      },
+    };
+
     where.OR = [
       {
         name: {
@@ -45,6 +74,9 @@ export async function getAll(options?: GetProductsOptions) {
           mode: "insensitive",
         },
       },
+      // En modo agrupado, buscar por nombre/SKU de una variante encuentra
+      // a su padre.
+      ...(options?.grouped ? [variantMatch] : []),
     ];
   }
 
@@ -94,10 +126,12 @@ export async function getAll(options?: GetProductsOptions) {
     ];
   }
 
+  const include = options?.grouped ? { ...productInclude, ...groupedVariantsInclude } : productInclude;
+
   if (!hasPagination) {
     return prisma.product.findMany({
       where,
-      include: productInclude,
+      include,
       orderBy,
     });
   }
@@ -109,7 +143,7 @@ export async function getAll(options?: GetProductsOptions) {
   const [data, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: productInclude,
+      include,
       orderBy,
       skip,
       take: safeLimit,
@@ -132,16 +166,25 @@ export async function getAll(options?: GetProductsOptions) {
 export async function getBySku(rawSku: string) {
   const sku = normalizeSku(rawSku);
 
+  // Si el SKU es de una variante, trae `parent`; si es de un padre, trae
+  // sus variantes activas (el POS abre el selector de variantes).
   return prisma.product.findFirst({
     where: { sku, ...tenantScope() },
-    include: productInclude,
+    include: { ...productInclude, ...groupedVariantsInclude },
   });
 }
 
 export async function getById(id: string) {
+  // Incluye todas las variantes (activas o no) para poder editarlas.
   return prisma.product.findFirst({
     where: { id, ...tenantScope() },
-    include: productInclude,
+    include: {
+      ...productInclude,
+      variants: {
+        include: { stock: { include: { businessLocation: true } } },
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
 }
 

@@ -34,6 +34,37 @@ router.put(
   productController.setStockMin
 );
 
+// Mismo stock minimo para todas las variantes de un padre en una ubicacion
+router.put(
+  "/:id/stock-min-all/:businessLocationId",
+  authMiddleware,
+  requireRole("ADMIN"),
+  productController.setStockMinForAllVariants
+);
+
+// Variantes: sincronizar combinaciones / editar la grilla, convertir un
+// producto existente y "volver al precio general" de una variante.
+router.post(
+  "/:id/variants/sync",
+  authMiddleware,
+  requireRole("ADMIN"),
+  productController.syncVariants
+);
+
+router.post(
+  "/:id/convert-to-variants",
+  authMiddleware,
+  requireRole("ADMIN"),
+  productController.convertToVariants
+);
+
+router.post(
+  "/:id/reset-price",
+  authMiddleware,
+  requireRole("ADMIN"),
+  productController.resetVariantPrice
+);
+
 // SKU
 router.get("/sku/:sku", authMiddleware, productController.getBySku);
 

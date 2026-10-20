@@ -79,6 +79,10 @@ export type GetProductsOptions = {
   search?: string;
   categoryId?: string;
   sort?: string;
+  // ?grouped=true: padres y productos simples, con sus variantes adentro.
+  grouped?: boolean;
+  // ?sellable=true: solo lo que se vende (simples y variantes, nunca padres).
+  sellable?: boolean;
 };
 
 export type CreateProductInput = {
@@ -122,6 +126,12 @@ export type CreateProductInput = {
     minQuantityKg?: number | string;
   }[];
   userId?: string;
+
+  // Variantes (ver product.variants.ts): si hasVariants, se crea un padre
+  // agrupador + una variante por combinacion de variantOptions.
+  hasVariants?: boolean | string;
+  variantOptions?: unknown;
+  variants?: unknown;
 };
 
 function normalizeComponents(data: CreateProductInput | any): ProductComponentInput[] {
@@ -218,6 +228,7 @@ async function validateComponents(
         type: true,
         saleUnit: true,
         isActive: true,
+        hasVariants: true,
       },
     });
 
@@ -227,6 +238,12 @@ async function validateComponents(
 
     if (!componentProduct.isActive) {
       throw new Error(`El componente "${componentProduct.name}" está inactivo`);
+    }
+
+    if (componentProduct.hasVariants) {
+      throw new Error(
+        `"${componentProduct.name}" tiene variantes: elegí la variante que va como componente`
+      );
     }
 
     if (componentProduct.type === ProductType.COMPUESTO) {
@@ -324,6 +341,10 @@ const productInclude = {
     include: {
       composite: true,
     },
+  },
+  // Variantes: datos del padre para mostrar nombre/foto/opciones.
+  parent: {
+    select: { id: true, name: true, sku: true, imageUrl: true, variantOptions: true, hasVariants: true },
   },
 };
 

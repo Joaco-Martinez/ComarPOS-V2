@@ -103,6 +103,8 @@ export const productController = {
         search,
         categoryId,
         sort,
+        grouped: req.query.grouped === "true",
+        sellable: req.query.sellable === "true",
       });
 
       res.json(products);
@@ -161,6 +163,10 @@ export const productController = {
         boxContents: parseJsonArray(req.body.boxContents),
         initialStock: parseJsonArray(req.body.initialStock),
         userId: (req as any).user?.id,
+
+        hasVariants: normalizeBoolean(req.body.hasVariants),
+        variantOptions: req.body.variantOptions,
+        variants: req.body.variants,
       });
 
       if ((newProduct as any)?.statusCode) {
@@ -396,6 +402,71 @@ export const productController = {
         components
       );
 
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // Variantes: crear/sincronizar combinaciones y editar la grilla.
+  async syncVariants(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = getParamAsString(req.params.id, "id");
+      const result = await productService.syncVariants(
+        id,
+        { variantOptions: req.body?.variantOptions, variants: req.body?.variants },
+        (req as any).user?.id
+      );
+      logAudit(req, "UPDATE", "Product", id, {
+        variants: { created: result.created, deleted: result.deleted, deactivated: result.deactivated },
+      });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async convertToVariants(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = getParamAsString(req.params.id, "id");
+      const parent = await productService.convertToVariants(
+        id,
+        {
+          mode: req.body?.mode,
+          variantOptions: req.body?.variantOptions,
+          attributes: req.body?.attributes,
+          deactivateOriginal: req.body?.deactivateOriginal,
+          parentSku: req.body?.parentSku,
+          variants: req.body?.variants,
+        },
+        (req as any).user?.id
+      );
+      logAudit(req, "UPDATE", "Product", id, { convertToVariants: req.body?.mode, parentId: parent?.id });
+      res.status(201).json(parent);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async resetVariantPrice(req: Request, res: Response, next: NextFunction) {
+    try {
+      const target = req.body?.target === "price" || req.body?.target === "cost" ? req.body.target : "both";
+      const updated = await productService.resetVariantPrice(getParamAsString(req.params.id, "id"), target);
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async setStockMinForAllVariants(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { minQuantity, minQuantityKg } = req.body ?? {};
+      const result = await productService.setStockMinForAllVariants(
+        getParamAsString(req.params.id, "id"),
+        getParamAsString(req.params.businessLocationId, "businessLocationId"),
+        minQuantity === undefined || minQuantity === null || minQuantity === "" ? null : Number(minQuantity),
+        minQuantityKg === undefined || minQuantityKg === null || minQuantityKg === "" ? null : Number(minQuantityKg)
+      );
       res.json(result);
     } catch (err) {
       next(err);

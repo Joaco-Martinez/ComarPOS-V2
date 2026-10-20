@@ -9,12 +9,16 @@ import { Prisma, ProductType, MovementType, SaleUnit } from "@prisma/client";
 import alertService from "../alert.service";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
+import { assertNotParent } from "./product.variants";
 
 const stockInclude = { stock: { include: { businessLocation: true } } } as const;
 
+// El padre de un producto con variantes no tiene stock: todas las
+// operaciones de stock van por variante.
 async function requireProduct(productId: string) {
   const product = await prisma.product.findFirst({ where: { id: productId, ...tenantScope() } });
   if (!product) throw new Error("Producto no encontrado");
+  assertNotParent(product);
   return product;
 }
 
