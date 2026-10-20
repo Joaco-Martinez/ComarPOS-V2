@@ -227,19 +227,67 @@ export default function PosPage() {
     ).slice(0, 8);
   }, [clients, clientSearch]);
 
-  const productStock = (p: Product) => {
+  // Stock de la fila propia del producto en la sucursal elegida.
+  const ownStock = (p: Product) => {
     const row = p.stock?.find((s) => s.businessLocationId === stockLocationId);
     if (!row) return 0;
     return num(p.saleUnit === 'KG' ? row.quantityKg : row.quantity);
   };
 
-  // Cantidad de un producto ya cargada en el carrito, sumando todas sus
-  // líneas (puede estar repetido con distinto priceType) -- para saber
-  // cuánto más se puede agregar sin pasarse del stock disponible.
-  const cartQtyForProduct = (productId: string) => cart.reduce((acc, item) => {
-    if (item.product.id !== productId) return acc;
-    return acc + (item.product.saleUnit === 'KG' ? num(item.quantityKg) : item.quantity);
-  }, 0);
+  // Un COMPUESTO nunca tiene stock propio (product.stock.ts bloquea ingresos
+  // y transferencias): su disponible sale de los componentes en la sucursal,
+  // igual que getProductStock() del catálogo -- min(floor(stock / cantidad
+  // por combo)).
+  const productStock = (p: Product) => {
+    if (p.type !== 'COMPUESTO') return ownStock(p);
+    const components = p.components ?? [];
+    if (components.length === 0) return 0;
+    return Math.max(0, Math.min(...components.map((c) => {
+      const row = c.component?.stock?.find((s) => s.businessLocationId === stockLocationId);
+      if (num(c.quantity) > 0) return Math.floor(num(row?.quantity) / num(c.quantity));
+      if (num(c.quantityKg) > 0) return Math.floor(num(row?.quantityKg) / num(c.quantityKg));
+      return 0;
+    })));
+  };
+
+  // Lo que consume del stock real cargar `qty` de un producto: el propio
+  // producto, o cada componente escalado si es un COMPUESTO. Mismo criterio
+  // que buildStockLines() del backend.
+  const stockUsage = (p: Product, qty: number) => {
+    if (p.type !== 'COMPUESTO') return [{ productId: p.id, qty }];
+    return (p.components ?? []).map((c) => ({
+      productId: c.componentId,
+      qty: num(num(c.quantity) > 0 ? c.quantity : c.quantityKg) * qty,
+    }));
+  };
+
+  // Consumo total del carrito por producto base, sumando todas sus líneas
+  // (puede estar repetido con distinto priceType) y lo que usan los combos
+  // -- un componente puede estar suelto y además dentro de un combo.
+  const cartUsage = () => {
+    const usage = new Map<string, number>();
+    for (const item of cart) {
+      const qty = item.product.saleUnit === 'KG' ? num(item.quantityKg) : item.quantity;
+      for (const u of stockUsage(item.product, qty)) {
+        usage.set(u.productId, (usage.get(u.productId) ?? 0) + u.qty);
+      }
+    }
+    return usage;
+  };
+
+  // true si se pueden agregar `delta` unidades/kg de `product` sin pasarse
+  // del stock de ninguno de los productos que consume.
+  const fitsInStock = (product: Product, delta: number) => {
+    const usage = cartUsage();
+    const ownStockById = new Map<string, number>([[product.id, ownStock(product)]]);
+    for (const c of product.components ?? []) {
+      if (c.component) ownStockById.set(c.componentId, ownStock(c.component));
+    }
+    if (product.type === 'COMPUESTO' && (product.components ?? []).length === 0) return false;
+    return stockUsage(product, delta).every(
+      (u) => (usage.get(u.productId) ?? 0) + u.qty <= (ownStockById.get(u.productId) ?? 0) + 1e-9
+    );
+  };
 
   const warnNoStock = (name: string, available: number) => {
     setCartWarning(`No hay más stock de "${name}" (disponible: ${available})`);
@@ -255,9 +303,8 @@ export default function PosPage() {
       return true;
     }
     if (!product.isService && !product.unlimitedStock) {
-      const available = productStock(product);
-      if (cartQtyForProduct(product.id) + 1 > available) {
-        warnNoStock(product.name, available);
+      if (!fitsInStock(product, 1)) {
+        warnNoStock(product.name, productStock(product));
         return false;
       }
     }
@@ -283,9 +330,8 @@ export default function PosPage() {
     const qty = parseFloat(kgModal.qty);
     if (!qty || qty <= 0) { setKgModal(null); return; }
     if (!kgModal.product.isService && !kgModal.product.unlimitedStock) {
-      const available = productStock(kgModal.product);
-      if (cartQtyForProduct(kgModal.product.id) + qty > available) {
-        warnNoStock(kgModal.product.name, available);
+      if (!fitsInStock(kgModal.product, qty)) {
+        warnNoStock(kgModal.product.name, productStock(kgModal.product));
         return;
       }
     }
@@ -522,9 +568,8 @@ export default function PosPage() {
     if (!current) return;
     const newQty = current.quantity + delta;
     if (delta > 0 && newQty > 0 && !current.product.isService && !current.product.unlimitedStock) {
-      const available = productStock(current.product);
-      if (cartQtyForProduct(current.product.id) + delta > available) {
-        warnNoStock(current.product.name, available);
+      if (!fitsInStock(current.product, delta)) {
+        warnNoStock(current.product.name, productStock(current.product));
         return;
       }
     }

@@ -316,6 +316,9 @@ const productInclude = {
       component: {
         include: {
           category: true,
+          // El POS calcula el disponible de un COMPUESTO a partir del stock
+          // de sus componentes (no tiene stock propio).
+          stock: true,
         },
       },
     },
