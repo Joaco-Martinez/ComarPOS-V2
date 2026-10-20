@@ -50,7 +50,9 @@ export default function PromocionesPage() {
     }
     try {
       const [prodRes, catRes] = await Promise.all([
-        api.get('/products', { params: { limit: 500, isActive: true } }),
+        // grouped: solo padres y productos simples (una promo sobre el padre
+        // aplica a todas sus variantes).
+        api.get('/products', { params: { limit: 500, isActive: true, grouped: true } }),
         api.get('/categories'),
       ]);
       setProducts(normalizeArray<Product>(prodRes.data));
@@ -292,6 +294,7 @@ export default function PromocionesPage() {
                       <label key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
                         <input type="checkbox" checked={form.productIds.includes(prod.id)} onChange={() => toggleId('productIds', prod.id)} style={{ width: 13, height: 13 }} />
                         {prod.name}
+                        {prod.hasVariants && <span style={{ fontSize: 11, color: 'var(--text3)' }}>(todas sus {prod.variants?.length ?? 0} variantes)</span>}
                       </label>
                     ))}
                   </div>

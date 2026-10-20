@@ -7,6 +7,20 @@ function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+// Las promos por producto se cargan sobre productos simples o sobre el padre
+// de un producto con variantes (aplica a todas, ver applyToCart); una
+// variante suelta no se elige.
+async function assertNoLooseVariants(productIds?: string[]) {
+  if (!productIds?.length) return;
+  const variant = await prisma.product.findFirst({
+    where: { id: { in: productIds }, parentId: { not: null }, ...tenantScope() },
+    select: { name: true },
+  });
+  if (variant) {
+    throw new Error(`"${variant.name}" es una variante: elegí el producto principal (la promo aplica a todas sus variantes).`);
+  }
+}
+
 export const promotionService = {
   async getAll() {
     return prisma.promotion.findMany({
@@ -47,6 +61,7 @@ export const promotionService = {
   }) {
     if (data.startsAt >= data.endsAt) throw new Error("startsAt debe ser anterior a endsAt.");
     if (data.discountValue <= 0) throw new Error("El descuento debe ser mayor a 0.");
+    await assertNoLooseVariants(data.productIds);
     return prisma.promotion.create({
       data: { ...data, tenantId: currentTenantId() },
     });
@@ -67,6 +82,7 @@ export const promotionService = {
   }) {
     const existing = await prisma.promotion.findFirst({ where: { id, ...tenantScope() } });
     if (!existing) throw new Error("Promoción no encontrada.");
+    await assertNoLooseVariants(data.productIds);
     return prisma.promotion.update({ where: { id }, data });
   },
 

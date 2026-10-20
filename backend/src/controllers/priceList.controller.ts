@@ -90,7 +90,8 @@ export const priceListController = {
             req.body.pricePerKg === undefined || req.body.pricePerKg === null || req.body.pricePerKg === ""
               ? null
               : Number(req.body.pricePerKg),
-        }
+        },
+        { allVariants: req.query.allVariants === "true" }
       );
 
       return sendServiceResponse(res, result);
@@ -116,7 +117,8 @@ export const priceListController = {
     try {
       const result = await priceListService.removeItem(
         getParamAsString(req.params.id, "id"),
-        getParamAsString(req.params.productId, "productId")
+        getParamAsString(req.params.productId, "productId"),
+        { allVariants: req.query.allVariants === "true" }
       );
 
       return sendServiceResponse(res, result);
