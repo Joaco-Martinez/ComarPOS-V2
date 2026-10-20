@@ -187,7 +187,62 @@ export function resolvePrice(product: any, category: CategoryClient) {
   };
 }
 
+// Variantes: el catalogo muestra padres y productos simples; el padre trae
+// sus variantes activas, cada una con su precio, stock y foto (o la del
+// padre), y el resumen ("desde $X", stock total, canSell si alguna tiene).
+function mapVariant(variant: any, parent: any, customer: CustomerContext) {
+  const stock = getProductStock(variant);
+  const pricing = resolvePrice(variant, customer.category);
+
+  return {
+    id: variant.id,
+    sku: variant.sku,
+    name: variant.name,
+    variantLabel: variant.variantLabel,
+    attributes: variant.variantAttributes ?? {},
+    imageUrl: variant.imageUrl || parent.imageUrl || null,
+    price: pricing.price,
+    publicPrice: pricing.publicPrice,
+    availableQuantity: stock.availableQuantity,
+    availableKg: stock.availableKg,
+    stockLabel: stock.stockLabel,
+    // Mismo criterio que el checkout (order.service): sin limite o servicio
+    // se puede pedir aunque no haya stock cargado.
+    canSell: stock.canSell || Boolean(variant.unlimitedStock) || Boolean(variant.isService),
+  };
+}
+
 function mapProduct(product: any, customer: CustomerContext) {
+  if (product.hasVariants) {
+    const variants = (product.variants ?? []).map((v: any) => mapVariant(v, product, customer));
+    const prices = variants.map((v: any) => v.price);
+    const minPrice = prices.length ? Math.min(...prices) : 0;
+    const maxPrice = prices.length ? Math.max(...prices) : 0;
+    const isKg = product.saleUnit === SaleUnit.KG;
+    const totalQty = variants.reduce((acc: number, v: any) => acc + v.availableQuantity, 0);
+    const totalKg = variants.reduce((acc: number, v: any) => acc + v.availableKg, 0);
+    const canSell = variants.some((v: any) => v.canSell);
+
+    return {
+      ...mapSimpleProduct({ ...product, type: ProductType.SIMPLE, components: [] }, customer),
+      hasVariants: true,
+      variantOptions: product.variantOptions ?? [],
+      variants,
+      price: round2(minPrice),
+      priceFrom: round2(minPrice),
+      priceTo: round2(maxPrice),
+      hasPriceRange: maxPrice !== minPrice,
+      availableQuantity: totalQty,
+      availableKg: totalKg,
+      stockLabel: canSell ? (isKg ? `${round2(totalKg)} kg disponibles` : `${totalQty} disponibles`) : "Sin stock",
+      canSell,
+    };
+  }
+
+  return mapSimpleProduct(product, customer);
+}
+
+function mapSimpleProduct(product: any, customer: CustomerContext) {
   const stock = getProductStock(product);
   const pricing = resolvePrice(product, customer.category);
 
@@ -266,7 +321,7 @@ function buildWhatsappMessage(params: {
 
   const lines = sale.items.map((item: any) => {
     const productName =
-      item.product?.name || item.productNameSnapshot || "Producto";
+      item.productNameSnapshot || item.product?.name || "Producto";
     const saleUnit = item.product?.saleUnit || "UNIT";
     const qty =
       saleUnit === SaleUnit.KG
@@ -345,7 +400,8 @@ export const catalogService = {
       include: {
         _count: {
           select: {
-            products: { where: { isActive: true } },
+            // Padres y productos simples (las variantes no cuentan aparte).
+            products: { where: { isActive: true, parentId: null } },
           },
         },
       },
@@ -366,7 +422,8 @@ export const catalogService = {
     const page = cleanPage(filters.page);
     const search = normalizeSearch(filters.search);
 
-    const where: any = { isActive: true, ...tenantScope() };
+    // Solo padres y productos simples; las variantes van adentro del padre.
+    const where: any = { isActive: true, parentId: null, ...tenantScope() };
 
     if (filters.categorySlug) {
       where.category = {
@@ -380,6 +437,19 @@ export const catalogService = {
         { name: { contains: search, mode: "insensitive" } },
         { description: { contains: search, mode: "insensitive" } },
         { sku: { contains: search, mode: "insensitive" } },
+        // Buscar (o escanear) el SKU o el nombre de una variante encuentra a
+        // su padre.
+        {
+          variants: {
+            some: {
+              isActive: true,
+              OR: [
+                { name: { contains: search, mode: "insensitive" } },
+                { sku: { contains: search, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
       ];
     }
 
@@ -390,10 +460,17 @@ export const catalogService = {
         category: true,
         stock: true,
         components: { include: { component: { include: { stock: true } } } },
+        variants: {
+          where: { isActive: true },
+          include: { stock: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
 
     const mappedProducts = products
+      // Un padre sin variantes activas no tiene nada para vender.
+      .filter((product) => !product.hasVariants || product.variants.length > 0)
       .map((product) => mapProduct(product, customer))
       .sort((a, b) => {
         if (a.canSell !== b.canSell) return a.canSell ? -1 : 1;

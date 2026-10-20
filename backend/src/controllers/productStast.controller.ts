@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { productStatsService } from "../services/productStats.service";
 import { parseDateInputAR } from "../utils/dateAR";
+import { parseGroupBy } from "../services/reports/variantGrouping";
 
 function parseUnit(unit: any): "UNIT" | "KG" | undefined {
   if (!unit) return undefined;
@@ -51,7 +52,8 @@ export const productStatsController = {
 
       const stats = await productStatsService.getTopProducts(
         parseLimit(limit, 10),
-        parseUnit(unit)
+        parseUnit(unit),
+        parseGroupBy(req.query.groupBy)
       );
 
       res.json(stats);
@@ -70,7 +72,8 @@ export const productStatsController = {
 
       const stats = await productStatsService.getWorstProducts(
         parseLimit(limit, 10),
-        parseUnit(unit)
+        parseUnit(unit),
+        parseGroupBy(req.query.groupBy)
       );
 
       res.json(stats);
@@ -101,7 +104,8 @@ export const productStatsController = {
         startDate,
         endDate,
         parseLimit(limit, 10),
-        parseUnit(unit)
+        parseUnit(unit),
+        parseGroupBy(req.query.groupBy)
       );
 
       res.json(stats);
@@ -132,7 +136,8 @@ export const productStatsController = {
         startDate,
         endDate,
         parseLimit(limit, 10),
-        parseUnit(unit)
+        parseUnit(unit),
+        parseGroupBy(req.query.groupBy)
       );
 
       res.json(stats);
@@ -159,7 +164,8 @@ export const productStatsController = {
       const stat = await productStatsService.getBestProductByMonth(
         Number(year),
         Number(month),
-        parseUnit(unit)
+        parseUnit(unit),
+        parseGroupBy(req.query.groupBy)
       );
 
       res.json(stat);
@@ -186,7 +192,8 @@ export const productStatsController = {
       const stat = await productStatsService.getWorstProductByMonth(
         Number(year),
         Number(month),
-        parseUnit(unit)
+        parseUnit(unit),
+        parseGroupBy(req.query.groupBy)
       );
 
       res.json(stat);

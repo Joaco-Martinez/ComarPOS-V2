@@ -144,8 +144,9 @@ export const businessLocationService = {
 
       // Arranca con stock en 0 para todos los productos activos del tenant
       // - ver doc de migracion "ubicaciones de stock dinamicas".
+      // Los padres de productos con variantes no tienen stock propio.
       const products = await tx.product.findMany({
-        where: { isActive: true, ...tenantScope() },
+        where: { isActive: true, hasVariants: false, ...tenantScope() },
         select: { id: true },
       });
       if (products.length > 0) {

@@ -83,6 +83,11 @@ export interface ProductComponent {
   component?: Product;
 }
 
+export interface VariantOption {
+  name: string;
+  values: string[];
+}
+
 export interface ProductStock {
   id: string;
   productId: string;
@@ -121,6 +126,18 @@ export interface Product {
   isActive?: boolean;
   components?: ProductComponent[];
   usedIn?: ProductComponent[];
+  // Variantes (talle, color, sabor...): el padre (hasVariants) agrupa y no
+  // se vende; cada variante es un Product con parentId, su SKU, precio,
+  // costo, foto y stock.
+  parentId?: string | null;
+  hasVariants?: boolean;
+  variantOptions?: VariantOption[] | null;
+  variantAttributes?: Record<string, string> | null;
+  variantLabel?: string | null;
+  customPrice?: boolean;
+  customCost?: boolean;
+  variants?: Product[];
+  parent?: Pick<Product, 'id' | 'name' | 'sku' | 'imageUrl' | 'variantOptions' | 'hasVariants'> | null;
   createdAt?: string;
   updatedAt?: string;
 }

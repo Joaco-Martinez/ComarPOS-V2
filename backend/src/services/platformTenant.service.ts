@@ -96,7 +96,8 @@ export const platformTenantService = {
         _max: { createdAt: true },
         _sum: { total: true },
       }),
-      prisma.product.count({ where: { tenantId: id } }),
+      // Mismo criterio que el limite del plan: las variantes no cuentan.
+      prisma.product.count({ where: { tenantId: id, parentId: null } }),
     ]);
 
     return {

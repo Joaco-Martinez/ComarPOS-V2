@@ -85,7 +85,7 @@ export const supplierService = {
 
     const products = await prisma.product.findMany({
       where: { supplierId, isActive: true, ...tenantScope() },
-      select: { id: true, saleUnit: true, price: true, pricePerKg: true, purchasePrice: true },
+      select: { id: true, saleUnit: true, price: true, pricePerKg: true, purchasePrice: true, hasVariants: true },
     });
 
     if (products.length === 0) {
@@ -117,13 +117,17 @@ export const supplierService = {
         return prisma.product.update({
           where: { id: product.id },
           data,
-          select: { id: true, price: true, pricePerKg: true },
+          select: { id: true, price: true, pricePerKg: true, hasVariants: true },
         });
       })
     );
 
+    // Padres y variantes reciben el mismo factor, asi las variantes sin
+    // precio propio siguen iguales al padre. El padre no tiene fila en la
+    // lista de precios default (no se vende).
     if (applySale) {
       for (const product of updated) {
+        if (product.hasVariants) continue;
         await priceListService.syncDefaultPriceListItem(currentTenantId(), product);
       }
     }

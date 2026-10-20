@@ -10,6 +10,7 @@ import { useStore } from '../StoreContext';
 import { useCartContext } from '../CartContext';
 import SkuScannerModal from '@/components/SkuScannerModal';
 import { Search, Package, ChevronLeft, ChevronRight, Plus, Check, ScanBarcode } from 'lucide-react';
+import VariantChooser, { type StoreVariant } from './VariantChooser';
 
 type StoreProduct = {
   id: string;
@@ -22,6 +23,11 @@ type StoreProduct = {
   price: number;
   stockLabel: string;
   canSell: boolean;
+  // Variantes: el catálogo trae el padre con sus variantes adentro.
+  hasVariants?: boolean;
+  variantOptions?: { name: string; values: string[] }[];
+  variants?: StoreVariant[];
+  hasPriceRange?: boolean;
 };
 
 const money = (n: number) =>
@@ -40,8 +46,26 @@ export default function TiendaProductosPage() {
   const [loading, setLoading] = useState(true);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [choosing, setChoosing] = useState<StoreProduct | null>(null);
+
+  // El carrito guarda el productId de la variante y su nombre completo
+  // ("Remera - M / Rojo").
+  const handleAddVariant = (parent: StoreProduct, v: StoreVariant) => {
+    addItem({ productId: v.id, name: v.name, imageUrl: v.imageUrl ?? parent.imageUrl, price: v.price, saleUnit: parent.saleUnit }, 1);
+    setChoosing(null);
+    setJustAdded(parent.id);
+    toast.success(`${v.name} agregado al carrito`);
+    setTimeout(() => setJustAdded((cur) => (cur === parent.id ? null : cur)), 1200);
+  };
 
   const handleAdd = (p: StoreProduct) => {
+    if (p.hasVariants) {
+      // Si se buscó/escaneó el SKU exacto de una variante, se agrega directo.
+      const exact = p.variants?.find((v) => v.sku && v.sku.toLowerCase() === search.trim().toLowerCase());
+      if (exact?.canSell) { handleAddVariant(p, exact); return; }
+      setChoosing(p);
+      return;
+    }
     addItem({ productId: p.id, name: p.name, imageUrl: p.imageUrl, price: p.price, saleUnit: p.saleUnit }, p.saleUnit === 'KG' ? 1 : 1);
     setJustAdded(p.id);
     toast.success(`${p.name} agregado al carrito`);
@@ -138,8 +162,13 @@ export default function TiendaProductosPage() {
                     {p.name}
                   </div>
                   <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--store-accent)' }}>
-                    {money(p.price)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                    {p.hasPriceRange ? 'Desde ' : ''}{money(p.price)}{p.saleUnit === 'KG' ? '/kg' : ''}
                   </div>
+                  {p.hasVariants && (
+                    <div style={{ fontSize: 11, color: '#667085', marginTop: 2 }}>
+                      {(p.variantOptions ?? []).map((o) => `${o.values.length} ${o.name.toLowerCase()}`).join(' · ')}
+                    </div>
+                  )}
                   <div style={{ fontSize: 11, color: p.canSell ? '#98A2B3' : '#F04438', marginTop: 4, marginBottom: 10 }}>
                     {p.canSell ? p.stockLabel : 'Sin stock'}
                   </div>
@@ -155,7 +184,7 @@ export default function TiendaProductosPage() {
                     }}
                   >
                     {justAdded === p.id ? <Check size={13} /> : <Plus size={13} />}
-                    {justAdded === p.id ? 'Agregado' : 'Agregar'}
+                    {justAdded === p.id ? 'Agregado' : p.hasVariants ? 'Elegir opciones' : 'Agregar'}
                   </button>
                 </div>
               </div>
@@ -182,6 +211,19 @@ export default function TiendaProductosPage() {
             </div>
           )}
         </>
+      )}
+      {choosing && (
+        <VariantChooser
+          name={choosing.name}
+          description={choosing.description}
+          imageUrl={choosing.imageUrl}
+          saleUnit={choosing.saleUnit}
+          options={choosing.variantOptions ?? []}
+          variants={choosing.variants ?? []}
+          money={money}
+          onAdd={(v) => handleAddVariant(choosing, v)}
+          onClose={() => setChoosing(null)}
+        />
       )}
     </div>
   );

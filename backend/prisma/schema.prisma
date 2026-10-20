@@ -557,6 +557,25 @@ model Product {
   unlimitedStock      Boolean             @default(false)
   minStockDeposito    Int?
   minStockDepositoKg  Float?
+  // Variantes de producto (talle, color, sabor...). Cada variante es un
+  // Product "hijo" normal (parentId) con su SKU, precio, costo, foto y
+  // stock; el "padre" (hasVariants) solo agrupa: no se vende ni tiene stock.
+  // Todo lo que ya funciona por productId (stock, ventas, compras...) sigue
+  // andando sin columnas nuevas en esas tablas. Ver product/product.variants.ts.
+  parentId            String?
+  parent              Product?            @relation("ProductVariants", fields: [parentId], references: [id], onDelete: Restrict)
+  variants            Product[]           @relation("ProductVariants")
+  hasVariants         Boolean             @default(false)
+  // Solo en el padre: [{ "name": "Talle", "values": ["S","M","L"] }, ...]
+  variantOptions      Json?
+  // Solo en la variante: { "Talle": "M", "Color": "Rojo" }
+  variantAttributes   Json?
+  // Solo en la variante: "M / Rojo" (el name queda "<padre> - <label>")
+  variantLabel        String?
+  // true si el precio/costo de la variante se cambio a mano: los cambios de
+  // precio/costo del padre ya no la pisan.
+  customPrice         Boolean             @default(false)
+  customCost          Boolean             @default(false)
   alerts              Alert[]
   BoxContent          BoxContent[]
   category            ProductCategory?    @relation(fields: [categoryId], references: [id])
@@ -584,6 +603,7 @@ model Product {
   @@index([isActive])
   @@index([isActive, name])
   @@index([tenantId])
+  @@index([parentId])
 }
 
 model ProductComponent {

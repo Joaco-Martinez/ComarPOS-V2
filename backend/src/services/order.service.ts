@@ -63,6 +63,12 @@ async function resolveAndValidateItems(
       throw new AppError("PRODUCT_NOT_FOUND", "Uno de los productos ya no está disponible", 400);
     }
 
+    // El padre de un producto con variantes no se vende: el carrito guarda
+    // el productId de la variante elegida.
+    if (product.hasVariants) {
+      throw new AppError("VARIANT_REQUIRED", `Elegí una variante de "${product.name}"`, 400);
+    }
+
     const isKg = product.saleUnit === "KG";
     const qty = isKg ? Number(item.quantityKg) : Number(item.quantity);
 

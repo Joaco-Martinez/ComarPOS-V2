@@ -108,7 +108,9 @@ export function mapProductsFromSaleOrBody(
       const cantidad = numberOrZero(item.quantityKg ?? item.quantity ?? 1);
       const precioUnitario = numberOrZero(item.price ?? 0);
       return {
-        descripcion: String(item.productName || item.product?.name || "Producto").trim(),
+        // productNameSnapshot: nombre al momento de la venta (incluye la
+        // variante, ej. "Remera - M / Rojo"); manda sobre el nombre actual.
+        descripcion: String(item.productName || item.productNameSnapshot || item.product?.name || "Producto").trim(),
         cantidad,
         precioUnitario,
         subtotal: Math.round(cantidad * precioUnitario * 100) / 100,

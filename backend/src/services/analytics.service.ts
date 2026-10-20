@@ -1,3 +1,4 @@
+import { sumByGroup, type ReportGroupBy } from "./reports/variantGrouping";
 import prisma from "../prisma";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
@@ -510,7 +511,9 @@ async function getProfitabilitySummary(from: Date, to: Date) {
   };
 }
 
-async function getProfitabilityByProduct(from: Date, to: Date, limit = 20) {
+// groupBy "product": las variantes se suman en una fila con el nombre del
+// padre (ver reports/variantGrouping.ts); "variant" (default) = como antes.
+async function getProfitabilityByProduct(from: Date, to: Date, limit = 20, groupBy: ReportGroupBy = "variant") {
   const scope = tenantScope();
   const items = await prisma.saleItem.findMany({
     where: { sale: { status: "COMPLETED", createdAt: { gte: from, lte: to }, ...scope } },
@@ -520,23 +523,22 @@ async function getProfitabilityByProduct(from: Date, to: Date, limit = 20) {
         select: {
           id: true, name: true, sku: true, saleUnit: true,
           category: { select: { name: true } },
+          parentId: true, variantLabel: true, parent: { select: { id: true, name: true, sku: true } },
         },
       },
     },
   });
 
-  const byProduct: Record<string, { product: any; revenue: number; profit: number; qty: number; qtyKg: number }> = {};
-  for (const i of items) {
-    if (!byProduct[i.productId]) byProduct[i.productId] = { product: i.product, revenue: 0, profit: 0, qty: 0, qtyKg: 0 };
-    byProduct[i.productId].revenue += i.subtotal;
-    byProduct[i.productId].profit += i.profit;
-    byProduct[i.productId].qty += i.quantity;
-    byProduct[i.productId].qtyKg += i.quantityKg ?? 0;
-  }
+  const grouped = sumByGroup(
+    items,
+    (i) => i.product,
+    (i) => ({ revenue: i.subtotal, profit: i.profit, qty: i.quantity, qtyKg: i.quantityKg ?? 0 }),
+    groupBy
+  );
 
-  return Object.values(byProduct)
-    .map((d) => ({
-      product: d.product,
+  return grouped
+    .map(({ product, values: d }) => ({
+      product,
       revenue: round2(d.revenue),
       profit: round2(d.profit),
       marginPercent: safeMargin(d.revenue, d.revenue - d.profit),
@@ -648,7 +650,7 @@ async function getExpensesBreakdown(from: Date, to: Date) {
   };
 }
 
-async function getLowMarginProducts(threshold = 20) {
+async function getLowMarginProducts(threshold = 20, groupBy: ReportGroupBy = "variant") {
   const scope = tenantScope();
   const items = await prisma.saleItem.findMany({
     where: { sale: { status: "COMPLETED", ...scope } },
@@ -658,22 +660,31 @@ async function getLowMarginProducts(threshold = 20) {
         select: {
           id: true, name: true, sku: true, price: true, purchasePrice: true,
           category: { select: { name: true } },
+          // En modo "product" el margen de lista se toma del padre (precio y
+          // costo generales).
+          parentId: true, variantLabel: true,
+          parent: { select: { id: true, name: true, sku: true, price: true, purchasePrice: true } },
         },
       },
     },
   });
 
-  const byProduct: Record<string, { product: any; revenue: number; profit: number; qty: number }> = {};
-  for (const i of items) {
-    if (!byProduct[i.productId]) byProduct[i.productId] = { product: i.product, revenue: 0, profit: 0, qty: 0 };
-    byProduct[i.productId].revenue += i.subtotal;
-    byProduct[i.productId].profit += i.profit;
-    byProduct[i.productId].qty += i.quantity;
-  }
+  const grouped = sumByGroup(
+    items,
+    (i) => i.product,
+    (i) => ({ revenue: i.subtotal, profit: i.profit, qty: i.quantity }),
+    groupBy
+  ).map(({ product, values }) => {
+    const source: any = groupBy === "product" && items.find((i) => i.product.parentId === product.id)?.product.parent;
+    return {
+      product: source ? { ...product, price: source.price, purchasePrice: source.purchasePrice } : product,
+      ...values,
+    };
+  });
 
-  return Object.values(byProduct)
+  return grouped
     .filter((d) => d.revenue > 0)
-    .map((d) => ({
+    .map((d: any) => ({
       product: d.product,
       revenue: round2(d.revenue),
       profit: round2(d.profit),
@@ -1000,7 +1011,7 @@ function sumStock(stock: { quantity: number; quantityKg: number }[], isKg: boole
 async function getInventoryValue() {
   const scope = tenantScope();
   const products = await prisma.product.findMany({
-    where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
+    where: { isActive: true, isService: false, unlimitedStock: false, hasVariants: false, ...scope },
     select: {
       id: true, name: true, sku: true, saleUnit: true, purchasePrice: true, price: true,
       stock: { select: { quantity: true, quantityKg: true } },
@@ -1064,7 +1075,7 @@ async function getDeadStock(days = 45) {
   const tenantId = currentTenantId();
 
   const products = await prisma.product.findMany({
-    where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
+    where: { isActive: true, isService: false, unlimitedStock: false, hasVariants: false, ...scope },
     select: {
       id: true, name: true, sku: true, saleUnit: true, purchasePrice: true,
       stock: { select: { quantity: true, quantityKg: true } },
@@ -1110,7 +1121,7 @@ async function getDeadStock(days = 45) {
 async function getLowStock() {
   const scope = tenantScope();
   const products = await prisma.product.findMany({
-    where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
+    where: { isActive: true, isService: false, unlimitedStock: false, hasVariants: false, ...scope },
     select: {
       id: true, name: true, sku: true, saleUnit: true, purchasePrice: true, price: true,
       category: { select: { name: true } },
@@ -1149,7 +1160,7 @@ async function getLowStock() {
   return rows.sort((a, b) => b.restockCost - a.restockCost);
 }
 
-async function getInventoryRotation(from: Date, to: Date) {
+async function getInventoryRotation(from: Date, to: Date, groupBy: ReportGroupBy = "variant") {
   const scope = tenantScope();
   const [items, products] = await Promise.all([
     prisma.saleItem.findMany({
@@ -1157,11 +1168,13 @@ async function getInventoryRotation(from: Date, to: Date) {
       select: { productId: true, quantity: true, quantityKg: true, subtotal: true, profit: true },
     }),
     prisma.product.findMany({
-      where: { isActive: true, isService: false, unlimitedStock: false, ...scope },
+      // Sin padres: el stock está en cada variante.
+      where: { isActive: true, isService: false, unlimitedStock: false, hasVariants: false, ...scope },
       select: {
         id: true, name: true, sku: true, saleUnit: true, purchasePrice: true,
         stock: { select: { quantity: true, quantityKg: true } },
         category: { select: { name: true } },
+        parentId: true, variantLabel: true, parent: { select: { id: true, name: true, sku: true } },
       },
     }),
   ]);
@@ -1177,21 +1190,39 @@ async function getInventoryRotation(from: Date, to: Date) {
 
   const days = Math.max(1, (to.getTime() - from.getTime()) / 86400000);
 
-  return products
-    .map((p) => {
+  // Stock y ventas por producto (o sumados por padre en modo "product").
+  const grouped = sumByGroup(
+    products,
+    (p) => ({ ...p, category: p.category?.name }),
+    (p) => {
       const isKg = p.saleUnit === "KG";
-      const currentStock = sumStock(p.stock, isKg);
       const s = salesMap[p.id];
-      const qtySold = s ? (isKg ? s.qtyKg : s.qty) : 0;
+      return {
+        currentStock: sumStock(p.stock, isKg),
+        qtySold: s ? (isKg ? s.qtyKg : s.qty) : 0,
+        revenue: s?.revenue ?? 0,
+        profit: s?.profit ?? 0,
+      };
+    },
+    groupBy
+  );
+
+  return grouped
+    .map(({ product: p, values: v }) => {
+      const currentStock = v.currentStock;
+      const qtySold = v.qtySold;
 
       return {
-        product: { id: p.id, name: p.name, sku: p.sku, saleUnit: p.saleUnit, category: p.category?.name },
+        product: {
+          id: p.id, name: p.name, sku: p.sku, saleUnit: p.saleUnit, category: p.category,
+          parentName: p.parentName ?? null, variantLabel: p.variantLabel ?? null,
+        },
         currentStock: round2(currentStock),
         qtySold: round2(qtySold),
         rotationIndex: currentStock > 0 ? round2(qtySold / currentStock) : null,
         turnoverDays: qtySold > 0 && currentStock > 0 ? round2((currentStock / qtySold) * days) : null,
-        revenue: s ? round2(s.revenue) : 0,
-        marginPercent: s ? safeMargin(s.revenue, s.revenue - s.profit) : 0,
+        revenue: round2(v.revenue),
+        marginPercent: v.revenue > 0 ? safeMargin(v.revenue, v.revenue - v.profit) : 0,
       };
     })
     .sort((a, b) => (b.rotationIndex ?? -1) - (a.rotationIndex ?? -1));

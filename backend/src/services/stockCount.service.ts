@@ -23,7 +23,9 @@ export const stockCountService = {
     const stockRows = await prisma.productStock.findMany({
       where: {
         businessLocationId: data.businessLocationId,
-        product: { isActive: true, isService: false, unlimitedStock: false, ...scope },
+        // Los padres de productos con variantes no tienen stock: se cuenta
+        // cada variante.
+        product: { isActive: true, isService: false, unlimitedStock: false, hasVariants: false, ...scope },
       },
       select: {
         productId: true,
@@ -52,7 +54,7 @@ export const stockCountService = {
           }),
         },
       },
-      include: { items: { include: { product: { select: { id: true, name: true, sku: true, saleUnit: true } } } } },
+      include: { items: { include: { product: { select: { id: true, name: true, sku: true, saleUnit: true, parentId: true, variantLabel: true, parent: { select: { id: true, name: true } } } } } } },
     });
 
     return stockCount;
@@ -64,7 +66,15 @@ export const stockCountService = {
       include: {
         businessLocation: true,
         items: {
-          include: { product: { select: { id: true, name: true, sku: true, saleUnit: true, category: { select: { name: true } } } } },
+          include: {
+            product: {
+              select: {
+                id: true, name: true, sku: true, saleUnit: true, category: { select: { name: true } },
+                // Variantes: para agrupar visualmente por producto principal.
+                parentId: true, variantLabel: true, parent: { select: { id: true, name: true } },
+              },
+            },
+          },
           orderBy: { product: { name: "asc" } },
         },
         user: { select: { id: true, name: true } },

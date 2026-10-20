@@ -5,6 +5,13 @@ paths:
       description: Devuelve los productos más vendidos de manera global.
       parameters:
         - in: query
+          name: groupBy
+          schema:
+            type: string
+            enum: [variant, product]
+            default: variant
+          description: "product: suma las variantes en una fila con el nombre del producto principal"
+        - in: query
           name: limit
           schema:
             type: integer
@@ -36,6 +43,13 @@ paths:
       description: Devuelve los productos menos vendidos de manera global.
       parameters:
         - in: query
+          name: groupBy
+          schema:
+            type: string
+            enum: [variant, product]
+            default: variant
+          description: "product: suma las variantes en una fila con el nombre del producto principal"
+        - in: query
           name: limit
           schema:
             type: integer
@@ -50,6 +64,13 @@ paths:
     get:
       summary: Obtener productos más vendidos en un rango de fechas
       parameters:
+        - in: query
+          name: groupBy
+          schema:
+            type: string
+            enum: [variant, product]
+            default: variant
+          description: "product: suma las variantes en una fila con el nombre del producto principal"
         - in: query
           name: start
           required: true
@@ -82,6 +103,13 @@ paths:
       summary: Obtener el producto más vendido de un mes específico
       parameters:
         - in: query
+          name: groupBy
+          schema:
+            type: string
+            enum: [variant, product]
+            default: variant
+          description: "product: suma las variantes en una fila con el nombre del producto principal"
+        - in: query
           name: year
           required: true
           schema:
@@ -107,6 +135,13 @@ paths:
     get:
       summary: Obtener el producto menos vendido de un mes específico
       parameters:
+        - in: query
+          name: groupBy
+          schema:
+            type: string
+            enum: [variant, product]
+            default: variant
+          description: "product: suma las variantes en una fila con el nombre del producto principal"
         - in: query
           name: year
           required: true

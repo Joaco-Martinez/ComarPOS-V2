@@ -33,8 +33,10 @@ async function run() {
       console.log(`  [${tenant.name}] lista Minorista creada (${list.id})`);
     }
 
+    // Los padres de productos con variantes no llevan item en la lista
+    // default (no se venden; cada variante tiene el suyo).
     const products = await prisma.product.findMany({
-      where: { tenantId: tenant.id },
+      where: { tenantId: tenant.id, hasVariants: false },
       select: { id: true, price: true, pricePerKg: true },
     });
 

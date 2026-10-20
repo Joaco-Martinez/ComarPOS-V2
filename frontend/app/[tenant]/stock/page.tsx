@@ -10,7 +10,8 @@ import toast from 'react-hot-toast';
 import type { BusinessLocation, Product, ProductCategory, StockMovement } from '@/types';
 import { categoryName, fmtDate, fmtKg, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
-import { BarChart2, Search, ArrowRightLeft, X, AlertTriangle, RefreshCcw, History, ScanBarcode, Package, Pencil } from 'lucide-react';
+import { BarChart2, Search, ArrowRightLeft, X, AlertTriangle, RefreshCcw, History, ScanBarcode, Package, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
+import { matchesSearch, sortedVariants } from '@/lib/variants';
 
 const MOVEMENT_LABELS: Record<string, string> = {
   TRANSFER: 'Transferencia', INGRESS: 'Ingreso', ADJUSTMENT: 'Ajuste',
@@ -18,7 +19,9 @@ const MOVEMENT_LABELS: Record<string, string> = {
 };
 
 type MoveForm = { type: 'TRANSFER' | 'INGRESS'; fromLocationId: string; toLocationId: string; quantity: string; reason: string };
-type MinModal = { product: Product; businessLocationId: string; businessLocationName: string; minQuantity: string; minQuantityKg: string } | null;
+// forAllVariants: el mínimo se aplica a todas las variantes del padre en esa
+// sucursal (PUT /products/:id/stock-min-all/:businessLocationId).
+type MinModal = { product: Product; businessLocationId: string; businessLocationName: string; minQuantity: string; minQuantityKg: string; forAllVariants?: boolean } | null;
 
 export default function StockPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -37,12 +40,13 @@ export default function StockPage() {
   const [movFrom, setMovFrom] = useState('');
   const [movTo, setMovTo] = useState('');
   const [movLoading, setMovLoading] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const load = async () => {
     setLoading(true);
     try {
       const [pr, cr, loc] = await Promise.all([
-        api.get('/products', { params: { limit: 500, isActive: true } }),
+        api.get('/products', { params: { limit: 500, isActive: true, grouped: true } }),
         api.get('/categories'),
         api.get('/business-locations', { params: { onlyActive: true } }),
       ]);
@@ -72,15 +76,41 @@ export default function StockPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadMovements(); }, [movFrom, movTo]);
 
+  // Listado agrupado (?grouped=true): el padre de un producto con variantes
+  // se ve con el total sumado y se despliega por variante × sucursal. El
+  // ingreso, la transferencia y el mínimo se hacen por variante.
   const filtered = useMemo(() => {
     let p = products.filter((x) => x.isService !== true && x.unlimitedStock !== true);
     if (catFilter) p = p.filter((x) => x.categoryId === catFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      p = p.filter((x) => x.name.toLowerCase().includes(q) || x.sku?.toLowerCase().includes(q));
-    }
+    if (search.trim()) p = p.filter((x) => matchesSearch(x, search));
     return p;
   }, [products, catFilter, search]);
+
+  const tableRows = useMemo(() => filtered.flatMap((p) => {
+    if (!p.hasVariants) return [p];
+    const open = expanded[p.id] ?? (search.trim().length > 0 && !matchesSearch({ ...p, variants: [] }, search));
+    return open ? [p, ...sortedVariants(p)] : [p];
+  }), [filtered, expanded, search]);
+
+  // Productos "hoja" (simples y variantes): los que tienen stock real.
+  const leaves = useMemo(() => products.flatMap((p) => (p.hasVariants ? p.variants ?? [] : [p])), [products]);
+
+  // Stock/mínimo de una fila en una sucursal: un padre suma sus variantes.
+  const qtyAt = (p: Product, locId: string) => {
+    const isKg = p.saleUnit === 'KG';
+    const sources = p.hasVariants ? p.variants ?? [] : [p];
+    return sources.reduce((acc, src) => {
+      const row = src.stock?.find((s) => s.businessLocationId === locId);
+      return acc + num(isKg ? row?.quantityKg : row?.quantity);
+    }, 0);
+  };
+  const rowStock = (p: Product) => (p.hasVariants ? (p.variants ?? []).reduce((acc, v) => acc + productStock(v), 0) : productStock(p));
+  const rowMinStock = (p: Product) => (p.hasVariants ? (p.variants ?? []).reduce((acc, v) => acc + productMinStock(v), 0) : productMinStock(p));
+  const rowLow = (p: Product) => (p.hasVariants ? (p.variants ?? []).some((v) => productHasLowStockLocation(v)) : productHasLowStockLocation(p));
+  const rowCritical = (p: Product) => (p.hasVariants ? (p.variants ?? []).some((v) => productStock(v) <= 0) : productStock(p) <= 0);
+  const toggleExpanded = (p: Product) => setExpanded((prev) => ({ ...prev, [p.id]: !(prev[p.id] ?? false) }));
+  const isOpen = (p: Product) => tableRows.some((r) => r.parentId === p.id);
+  const rowName = (p: Product) => (p.parentId ? p.variantLabel ?? p.name : p.name);
 
 
   const openMoveModal = (p: Product) => {
@@ -96,7 +126,7 @@ export default function StockPage() {
 
   const handleScannedSku = (rawSku: string) => {
     const sku = rawSku.trim().toLowerCase();
-    const found = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
+    const found = leaves.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
     if (!found) {
       toast.error(`No encontré ningún producto con SKU: ${rawSku}`);
       return;
@@ -143,13 +173,14 @@ export default function StockPage() {
   };
 
   const openMinModal = (p: Product, loc: BusinessLocation) => {
-    const row = p.stock?.find((s) => s.businessLocationId === loc.id);
+    const row = p.hasVariants ? undefined : p.stock?.find((s) => s.businessLocationId === loc.id);
     setMinModal({
       product: p,
       businessLocationId: loc.id,
       businessLocationName: loc.name,
       minQuantity: String(row?.minQuantity ?? ''),
       minQuantityKg: String(row?.minQuantityKg ?? ''),
+      forAllVariants: Boolean(p.hasVariants),
     });
   };
 
@@ -157,7 +188,8 @@ export default function StockPage() {
     if (!minModal) return;
     setSaving(true);
     try {
-      await api.put(`/products/${minModal.product.id}/stock-min/${minModal.businessLocationId}`, {
+      const endpoint = minModal.forAllVariants ? 'stock-min-all' : 'stock-min';
+      await api.put(`/products/${minModal.product.id}/${endpoint}/${minModal.businessLocationId}`, {
         minQuantity: minModal.minQuantity === '' ? null : Number(minModal.minQuantity),
         minQuantityKg: minModal.minQuantityKg === '' ? null : Number(minModal.minQuantityKg),
       });
@@ -171,7 +203,7 @@ export default function StockPage() {
     }
   };
 
-  const lowStockCount = products.filter((p) => productStock(p) <= 0 || productHasLowStockLocation(p)).length;
+  const lowStockCount = leaves.filter((p) => p.isService !== true && p.unlimitedStock !== true && (productStock(p) <= 0 || productHasLowStockLocation(p))).length;
 
   return (
     <AppLayout
@@ -223,20 +255,29 @@ export default function StockPage() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>
             ) : (
               <ResponsiveTable
-                data={filtered}
+                data={tableRows}
                 keyFor={(p) => p.id}
                 emptyIcon={Package}
                 emptyMessage="Sin productos para mostrar"
                 columns={[
                   {
                     key: 'producto', header: 'Producto', render: (p) => (
-                      <>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p.name}</div>
-                        {p.sku && <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{p.sku}</div>}
-                      </>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: p.parentId ? 24 : 0 }}>
+                        {p.hasVariants && (
+                          <button onClick={() => toggleExpanded(p)} className="btn btn-ghost btn-xs" style={{ padding: 2 }} title={isOpen(p) ? 'Ocultar variantes' : 'Ver variantes'}>
+                            {isOpen(p) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </button>
+                        )}
+                        <div>
+                          <div style={{ fontSize: p.parentId ? 12 : 13, fontWeight: 600, color: 'var(--text)' }}>{rowName(p)}</div>
+                          {p.hasVariants
+                            ? <div style={{ fontSize: 10, color: 'var(--text3)' }}>{p.variants?.length ?? 0} variantes</div>
+                            : p.sku && <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{p.sku}</div>}
+                        </div>
+                      </div>
                     ),
                   },
-                  { key: 'categoria', header: 'Categoría', render: (p) => <span style={{ fontSize: 12 }}>{categoryName(p)}</span> },
+                  { key: 'categoria', header: 'Categoría', render: (p) => <span style={{ fontSize: 12 }}>{p.parentId ? '' : categoryName(p)}</span> },
                   { key: 'unidad', header: 'Unidad', render: (p) => <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{p.saleUnit}</span> },
                   ...locations.map((loc) => ({
                     key: `loc_${loc.id}`,
@@ -244,9 +285,15 @@ export default function StockPage() {
                     render: (p: Product) => {
                       const row = p.stock?.find((s) => s.businessLocationId === loc.id);
                       const isKg = p.saleUnit === 'KG';
-                      const qty = num(isKg ? row?.quantityKg : row?.quantity);
+                      const qty = p.hasVariants ? qtyAt(p, loc.id) : num(isKg ? row?.quantityKg : row?.quantity);
                       const min = num(isKg ? row?.minQuantityKg : row?.minQuantity);
-                      const low = min > 0 && qty <= min;
+                      const low = p.hasVariants
+                        ? (p.variants ?? []).some((v) => {
+                            const vr = v.stock?.find((s) => s.businessLocationId === loc.id);
+                            const vmin = num(isKg ? vr?.minQuantityKg : vr?.minQuantity);
+                            return vmin > 0 && num(isKg ? vr?.quantityKg : vr?.quantity) <= vmin;
+                          })
+                        : min > 0 && qty <= min;
                       const critical = qty <= 0;
                       const unit = isKg ? 'kg' : 'un';
                       return (
@@ -258,7 +305,7 @@ export default function StockPage() {
                           <button
                             onClick={() => openMinModal(p, loc)}
                             className="btn btn-ghost btn-xs"
-                            title={`Editar mínimo en ${loc.name}`}
+                            title={p.hasVariants ? `Mismo mínimo para todas las variantes en ${loc.name}` : `Editar mínimo en ${loc.name}`}
                             style={{ padding: 3, color: 'var(--text3)' }}
                           >
                             <Pencil size={10} />
@@ -269,9 +316,8 @@ export default function StockPage() {
                   })),
                   {
                     key: 'estado', header: 'Estado', render: (p) => {
-                      const s = productStock(p);
-                      const critical = s <= 0;
-                      const low = !critical && productHasLowStockLocation(p);
+                      const critical = rowCritical(p);
+                      const low = !critical && rowLow(p);
                       return critical ? (
                         <span className="badge badge-red">Sin stock</span>
                       ) : low ? (
@@ -282,7 +328,7 @@ export default function StockPage() {
                     },
                   },
                   {
-                    key: 'acciones', header: '', render: (p) => (
+                    key: 'acciones', header: '', render: (p) => p.hasVariants ? null : (
                       <button
                         onClick={() => openMoveModal(p)}
                         className="btn btn-ghost"
@@ -296,17 +342,18 @@ export default function StockPage() {
                   },
                 ] as ResponsiveTableColumn<Product>[]}
                 renderMobileCard={(p) => {
-                  const s = productStock(p);
-                  const m = productMinStock(p);
-                  const critical = s <= 0;
-                  const low = !critical && productHasLowStockLocation(p);
+                  const m = rowMinStock(p);
+                  const critical = rowCritical(p);
+                  const low = !critical && rowLow(p);
                   const unit = p.saleUnit === 'KG' ? 'kg' : 'un';
                   return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: p.parentId ? 12 : 0, borderLeft: p.parentId ? '2px solid var(--border2)' : undefined }}>
                       <div className="mobile-card-head">
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p.name}</div>
-                          {p.sku && <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{p.sku}</div>}
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{rowName(p)}</div>
+                          {p.hasVariants
+                            ? <div style={{ fontSize: 10, color: 'var(--text3)' }}>{p.variants?.length ?? 0} variantes · total {p.saleUnit === 'KG' ? fmtKg(rowStock(p)) : rowStock(p)} {unit}</div>
+                            : p.sku && <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{p.sku}</div>}
                         </div>
                         {critical ? (
                           <span className="badge badge-red">Sin stock</span>
@@ -316,17 +363,23 @@ export default function StockPage() {
                           <span className="badge badge-green">OK</span>
                         )}
                       </div>
-                      <div className="mobile-card-row">
-                        <span>Categoría</span>
-                        <span>{categoryName(p)} · {p.saleUnit}</span>
-                      </div>
+                      {!p.parentId && (
+                        <div className="mobile-card-row">
+                          <span>Categoría</span>
+                          <span>{categoryName(p)} · {p.saleUnit}</span>
+                        </div>
+                      )}
                       {locations.map((loc) => {
-                        const row = p.stock?.find((s2) => s2.businessLocationId === loc.id);
                         const isKg = p.saleUnit === 'KG';
-                        const qty = num(isKg ? row?.quantityKg : row?.quantity);
+                        const qty = qtyAt(p, loc.id);
                         return (
                           <div className="mobile-card-row" key={loc.id}>
-                            <span>{loc.name}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {loc.name}
+                              <button onClick={() => openMinModal(p, loc)} className="btn btn-ghost btn-xs" style={{ padding: 3, color: 'var(--text3)' }} title={p.hasVariants ? 'Mismo mínimo para todas las variantes' : 'Editar mínimo'}>
+                                <Pencil size={10} />
+                              </button>
+                            </span>
                             <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{isKg ? fmtKg(qty) : qty} {unit}</span>
                           </div>
                         );
@@ -335,14 +388,20 @@ export default function StockPage() {
                         <span>Mínimo (total)</span>
                         <span style={{ fontFamily: 'var(--mono)' }}>{p.saleUnit === 'KG' ? fmtKg(m) : m} {unit}</span>
                       </div>
-                      <button
-                        onClick={() => openMoveModal(p)}
-                        className="btn btn-secondary btn-sm"
-                        style={{ marginTop: 4, gap: 6 }}
-                        disabled={locations.length === 0}
-                      >
-                        <ArrowRightLeft size={13} /> Transferir stock
-                      </button>
+                      {p.hasVariants ? (
+                        <button onClick={() => toggleExpanded(p)} className="btn btn-secondary btn-sm" style={{ marginTop: 4, gap: 6 }}>
+                          {isOpen(p) ? <ChevronDown size={13} /> : <ChevronRight size={13} />} {isOpen(p) ? 'Ocultar variantes' : 'Ver variantes'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => openMoveModal(p)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ marginTop: 4, gap: 6 }}
+                          disabled={locations.length === 0}
+                        >
+                          <ArrowRightLeft size={13} /> Transferir stock
+                        </button>
+                      )}
                     </div>
                   );
                 }}
@@ -491,12 +550,17 @@ export default function StockPage() {
           <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>Mínimo de stock</div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{minModal.forAllVariants ? 'Mínimo para todas las variantes' : 'Mínimo de stock'}</div>
                 <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{minModal.product.name} · {minModal.businessLocationName}</div>
               </div>
               <button onClick={() => setMinModal(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {minModal.forAllVariants && (
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                  Se aplica a las {minModal.product.variants?.length ?? 0} variantes en {minModal.businessLocationName}. Después podés ajustar cada una por separado.
+                </div>
+              )}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Mínimo {minModal.product.saleUnit === 'KG' ? '(kg)' : ''}</label>
                 <input

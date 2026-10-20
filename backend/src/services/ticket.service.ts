@@ -383,7 +383,7 @@ function buildTicketPayload(sale: any, tenant: any, arcaConfig: any) {
           : quantity * price;
 
       return {
-        name: item.product?.name ?? item.productNameSnapshot ?? "Producto",
+        name: item.productNameSnapshot ?? item.product?.name ?? "Producto",
         quantity,
         ...(quantityKg !== undefined ? { quantityKg } : {}),
         price,

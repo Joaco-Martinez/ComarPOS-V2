@@ -7,6 +7,20 @@ function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+// Las promos por producto se cargan sobre productos simples o sobre el padre
+// de un producto con variantes (aplica a todas, ver applyToCart); una
+// variante suelta no se elige.
+async function assertNoLooseVariants(productIds?: string[]) {
+  if (!productIds?.length) return;
+  const variant = await prisma.product.findFirst({
+    where: { id: { in: productIds }, parentId: { not: null }, ...tenantScope() },
+    select: { name: true },
+  });
+  if (variant) {
+    throw new Error(`"${variant.name}" es una variante: elegí el producto principal (la promo aplica a todas sus variantes).`);
+  }
+}
+
 export const promotionService = {
   async getAll() {
     return prisma.promotion.findMany({
@@ -47,6 +61,7 @@ export const promotionService = {
   }) {
     if (data.startsAt >= data.endsAt) throw new Error("startsAt debe ser anterior a endsAt.");
     if (data.discountValue <= 0) throw new Error("El descuento debe ser mayor a 0.");
+    await assertNoLooseVariants(data.productIds);
     return prisma.promotion.create({
       data: { ...data, tenantId: currentTenantId() },
     });
@@ -67,6 +82,7 @@ export const promotionService = {
   }) {
     const existing = await prisma.promotion.findFirst({ where: { id, ...tenantScope() } });
     if (!existing) throw new Error("Promoción no encontrada.");
+    await assertNoLooseVariants(data.productIds);
     return prisma.promotion.update({ where: { id }, data });
   },
 
@@ -98,6 +114,19 @@ export const promotionService = {
     const activePromos = await promotionService.getActive();
     const applicable = [];
 
+    // Variantes: una promo cargada sobre el padre (las promos solo eligen
+    // padres o productos simples) aplica a todas sus variantes. Se suman los
+    // parentId de las variantes del carrito a los productIds a matchear.
+    const parentRows = params.productIds?.length
+      ? await prisma.product.findMany({
+          where: { id: { in: params.productIds }, parentId: { not: null }, ...tenantScope() },
+          select: { parentId: true },
+        })
+      : [];
+    const productIds = [
+      ...new Set([...(params.productIds ?? []), ...parentRows.map((r) => r.parentId as string)]),
+    ];
+
     for (const promo of activePromos) {
       // Check client category restriction
       if (promo.clientCategory && promo.clientCategory !== params.clientCategory) continue;
@@ -107,7 +136,7 @@ export const promotionService = {
       if (promo.type === "CART_DISCOUNT") {
         applicable.push(promo);
       } else if (promo.type === "PRODUCT_DISCOUNT") {
-        if (promo.productIds.some((id) => params.productIds.includes(id))) applicable.push(promo);
+        if (promo.productIds.some((id) => productIds.includes(id))) applicable.push(promo);
       } else if (promo.type === "CATEGORY_DISCOUNT") {
         if (promo.categoryIds.some((id) => params.categoryIds.includes(id))) applicable.push(promo);
       }

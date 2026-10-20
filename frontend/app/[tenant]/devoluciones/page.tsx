@@ -7,10 +7,12 @@ import SearchableSelect from '@/components/SearchableSelect';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { Return, Sale, Product, PaymentMethod, ReturnSettlementType } from '@/types';
-import { fmtDate, fmtMoney, normalizeArray } from '@/lib/helpers';
+import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { toDateInputAR } from '@/lib/dateAR';
 import { RotateCcw, Eye, X, RefreshCcw, Plus, Search, Trash2, ArrowLeftRight } from 'lucide-react';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
+import VariantPicker from '@/components/products/VariantPicker';
+import { groupByParent } from '@/lib/variants';
 
 const REFUND_METHODS: PaymentMethod[] = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'QR'];
 // El item de envío no tiene sentido "devolverlo" -- y si se lo deja como
@@ -81,7 +83,9 @@ export default function DevolucionesPage() {
       from.setDate(from.getDate() - 60);
       const [salesRes, productsRes] = await Promise.all([
         api.get('/sales', { params: { status: 'COMPLETED', from: toDateInputAR(from), limit: 200 } }),
-        api.get('/products', { params: { limit: 500, isActive: true } }),
+        // sellable: simples y variantes; las variantes se eligen con el
+        // selector (caso típico: cambiar un talle M por un L).
+        api.get('/products', { params: { limit: 500, isActive: true, sellable: true } }),
       ]);
       setSales(normalizeArray<Sale>(salesRes.data));
       setProducts(normalizeArray<Product>(productsRes.data));
@@ -111,7 +115,16 @@ export default function DevolucionesPage() {
   const setItemQty = (itemId: string, field: 'quantity' | 'quantityKg', value: string) =>
     setSelections((p) => ({ ...p, [itemId]: { ...p[itemId], [field]: value } }));
 
+  const [variantPicker, setVariantPicker] = useState<Product | null>(null);
+  const groupedProducts = useMemo(() => groupByParent(products), [products]);
+
   const addExchangeProduct = (productId: string) => {
+    const group = groupedProducts.find((p) => p.id === productId && p.hasVariants);
+    if (group) {
+      setVariantPicker(group);
+      setExchangeProductId('');
+      return;
+    }
     const product = products.find((p) => p.id === productId);
     if (!product) return;
     setExchangeItems((prev) => [
@@ -210,9 +223,12 @@ export default function DevolucionesPage() {
     return name.includes(q) || s.id.includes(q);
   });
 
-  const productOptions = products.map((p) => ({
+  const unitPriceOf = (p: Product) => num(p.saleUnit === 'KG' ? (p.pricePerKg ?? p.price) : p.price);
+  const productOptions = groupedProducts.map((p) => ({
     value: p.id,
-    label: `${p.name} — ${fmtMoney(p.saleUnit === 'KG' ? (p.pricePerKg ?? p.price) : p.price)}${p.saleUnit === 'KG' ? '/kg' : ''}`,
+    label: p.hasVariants
+      ? `${p.name} (${p.variants?.length} variantes) — desde ${fmtMoney(Math.min(...(p.variants ?? []).map(unitPriceOf)))}${p.saleUnit === 'KG' ? '/kg' : ''}`
+      : `${p.name} — ${fmtMoney(unitPriceOf(p))}${p.saleUnit === 'KG' ? '/kg' : ''}`,
   }));
 
   return (
@@ -537,6 +553,18 @@ export default function DevolucionesPage() {
             </div>
           </div>
         </div>
+      )}
+      {variantPicker && (
+        <VariantPicker
+          parent={variantPicker}
+          title="¿Qué variante se lleva?"
+          locationId={pickedSale?.stockLocationId ?? null}
+          onPick={(variant) => {
+            setVariantPicker(null);
+            addExchangeProduct(variant.id);
+          }}
+          onClose={() => setVariantPicker(null)}
+        />
       )}
     </AppLayout>
   );

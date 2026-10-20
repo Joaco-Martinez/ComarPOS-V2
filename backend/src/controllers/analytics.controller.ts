@@ -1,3 +1,4 @@
+import { parseGroupBy } from "../services/reports/variantGrouping";
 import { Request, Response, NextFunction } from "express";
 import { analyticsService } from "../services/analytics.service";
 import { profitAndLossService } from "../services/reports/profitAndLoss.service";
@@ -88,7 +89,7 @@ export const analyticsController = {
   getProfitabilityByProduct: wrap(async (req) => {
     const { start, end } = parseRange(req);
     const limit = Number(req.query.limit) || 20;
-    return analyticsService.getProfitabilityByProduct(start, end, limit);
+    return analyticsService.getProfitabilityByProduct(start, end, limit, parseGroupBy(req.query.groupBy));
   }),
 
   getProfitabilityByCategory: wrap(async (req) => {
@@ -108,7 +109,7 @@ export const analyticsController = {
 
   getLowMarginProducts: wrap(async (req) => {
     const threshold = Number(req.query.threshold) || 20;
-    return analyticsService.getLowMarginProducts(threshold);
+    return analyticsService.getLowMarginProducts(threshold, parseGroupBy(req.query.groupBy));
   }),
 
   getProfitAndLoss: wrap(async (req) => {
@@ -168,7 +169,7 @@ export const analyticsController = {
 
   getInventoryRotation: wrap(async (req) => {
     const { start, end } = parseRange(req);
-    return analyticsService.getInventoryRotation(start, end);
+    return analyticsService.getInventoryRotation(start, end, parseGroupBy(req.query.groupBy));
   }),
 
   // ── Purchases ──────────────────────────────────────────────────────────────

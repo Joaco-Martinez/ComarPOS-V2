@@ -27,18 +27,33 @@ import {
   type CreateProductInput,
   type ProductComponentInput,
 } from "./product.helpers";
+import {
+  createParentWithVariants,
+  propagateParentToVariants,
+  syncDefaultPriceListAfterPropagation,
+  variantsInclude,
+} from "./product.variants";
+import { pricesDifferFromParent, costDiffersFromParent } from "./product.variants.helpers";
 
 export async function create(data: CreateProductInput) {
   if (!data.name || !data.name.trim()) {
     return { statusCode: 400, message: "El nombre del producto es requerido" };
   }
 
+  const wantsVariants = isTrue(data.hasVariants);
+
   // Si no viene SKU (o queda vacio despues de normalizar), se genera uno
   // automatico en vez de rechazar el alta - ver generateSku() en
-  // product.helpers.ts.
-  const sku = data.sku && data.sku.trim() ? normalizeSku(data.sku) : await generateSku();
+  // product.helpers.ts. El padre de un producto con variantes no necesita
+  // SKU (cada variante tiene el suyo).
+  const sku =
+    data.sku && data.sku.trim()
+      ? normalizeSku(data.sku)
+      : wantsVariants
+        ? null
+        : await generateSku();
 
-  if (!sku) {
+  if (!sku && !wantsVariants) {
     return { statusCode: 400, message: "El SKU no puede quedar vacío" };
   }
 
@@ -72,6 +87,15 @@ export async function create(data: CreateProductInput) {
       return {
         statusCode: 400,
         message: "Un producto COMPUESTO debe tener al menos un componente",
+      };
+    }
+
+    if (wantsVariants && (type === ProductType.COMPUESTO || rawComponents.length > 0)) {
+      safeDeleteLocalFile(data.file?.path);
+
+      return {
+        statusCode: 400,
+        message: "Un producto con variantes no puede ser COMPUESTO ni tener componentes",
       };
     }
 
@@ -155,6 +179,15 @@ export async function create(data: CreateProductInput) {
             clientPrice: 0,
             wholesalePrice: 0,
           };
+
+    if (wantsVariants) {
+      return await createParentWithVariants({
+        parentData: { ...base, ...unitData, tenantId: currentTenantId() },
+        variantOptions: data.variantOptions,
+        variants: data.variants,
+        userId: data.userId,
+      });
+    }
 
     const created = await prisma.product.create({
       data: {
@@ -315,6 +348,7 @@ export async function update(id: string, data: Partial<Product> & any) {
     where: { id, ...tenantScope() },
     include: {
       components: true,
+      parent: true,
     },
   });
 
@@ -322,10 +356,58 @@ export async function update(id: string, data: Partial<Product> & any) {
     throw new Error("Producto no encontrado");
   }
 
+  const isParent = existing.hasVariants;
+  const parent = existing.parent;
+
+  // Una variante hereda del padre nombre, categoria, proveedor, IVA,
+  // unidad, servicio, "sin limite" y descripcion: si el form los manda
+  // iguales se ignoran, si los quiere cambiar se rechaza (se editan en el
+  // padre y se propagan a todas sus variantes).
+  if (parent) {
+    const locked: [string, unknown, unknown][] = [
+      ["name", data.name !== undefined ? String(data.name).trim() : undefined, existing.name],
+      [
+        "description",
+        data.description !== undefined ? String(data.description).trim() || null : undefined,
+        existing.description,
+      ],
+      ["categoryId", data.categoryId === "" ? null : data.categoryId, existing.categoryId],
+      ["supplierId", data.supplierId === "" ? null : data.supplierId, existing.supplierId],
+      ["ivaRate", data.ivaRate !== undefined ? Number(data.ivaRate) : undefined, existing.ivaRate],
+      ["saleUnit", data.saleUnit, existing.saleUnit],
+      ["isService", data.isService !== undefined ? isTrue(data.isService) : undefined, existing.isService],
+      [
+        "unlimitedStock",
+        data.unlimitedStock !== undefined ? isTrue(data.unlimitedStock) : undefined,
+        existing.unlimitedStock,
+      ],
+      ["type", data.type, existing.type],
+    ];
+
+    for (const [field, next, current] of locked) {
+      if (next === undefined) continue;
+      if ((next ?? null) !== (current ?? null)) {
+        throw new Error(
+          `Ese dato se edita en el producto principal ("${parent.name}") y se aplica a todas sus variantes`
+        );
+      }
+      delete data[field];
+    }
+
+    if (isTrue(data.isActive) && !parent.isActive) {
+      throw new Error(`Activá primero el producto principal ("${parent.name}")`);
+    }
+  }
+
+  if (isParent && data.type === ProductType.COMPUESTO) {
+    throw new Error("Un producto con variantes no puede ser COMPUESTO");
+  }
+
   if (data.sku !== undefined) {
-    const normalized = normalizeSku(String(data.sku));
-    if (!normalized) throw new Error("El SKU no puede quedar vacío");
-    data.sku = normalized;
+    const normalized = normalizeSku(String(data.sku ?? ""));
+    // El padre de un producto con variantes puede no tener SKU.
+    if (!normalized && !isParent) throw new Error("El SKU no puede quedar vacío");
+    data.sku = normalized || null;
   }
 
   if (data.categoryId !== undefined && data.categoryId !== null && data.categoryId !== "") {
@@ -432,7 +514,47 @@ export async function update(id: string, data: Partial<Product> & any) {
     prismaData.wholesalePrice = 0;
   }
 
+  // Precio/costo cambiado a mano en una variante: queda "personalizado" y
+  // los cambios del padre ya no lo pisan (ver "volver al precio general").
+  if (parent) {
+    const touchesPrice = ["price", "wholesalePrice", "pricePerKg", "wholesalePricePerKg"].some(
+      (key) => data[key] !== undefined
+    );
+    if (touchesPrice) {
+      prismaData.customPrice = pricesDifferFromParent(parent, {
+        price: data.price !== undefined ? Number(data.price) : undefined,
+        wholesalePrice: data.wholesalePrice !== undefined ? Number(data.wholesalePrice) : undefined,
+        pricePerKg: data.pricePerKg !== undefined ? Number(data.pricePerKg) : undefined,
+        wholesalePricePerKg:
+          data.wholesalePricePerKg !== undefined ? Number(data.wholesalePricePerKg) : undefined,
+      });
+    }
+    if (data.purchasePrice !== undefined) {
+      prismaData.customCost = costDiffersFromParent(parent, Number(data.purchasePrice));
+    }
+  }
+
   try {
+    // Padre: se actualiza y se propaga a sus variantes en la misma
+    // transaccion (campos heredados, nombre, precio/costo no personalizados
+    // y desactivacion). El padre no tiene fila en la lista default ni stock.
+    if (isParent) {
+      const variantIds = await prisma.$transaction(async (tx) => {
+        await tx.product.update({ where: { id }, data: prismaData });
+        return propagateParentToVariants(tx, id);
+      }, { timeout: 60000, maxWait: 15000 });
+
+      await syncDefaultPriceListAfterPropagation(variantIds);
+      for (const variantId of variantIds) {
+        await alertService.checkProductStock(variantId);
+      }
+
+      return (await prisma.product.findUnique({
+        where: { id },
+        include: { ...productInclude, ...variantsInclude },
+      }))!;
+    }
+
     const updated = await prisma.product.update({
       where: { id },
       data: prismaData,
@@ -494,10 +616,19 @@ export async function updateComponents(productId: string, components: ProductCom
 export async function deleteProduct(id: string) {
   const existing = await prisma.product.findFirst({
     where: { id, ...tenantScope() },
-    select: { id: true },
+    select: { id: true, hasVariants: true },
   });
 
   if (!existing) throw new Error("Producto no encontrado");
+
+  // Borrar (desactivar) el padre desactiva todas sus variantes.
+  if (existing.hasVariants) {
+    const [, parentUpdated] = await prisma.$transaction([
+      prisma.product.updateMany({ where: { parentId: id }, data: { isActive: false } }),
+      prisma.product.update({ where: { id }, data: { isActive: false } }),
+    ]);
+    return parentUpdated;
+  }
 
   return prisma.product.update({
     where: { id },

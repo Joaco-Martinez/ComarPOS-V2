@@ -15,6 +15,11 @@ type BarcodeProduct = {
   name: string;
   sku: string;
   price: number;
+  // Variantes: la etiqueta muestra el nombre del padre y el label de la
+  // variante (ej. "Remera" + "M / Rojo") en vez del nombre largo.
+  parentId?: string | null;
+  parentName?: string | null;
+  variantLabel?: string | null;
 };
 
 async function renderBarcodePng(text: string): Promise<Buffer> {
@@ -30,12 +35,22 @@ async function renderBarcodePng(text: string): Promise<Buffer> {
 
 async function getProducts(productIds?: string[]): Promise<BarcodeProduct[]> {
   const where: any = { ...tenantScope(), isActive: true, sku: { not: null } };
-  if (productIds && productIds.length > 0) where.id = { in: productIds };
+  if (productIds && productIds.length > 0) {
+    // Elegir un padre incluye todas sus variantes (cada una con su SKU). El
+    // padre solo genera su propia etiqueta si tiene SKU y se pidio explicito.
+    where.OR = [{ id: { in: productIds } }, { parentId: { in: productIds } }];
+  } else {
+    // Sin seleccion: todo lo que se vende (los padres no se venden).
+    where.hasVariants = false;
+  }
 
   const products = await prisma.product.findMany({
     where,
     orderBy: { name: "asc" },
-    select: { id: true, name: true, sku: true, price: true, pricePerKg: true, saleUnit: true },
+    select: {
+      id: true, name: true, sku: true, price: true, pricePerKg: true, saleUnit: true,
+      parentId: true, variantLabel: true, parent: { select: { name: true } },
+    },
   });
 
   return products
@@ -45,6 +60,9 @@ async function getProducts(productIds?: string[]): Promise<BarcodeProduct[]> {
       name: p.name,
       sku: p.sku as string,
       price: p.saleUnit === "KG" ? p.pricePerKg ?? 0 : p.price ?? 0,
+      parentId: p.parentId,
+      parentName: p.parent?.name ?? null,
+      variantLabel: p.variantLabel,
     }));
 }
 
@@ -81,9 +99,11 @@ async function exportPdf(params: {
 
   const labels: BarcodeLabel[] = [];
   for (const p of products) {
-    const rawQty = params.quantities?.[p.id];
+    // Una variante incluida por haber elegido a su padre usa la cantidad y
+    // el tamano cargados para el padre.
+    const rawQty = params.quantities?.[p.id] ?? (p.parentId ? params.quantities?.[p.parentId] : undefined);
     const qty = Number.isFinite(Number(rawQty)) && Number(rawQty) > 0 ? Math.floor(Number(rawQty)) : 1;
-    const size = normalizeSize(params.sizes?.[p.id]);
+    const size = normalizeSize(params.sizes?.[p.id] ?? (p.parentId ? params.sizes?.[p.parentId] : undefined));
     for (let i = 0; i < qty; i++) labels.push({ ...p, size });
   }
 
@@ -152,10 +172,23 @@ async function drawLabel(doc: PDFKit.PDFDocument, label: BarcodeLabel, x: number
   const imgY = y + Math.round(26 * k);
 
   doc.rect(x, y, w - 8, h - 8).stroke("#dddddd");
-  doc
-    .fontSize(nameSize)
-    .fillColor("#000")
-    .text(label.name, x + 6, y + 6, { width: w - 20, height: Math.round(22 * k), ellipsis: true });
+  if (label.parentName && label.variantLabel) {
+    // Variante: nombre del padre + label en negrita (ej. "Remera" / "M / Rojo").
+    doc
+      .fontSize(nameSize)
+      .fillColor("#000")
+      .text(label.parentName, x + 6, y + 6, { width: w - 20, height: Math.round(11 * k), ellipsis: true });
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(nameSize)
+      .text(label.variantLabel, x + 6, y + 6 + Math.round(11 * k), { width: w - 20, height: Math.round(11 * k), ellipsis: true })
+      .font("Helvetica");
+  } else {
+    doc
+      .fontSize(nameSize)
+      .fillColor("#000")
+      .text(label.name, x + 6, y + 6, { width: w - 20, height: Math.round(22 * k), ellipsis: true });
+  }
   doc.image(png, x + 10, imgY, { width: w - 36, height: imgHeight });
   doc
     .fontSize(skuSize)

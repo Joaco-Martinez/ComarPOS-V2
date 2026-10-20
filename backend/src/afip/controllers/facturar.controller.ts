@@ -183,7 +183,7 @@ export async function facturarController(req: Request, res: Response) {
     console.log(`📦 [${requestId}] Items de venta:`, sale.items.map((item: any) => ({
       id: item.id,
       productId: item.productId,
-      productName: item.product?.name,
+      productName: item.productNameSnapshot ?? item.product?.name,
       sku: item.product?.sku,
       quantity: item.quantity,
       quantityKg: item.quantityKg,

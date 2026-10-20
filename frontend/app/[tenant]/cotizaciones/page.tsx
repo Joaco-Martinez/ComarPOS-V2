@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import type { BusinessLocation, Client, PriceList, Product, Sale } from '@/types';
 import { clientName, fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { FileText, Plus, Trash2, Search, Download, RefreshCcw, X } from 'lucide-react';
+import VariantPicker from '@/components/products/VariantPicker';
+import { groupByParent } from '@/lib/variants';
 
 type CartLine = {
   product: Product;
@@ -49,7 +51,9 @@ export default function CotizacionesPage() {
     setLoading(true);
     try {
       const [pr, clr, plr, blr] = await Promise.all([
-        api.get('/products', { params: { isActive: true, limit: 500 } }).catch(() => null),
+        // sellable: simples y variantes; las variantes se agrupan por padre
+        // en la búsqueda y se eligen con el selector de variantes.
+        api.get('/products', { params: { isActive: true, limit: 500, sellable: true } }).catch(() => null),
         api.get('/clients', { params: { limit: 300 } }).catch(() => null),
         api.get('/price-lists').catch(() => null),
         api.get('/business-locations').catch(() => null),
@@ -114,15 +118,24 @@ export default function CotizacionesPage() {
     return override?.price ?? num(product.price);
   };
 
+  const [variantPicker, setVariantPicker] = useState<Product | null>(null);
+
   const filteredProducts = useMemo(() => {
     if (!search.trim()) return [];
     const q = search.trim().toLowerCase();
-    return products
-      .filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q))
+    // Si el SKU coincide exacto con una variante, se ofrece esa sola (no el
+    // grupo) para agregarla directo.
+    const exact = products.filter((p) => p.sku && p.sku.trim().toLowerCase() === q);
+    if (exact.length) return exact;
+    return groupByParent(products.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)))
       .slice(0, 15);
   }, [search, products]);
 
   const addProduct = (product: Product) => {
+    if (product.hasVariants) {
+      setVariantPicker(product);
+      return;
+    }
     setCart((prev) => {
       const idx = prev.findIndex((l) => l.product.id === product.id);
       if (idx >= 0) {
@@ -283,8 +296,15 @@ export default function CotizacionesPage() {
                     onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg2)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
-                    <span style={{ fontSize: 13 }}>{p.name}</span>
-                    <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{fmtMoney(resolvedPrice(p))}</span>
+                    <span style={{ fontSize: 13 }}>
+                      {p.name}
+                      {p.hasVariants && <span style={{ fontSize: 11, color: 'var(--text3)' }}> · {p.variants?.length} variantes</span>}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                      {p.hasVariants
+                        ? `desde ${fmtMoney(Math.min(...(p.variants ?? []).map((v) => resolvedPrice(v))))}`
+                        : fmtMoney(resolvedPrice(p))}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -486,6 +506,19 @@ export default function CotizacionesPage() {
           </div>
         )}
       </div>
+      {variantPicker && (
+        <VariantPicker
+          parent={variantPicker}
+          locationId={stockLocationId}
+          priceOf={resolvedPrice}
+          requireStock={false}
+          onPick={(variant) => {
+            setVariantPicker(null);
+            addProduct(variant);
+          }}
+          onClose={() => setVariantPicker(null)}
+        />
+      )}
     </AppLayout>
   );
 }

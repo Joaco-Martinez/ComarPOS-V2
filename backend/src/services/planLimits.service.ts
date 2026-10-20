@@ -14,7 +14,8 @@ async function countCurrent(tenantId: string, resource: LimitedResource) {
     return prisma.businessLocation.count({ where: { tenantId } });
   }
   if (resource === "products") {
-    return prisma.product.count({ where: { tenantId } });
+    // Cuentan los padres y los productos sin variantes; las variantes no.
+    return prisma.product.count({ where: { tenantId, parentId: null } });
   }
   // "users" = cuentas del sistema (ADMIN/EMPLEADO) -- un usuario con rol
   // CLIENTE es un cliente con portal propio, no cuenta contra este limite.

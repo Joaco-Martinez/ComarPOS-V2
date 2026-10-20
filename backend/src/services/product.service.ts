@@ -11,6 +11,12 @@
 import { getAll, getBySku, getById, getMovements } from "./product/product.read";
 import { create, updateImage, update, updateComponents, deleteProduct } from "./product/product.write";
 import { transferStock, transferStockKg, addStockKg, addStock, setStockMin } from "./product/product.stock";
+import {
+  syncVariants,
+  convertToVariants,
+  resetVariantPrice,
+  setStockMinForAllVariants,
+} from "./product/product.variants";
 
 export const productService = {
   getAll,
@@ -27,4 +33,8 @@ export const productService = {
   addStock,
   setStockMin,
   getMovements,
+  syncVariants,
+  convertToVariants,
+  resetVariantPrice,
+  setStockMinForAllVariants,
 };

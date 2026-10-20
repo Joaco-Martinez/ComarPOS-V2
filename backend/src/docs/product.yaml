@@ -6,9 +6,38 @@ paths:
   /products:
     get:
       summary: Listar todos los productos activos
+      description: |
+        Sin `grouped` ni `sellable` devuelve todo (padres y variantes mezclados), igual que antes de las variantes.
       tags: [Products]
       security:
         - bearerAuth: []
+      parameters:
+        - in: query
+          name: grouped
+          schema:
+            type: boolean
+          description: Padres y productos simples, con sus variantes activas (y su stock) en `variants`. La búsqueda por nombre/SKU de una variante encuentra a su padre.
+        - in: query
+          name: sellable
+          schema:
+            type: boolean
+          description: Solo lo que se vende (productos simples y variantes, nunca padres).
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: categoryId
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
       responses:
         200:
           description: Lista de productos
@@ -272,6 +301,179 @@ paths:
         200:
           description: Stock KG agregado correctamente
 
+  /products/{id}/variants/sync:
+    post:
+      summary: Sincronizar las variantes de un producto con variantes
+      description: |
+        Guarda las opciones (`variantOptions`), crea las combinaciones que faltan, desactiva las que sobran
+        con historial (ventas, compras, movimientos, stock) y borra las que no tienen ninguno. Aplica ediciones
+        por variante (SKU, precio, costo, activa). Si se manda `variants`, solo se crean las combinaciones nuevas
+        que vengan en la lista.
+      tags: [Products]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID del producto padre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                variantOptions:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/VariantOption"
+                variants:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/VariantInput"
+      responses:
+        200:
+          description: Producto actualizado y conteo de variantes creadas/desactivadas/borradas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product:
+                    $ref: "#/components/schemas/Product"
+                  created:
+                    type: integer
+                  deactivated:
+                    type: integer
+                  deleted:
+                    type: integer
+
+  /products/{id}/convert-to-variants:
+    post:
+      summary: Convertir un producto existente en producto con variantes
+      description: |
+        `first_variant`: se crea un padre con los datos del producto y el producto pasa a ser una variante
+        (conserva id, SKU, stock, ventas y movimientos); `attributes` indica qué combinación es.
+        `fresh`: el producto queda como está (o se desactiva con `deactivateOriginal`) y se crea un padre nuevo
+        con variantes sin stock.
+      tags: [Products]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode, variantOptions]
+              properties:
+                mode:
+                  type: string
+                  enum: [first_variant, fresh]
+                variantOptions:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/VariantOption"
+                attributes:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  example: { "Talle": "M", "Color": "Rojo" }
+                deactivateOriginal:
+                  type: boolean
+                parentSku:
+                  type: string
+                  nullable: true
+      responses:
+        201:
+          description: Producto padre creado, con sus variantes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}/reset-price:
+    post:
+      summary: Volver al precio/costo general (variante)
+      description: La variante deja de tener precio y/o costo propio (customPrice/customCost) y copia los del padre.
+      tags: [Products]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID de la variante
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target:
+                  type: string
+                  enum: [price, cost, both]
+                  default: both
+      responses:
+        200:
+          description: Variante actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}/stock-min-all/{businessLocationId}:
+    put:
+      summary: Mismo stock mínimo para todas las variantes de un producto en una sucursal
+      tags: [Products]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID del producto padre
+        - in: path
+          name: businessLocationId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                minQuantity:
+                  type: number
+                  nullable: true
+                minQuantityKg:
+                  type: number
+                  nullable: true
+      responses:
+        200:
+          description: Cantidad de variantes actualizadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+
   /products/movements:
     get:
       summary: Listar historial de movimientos de stock
@@ -361,6 +563,61 @@ components:
         component:
           $ref: "#/components/schemas/Product"
 
+    VariantOption:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Talle
+        values:
+          type: array
+          items:
+            type: string
+          example: [S, M, L]
+
+    VariantInput:
+      type: object
+      description: Una variante en el alta / sincronización. Sin `id` es una combinación nueva.
+      properties:
+        id:
+          type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+          example: { "Talle": "M", "Color": "Rojo" }
+        sku:
+          type: string
+          description: Si no viene, se arma <SKU padre>-<valores> o uno automático.
+        price:
+          type: number
+        pricePerKg:
+          type: number
+        customPrice:
+          type: boolean
+          description: true = precio propio (los cambios del padre no lo pisan).
+        purchasePrice:
+          type: number
+        customCost:
+          type: boolean
+        isActive:
+          type: boolean
+        initialStock:
+          type: array
+          items:
+            type: object
+            properties:
+              businessLocationId:
+                type: string
+              quantity:
+                type: number
+              quantityKg:
+                type: number
+              minQuantity:
+                type: number
+              minQuantityKg:
+                type: number
+
     ProductInput:
       type: object
       required:
@@ -369,6 +626,19 @@ components:
         - type
         - saleUnit
       properties:
+        hasVariants:
+          type: boolean
+          description: Crea un producto padre (no se vende ni tiene stock) y una variante por combinación.
+        variantOptions:
+          type: array
+          description: JSON string si se manda por multipart/form-data.
+          items:
+            $ref: "#/components/schemas/VariantOption"
+        variants:
+          type: array
+          description: Combinaciones a crear (JSON string en multipart). Sin lista se crean todas.
+          items:
+            $ref: "#/components/schemas/VariantInput"
         name:
           type: string
           example: Promo Fernet + Coca
@@ -491,6 +761,35 @@ components:
     Product:
       type: object
       properties:
+        parentId:
+          type: string
+          nullable: true
+          description: Variante - ID del producto padre
+        hasVariants:
+          type: boolean
+          description: Padre - agrupa variantes, no se vende ni tiene stock
+        variantOptions:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/VariantOption"
+        variantAttributes:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+        variantLabel:
+          type: string
+          nullable: true
+          example: M / Rojo
+        customPrice:
+          type: boolean
+        customCost:
+          type: boolean
+        variants:
+          type: array
+          items:
+            type: object
         id:
           type: string
           format: uuid

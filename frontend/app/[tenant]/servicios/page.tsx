@@ -113,7 +113,10 @@ export default function ServiciosPage() {
       try {
         const [clRes, prRes, locRes] = await Promise.all([
           api.get('/clients', { params: { limit: 500 } }),
-          api.get('/products', { params: { limit: 500, isActive: true } }),
+          // sellable: simples y variantes (con su nombre completo, ej.
+          // "Pantalla - Modelo X"); el padre de un producto con variantes no
+          // se usa como repuesto.
+          api.get('/products', { params: { limit: 500, isActive: true, sellable: true } }),
           api.get('/business-locations').catch(() => null),
         ]);
         setClients(normalizeArray<Client>(clRes.data));

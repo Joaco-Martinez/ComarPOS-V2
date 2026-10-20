@@ -8,6 +8,12 @@ import {
   MovementType, BusinessLocationType, CashSessionStatus,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import {
+  buildCombinations,
+  buildVariantLabel,
+  buildVariantName,
+  buildVariantSku,
+} from "./services/product/product.variants.helpers";
 
 const prisma = new PrismaClient();
 
@@ -176,6 +182,43 @@ async function main() {
     }
   }
   console.log(`  ✓ ${prodDefs.length} productos`);
+
+  // Producto con variantes de ejemplo (Talle × Color): un padre agrupador
+  // sin stock + una variante por combinación con su SKU y stock propio.
+  const variantOptions = [
+    { name: "Talle", values: ["S", "M", "L"] },
+    { name: "Color", values: ["Rojo", "Negro"] },
+  ];
+  const existingParent = await prisma.product.findFirst({
+    where: { tenantId: tId, sku: "REM", hasVariants: true },
+  });
+  if (!existingParent) {
+    const remera = await prisma.product.create({
+      data: {
+        tenantId: tId, name: "Remera básica", sku: "REM",
+        price: 9500, wholesalePrice: 9500, clientPrice: 9500, purchasePrice: 4800,
+        hasVariants: true, variantOptions, isActive: true,
+      },
+    });
+    for (const attributes of buildCombinations(variantOptions)) {
+      const label = buildVariantLabel(attributes, variantOptions);
+      const variant = await prisma.product.create({
+        data: {
+          tenantId: tId, parentId: remera.id, name: buildVariantName(remera.name, label),
+          sku: buildVariantSku(remera.sku, attributes, variantOptions), variantAttributes: attributes, variantLabel: label,
+          price: 9500, wholesalePrice: 9500, clientPrice: 9500, purchasePrice: 4800, isActive: true,
+        },
+      });
+      await prisma.productStock.createMany({
+        data: [
+          { tenantId: tId, productId: variant.id, businessLocationId: local.id, quantity: 6, minQuantity: 2 },
+          { tenantId: tId, productId: variant.id, businessLocationId: deposito.id, quantity: 10 },
+        ],
+        skipDuplicates: true,
+      });
+    }
+    console.log("  ✓ Remera básica con 6 variantes (Talle × Color)");
+  }
 
   // ─── Proveedores ───────────────────────────────────────────────────────────
   console.log("\n🚚 Creando proveedores...");

@@ -65,7 +65,7 @@ export async function pendingAfipController(_req: Request, res: Response) {
         items: sale.items.map((item: any) => ({
           id: item.id,
           productId: item.productId,
-          productName: item.product?.name ?? "Producto",
+          productName: item.productNameSnapshot ?? item.product?.name ?? "Producto",
           sku: item.product?.sku ?? null,
           quantity: item.quantity,
           quantityKg: item.quantityKg,

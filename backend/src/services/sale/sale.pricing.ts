@@ -235,6 +235,8 @@ async function resolveSaleItems(
       isService: true,
       unlimitedStock: true,
       ivaRate: true,
+      // Variantes: el padre agrupa y no se vende (se elige una variante).
+      hasVariants: true,
 
       price: true,
       pricePerKg: true,
@@ -280,6 +282,10 @@ async function resolveSaleItems(
 
     if (!product) {
       throw new Error("Producto no encontrado");
+    }
+
+    if (product.hasVariants) {
+      throw new Error(`Elegí una variante de ${product.name}`);
     }
 
     const isDeliveryProduct = normalizeText(product.sku) === DELIVERY_SKU;

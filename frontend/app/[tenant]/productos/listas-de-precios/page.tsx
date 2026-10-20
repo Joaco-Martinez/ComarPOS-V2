@@ -7,7 +7,8 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { PriceList, Product } from '@/types';
 import { fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { Plus, Edit2, Trash2, X, Search, Lock } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Search, Lock, ChevronDown, ChevronRight } from 'lucide-react';
+import { matchesSearch, sortedVariants } from '@/lib/variants';
 
 export default function ListasDePreciosPage() {
   const [lists, setLists] = useState<PriceList[]>([]);
@@ -24,13 +25,16 @@ export default function ListasDePreciosPage() {
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [bulkPct, setBulkPct] = useState('');
   const [applyingBulk, setApplyingBulk] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const load = async () => {
     setLoading(true);
     try {
       const [lr, pr] = await Promise.all([
         api.get('/price-lists').catch(() => null),
-        api.get('/products', { params: { isActive: true, limit: 500 } }).catch(() => null),
+        // grouped: padres con sus variantes adentro (el override es por
+        // variante; el padre ofrece "mismo precio para todas").
+        api.get('/products', { params: { isActive: true, limit: 500, grouped: true } }).catch(() => null),
       ]);
       if (lr) setLists(normalizeArray<PriceList>(lr.data));
       if (pr) setProducts(normalizeArray<Product>(pr.data));
@@ -109,12 +113,13 @@ export default function ListasDePreciosPage() {
 
   const detailProducts = useMemo(() => {
     if (!detailSearch.trim()) return products.slice(0, 40);
-    const q = detailSearch.trim().toLowerCase();
-    return products.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)).slice(0, 40);
+    return products.filter((p) => matchesSearch(p, detailSearch)).slice(0, 40);
   }, [products, detailSearch]);
 
   const overrideFor = (productId: string) => detail?.items?.find((i) => i.productId === productId);
 
+  // Un padre guarda "mismo precio para todas las variantes" (crea o
+  // actualiza el item de cada variante, ?allVariants=true).
   const saveOverride = async (product: Product) => {
     if (!detail) return;
     const draft = priceDrafts[product.id];
@@ -123,7 +128,7 @@ export default function ListasDePreciosPage() {
       await api.put(`/price-lists/${detail.id}/items/${product.id}`, {
         price: num(draft),
         pricePerKg: product.saleUnit === 'KG' ? num(draft) : undefined,
-      });
+      }, { params: product.hasVariants ? { allVariants: true } : undefined });
       const { data } = await api.get(`/price-lists/${detail.id}`);
       setDetail(data);
       setPriceDrafts((prev) => { const next = { ...prev }; delete next[product.id]; return next; });
@@ -133,16 +138,41 @@ export default function ListasDePreciosPage() {
     }
   };
 
-  const removeOverride = async (productId: string) => {
+  const removeOverride = async (productId: string, allVariants = false) => {
     if (!detail) return;
     try {
-      await api.delete(`/price-lists/${detail.id}/items/${productId}`);
+      await api.delete(`/price-lists/${detail.id}/items/${productId}`, { params: allVariants ? { allVariants: true } : undefined });
       const { data } = await api.get(`/price-lists/${detail.id}`);
       setDetail(data);
       toast.success('Vuelve al precio de Minorista');
     } catch {
       toast.error('No se pudo quitar el override');
     }
+  };
+
+  const renderPriceRow = (p: Product, indent = false) => {
+    const override = overrideFor(p.id);
+    const basePrice = p.saleUnit === 'KG' ? num(p.pricePerKg) : num(p.price);
+    const overridePrice = p.saleUnit === 'KG' ? override?.pricePerKg : override?.price;
+    return (
+      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8, marginLeft: indent ? 24 : 0 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{indent ? p.variantLabel ?? p.name : p.name}</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)' }}>Minorista: {fmtMoney(basePrice)}</div>
+        </div>
+        <input
+          type="number" min="0"
+          placeholder={overridePrice != null ? String(overridePrice) : 'igual a Minorista'}
+          value={priceDrafts[p.id] ?? ''}
+          onChange={(e) => setPriceDrafts((prev) => ({ ...prev, [p.id]: e.target.value }))}
+          style={{ width: 110 }}
+        />
+        <button onClick={() => saveOverride(p)} className="btn btn-secondary btn-xs">Guardar</button>
+        {overridePrice != null && (
+          <button onClick={() => removeOverride(p.id)} className="btn btn-ghost btn-xs" title="Quitar override"><X size={12} /></button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -261,26 +291,35 @@ export default function ListasDePreciosPage() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflowY: 'auto' }}>
                     {detailProducts.map((p) => {
-                      const override = overrideFor(p.id);
-                      const basePrice = p.saleUnit === 'KG' ? num(p.pricePerKg) : num(p.price);
-                      const overridePrice = p.saleUnit === 'KG' ? override?.pricePerKg : override?.price;
+                      if (!p.hasVariants) return renderPriceRow(p);
+                      const variants = sortedVariants(p);
+                      const withOverride = variants.filter((v) => overrideFor(v.id)).length;
+                      const open = expanded[p.id] ?? (detailSearch.trim().length > 0 && !matchesSearch({ ...p, variants: [] }, detailSearch));
                       return (
-                        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text3)' }}>Minorista: {fmtMoney(basePrice)}</div>
+                        <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface2)' }}>
+                            <button onClick={() => setExpanded((prev) => ({ ...prev, [p.id]: !open }))} className="btn btn-ghost btn-xs" style={{ padding: 2 }} title={open ? 'Ocultar variantes' : 'Editar variantes una por una'}>
+                              {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </button>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                                Mismo precio para las {variants.length} variantes{withOverride > 0 ? ` · ${withOverride} con precio en esta lista` : ''}
+                              </div>
+                            </div>
+                            <input
+                              type="number" min="0"
+                              placeholder="Precio para todas"
+                              value={priceDrafts[p.id] ?? ''}
+                              onChange={(e) => setPriceDrafts((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                              style={{ width: 110 }}
+                            />
+                            <button onClick={() => saveOverride(p)} className="btn btn-secondary btn-xs">Guardar</button>
+                            {withOverride > 0 && (
+                              <button onClick={() => removeOverride(p.id, true)} className="btn btn-ghost btn-xs" title="Quitar el precio de todas las variantes"><X size={12} /></button>
+                            )}
                           </div>
-                          <input
-                            type="number" min="0"
-                            placeholder={overridePrice != null ? String(overridePrice) : 'igual a Minorista'}
-                            value={priceDrafts[p.id] ?? ''}
-                            onChange={(e) => setPriceDrafts((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                            style={{ width: 110 }}
-                          />
-                          <button onClick={() => saveOverride(p)} className="btn btn-secondary btn-xs">Guardar</button>
-                          {overridePrice != null && (
-                            <button onClick={() => removeOverride(p.id)} className="btn btn-ghost btn-xs" title="Quitar override"><X size={12} /></button>
-                          )}
+                          {open && variants.map((v) => renderPriceRow(v, true))}
                         </div>
                       );
                     })}

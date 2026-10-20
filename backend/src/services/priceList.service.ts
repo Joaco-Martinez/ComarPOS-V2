@@ -83,7 +83,13 @@ export const priceListService = {
       include: {
         items: {
           include: {
-            product: { select: { id: true, name: true, sku: true, saleUnit: true, price: true, pricePerKg: true } },
+            product: {
+              select: {
+                id: true, name: true, sku: true, saleUnit: true, price: true, pricePerKg: true,
+                // Variantes: para agrupar por producto principal en pantalla.
+                parentId: true, variantLabel: true, parent: { select: { id: true, name: true } },
+              },
+            },
           },
           orderBy: { updatedAt: "desc" },
         },
@@ -161,10 +167,17 @@ export const priceListService = {
     return { ok: true };
   },
 
+  /**
+   * Precio de un producto en una lista. El override es por variante: un
+   * padre de producto con variantes no tiene item propio; con
+   * `allVariants` se crea/actualiza el item de cada una de sus variantes
+   * ("mismo precio para todas las variantes").
+   */
   async setItemPrice(
     priceListId: string,
     productId: string,
-    data: { price: number; pricePerKg?: number | null }
+    data: { price: number; pricePerKg?: number | null },
+    options?: { allVariants?: boolean }
   ) {
     const list = await prisma.priceList.findFirst({ where: { id: priceListId, ...tenantScope() } });
 
@@ -181,7 +194,7 @@ export const priceListService = {
 
     const product = await prisma.product.findFirst({
       where: { id: productId, ...tenantScope() },
-      select: { id: true },
+      select: { id: true, name: true, hasVariants: true, variants: { select: { id: true } } },
     });
 
     if (!product) {
@@ -192,6 +205,27 @@ export const priceListService = {
       return { statusCode: 400, message: "Precio inválido" };
     }
 
+    if (product.hasVariants) {
+      if (!options?.allVariants) {
+        return {
+          statusCode: 400,
+          message: `Elegí una variante de "${product.name}" o aplicá el mismo precio a todas sus variantes`,
+        };
+      }
+
+      await prisma.$transaction(
+        product.variants.map((v) =>
+          prisma.priceListItem.upsert({
+            where: { priceListId_productId: { priceListId, productId: v.id } },
+            update: { price: data.price, pricePerKg: data.pricePerKg ?? null },
+            create: { priceListId, productId: v.id, price: data.price, pricePerKg: data.pricePerKg ?? null },
+          })
+        )
+      );
+
+      return { ok: true, count: product.variants.length };
+    }
+
     return prisma.priceListItem.upsert({
       where: { priceListId_productId: { priceListId, productId } },
       update: { price: data.price, pricePerKg: data.pricePerKg ?? null },
@@ -199,7 +233,7 @@ export const priceListService = {
     });
   },
 
-  async removeItem(priceListId: string, productId: string) {
+  async removeItem(priceListId: string, productId: string, options?: { allVariants?: boolean }) {
     const list = await prisma.priceList.findFirst({ where: { id: priceListId, ...tenantScope() } });
 
     if (!list) {
@@ -208,6 +242,19 @@ export const priceListService = {
 
     if (list.isDefault) {
       return { statusCode: 400, message: "La lista Minorista no se edita acá" };
+    }
+
+    // Padre de un producto con variantes: con allVariants se quitan los
+    // items de todas sus variantes de esta lista.
+    if (options?.allVariants) {
+      const variants = await prisma.product.findMany({
+        where: { parentId: productId, ...tenantScope() },
+        select: { id: true },
+      });
+      await prisma.priceListItem.deleteMany({
+        where: { priceListId, productId: { in: variants.map((v) => v.id) } },
+      });
+      return { ok: true };
     }
 
     await prisma.priceListItem
@@ -242,8 +289,10 @@ export const priceListService = {
       return { statusCode: 400, message: "Porcentaje inválido" };
     }
 
+    // Los padres de productos con variantes no llevan item (se carga cada
+    // variante, con su propio precio de Minorista).
     const products = await prisma.product.findMany({
-      where: { ...tenantScope(), isActive: true },
+      where: { ...tenantScope(), isActive: true, hasVariants: false },
       select: { id: true, price: true, pricePerKg: true },
     });
 

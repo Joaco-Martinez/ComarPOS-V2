@@ -117,6 +117,12 @@ export default function ReportesPage() {
 
   const params = { from, to };
 
+  // Variantes: "Ver por variante" (una fila por talle/color) o "Agrupar por
+  // producto" (suma las variantes bajo el producto principal). Aplica a los
+  // rankings por producto de Rentabilidad e Inventario.
+  const [productGroupBy, setProductGroupBy] = useState<'variant' | 'product'>('variant');
+  const productParams = { ...params, groupBy: productGroupBy };
+
   const loadVentas = async () => {
     setLoad('ventas', true);
     try {
@@ -152,9 +158,9 @@ export default function ReportesPage() {
     try {
       const [summary, byProduct, byCategory, lowMargin] = await Promise.all([
         api.get('/analytics/profitability/summary', { params }).catch(() => ({ data: {} })),
-        api.get('/analytics/profitability/by-product', { params }).catch(() => ({ data: [] })),
+        api.get('/analytics/profitability/by-product', { params: productParams }).catch(() => ({ data: [] })),
         api.get('/analytics/profitability/by-category', { params }).catch(() => ({ data: [] })),
-        api.get('/analytics/profitability/low-margin-products', { params }).catch(() => ({ data: [] })),
+        api.get('/analytics/profitability/low-margin-products', { params: productParams }).catch(() => ({ data: [] })),
       ]);
       setRentabilidad({
         summary: summary.data,
@@ -214,7 +220,7 @@ export default function ReportesPage() {
         api.get('/analytics/inventory/value').catch(() => ({ data: {} })),
         api.get('/analytics/inventory/dead-stock').catch(() => ({ data: [] })),
         api.get('/analytics/inventory/low-stock').catch(() => ({ data: [] })),
-        api.get('/analytics/inventory/rotation', { params }).catch(() => ({ data: [] })),
+        api.get('/analytics/inventory/rotation', { params: productParams }).catch(() => ({ data: [] })),
       ]);
       setInventario({
         value: value.data,
@@ -309,6 +315,10 @@ export default function ReportesPage() {
     if (loaded.current.has('estado-resultados')) loadPyl();
   }, [pylPeriod.year, pylPeriod.month]);
 
+  useEffect(() => {
+    ['rentabilidad', 'inventario'].filter((t) => loaded.current.has(t)).forEach((t) => loaders[t]?.());
+  }, [productGroupBy]);
+
   const downloadExcel = async () => {
     try {
       const res = await api.get('/exports/sales', { params: { fromDate: from, toDate: to }, responseType: 'blob' });
@@ -335,6 +345,17 @@ export default function ReportesPage() {
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 150 }} />
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 150 }} />
         <button onClick={() => { setFrom(firstDayOfMonthAR()); setTo(todayInputAR()); }} className="btn btn-secondary btn-sm">Este mes</button>
+        {(tab === 'rentabilidad' || tab === 'inventario') && (
+          <select
+            value={productGroupBy}
+            onChange={(e) => setProductGroupBy(e.target.value as 'variant' | 'product')}
+            style={{ width: 'auto' }}
+            title="Cómo mostrar los productos con variantes (talle, color...)"
+          >
+            <option value="variant">Ver por variante</option>
+            <option value="product">Agrupar por producto</option>
+          </select>
+        )}
       </div>
 
       {/* Tabs */}
