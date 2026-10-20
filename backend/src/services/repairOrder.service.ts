@@ -342,6 +342,9 @@ export const repairOrderService = {
     if (item.productId) {
       const product = await prisma.product.findFirst({ where: { id: item.productId, ...tenantScope() } });
       if (!product) throw new AppError("PRODUCT_NOT_FOUND", "Producto no encontrado", 404);
+      if (product.hasVariants) {
+        throw new AppError("VALIDATION_ERROR", `Elegí una variante de "${product.name}"`, 400);
+      }
       productId = product.id;
       productIvaRate = product.ivaRate;
       if (!description) description = product.name;

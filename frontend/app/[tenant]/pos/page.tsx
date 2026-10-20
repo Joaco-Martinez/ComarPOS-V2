@@ -10,6 +10,8 @@ import { useAuthStore } from '@/store/auth';
 import { usePlanFeaturesStore } from '@/store/planFeatures';
 import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, PriceList, Product, ProductCategory, SalePayment } from '@/types';
 import { categoryName, clientName, fmtKg, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
+import VariantPicker from '@/components/products/VariantPicker';
+import { groupByParent, stockAt } from '@/lib/variants';
 import {
   AlertTriangle, Check, ChevronLeft, LayoutGrid, List, Minus, Package, Plus, RefreshCcw,
   ScanBarcode, Search, ShoppingCart, Trash2, X, User, Percent,
@@ -80,6 +82,8 @@ export default function PosPage() {
   const [wantsTicket, setWantsTicket] = useState(true);
 
   const [kgModal, setKgModal] = useState<KgModal>(null);
+  // Variantes: tocar un producto con variantes abre el selector.
+  const [variantPicker, setVariantPicker] = useState<Product | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [cartWarning, setCartWarning] = useState('');
@@ -120,7 +124,9 @@ export default function PosPage() {
     const load = async () => {
       try {
         const [pr, cr, clr, blr, plr] = await Promise.all([
-          api.get('/products', { params: { isActive: true, limit: 500 } }).catch(() => null),
+          // sellable: simples y variantes (nunca padres); se agrupan por
+          // padre para mostrar en la grilla (ver groupByParent).
+          api.get('/products', { params: { isActive: true, limit: 500, sellable: true } }).catch(() => null),
           api.get('/categories').catch(() => null),
           api.get('/clients', { params: { limit: 200 } }).catch(() => null),
           api.get('/business-locations').catch(() => null),
@@ -207,8 +213,27 @@ export default function PosPage() {
       const q = search.trim().toLowerCase();
       p = p.filter((x) => x.name.toLowerCase().includes(q) || x.sku?.toLowerCase().includes(q));
     }
-    return p;
+    // Las variantes se muestran agrupadas en una tarjeta por producto (el
+    // nombre de la variante incluye el del padre, así que buscar por el
+    // padre o por "M / Rojo" la encuentra igual).
+    return groupByParent(p);
   }, [products, catFilter, search]);
+
+  // Tarjeta de un producto con variantes: stock sumado en la sucursal y el
+  // precio más bajo ("desde"); tocarla abre el selector de variantes.
+  const groupStock = (p: Product) => (p.variants ?? []).reduce((acc, v) => acc + stockAt(v, stockLocationId), 0);
+  const groupPrices = (p: Product) => (p.variants ?? []).map((v) => resolvedPrice(v));
+  const pickProduct = (p: Product) => {
+    if (p.hasVariants) {
+      setVariantPicker(p);
+      return;
+    }
+    addToCart(p, 'price');
+  };
+
+  // SKU de un padre (si lo tiene): abre el selector de variantes.
+  const findParentBySku = (sku: string) =>
+    groupByParent(products).find((g) => g.hasVariants && g.sku && g.sku.trim().toLowerCase() === sku.toLowerCase());
 
   // Reset pagination whenever the visible set changes, so "Ver más" always starts from the top.
   useEffect(() => {
@@ -349,7 +374,13 @@ export default function PosPage() {
     const sku = rawSku.trim();
     if (!sku) return false;
     const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
-    if (!product || product.isService) return false;
+    if (!product) {
+      const parent = findParentBySku(sku);
+      if (!parent) return false;
+      setVariantPicker(parent);
+      return true;
+    }
+    if (product.isService) return false;
 
     if (!addToCart(product, 'price')) return false;
     if (product.saleUnit !== 'KG') {
@@ -398,7 +429,7 @@ export default function PosPage() {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (skuScannerOpen || checkoutModalOpen || kgModal || isEditableTarget(e.target)) return;
+      if (skuScannerOpen || checkoutModalOpen || kgModal || variantPicker || isEditableTarget(e.target)) return;
       if (e.ctrlKey || e.altKey || e.metaKey) return;
 
       const now = Date.now();
@@ -417,7 +448,7 @@ export default function PosPage() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [skuScannerOpen, checkoutModalOpen, kgModal, products, priceOverrides]);
+  }, [skuScannerOpen, checkoutModalOpen, kgModal, variantPicker, products, priceOverrides]);
 
   const handleScannedSku = async (rawSku: string) => {
     const sku = rawSku.trim();
@@ -425,6 +456,12 @@ export default function PosPage() {
     scannerHandledRef.current = true;
 
     const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
+
+    if (!product && findParentBySku(sku)) {
+      setVariantPicker(findParentBySku(sku) ?? null);
+      await closeSkuScanner();
+      return;
+    }
 
     if (!product) {
       scannerHandledRef.current = false;
@@ -905,17 +942,19 @@ export default function PosPage() {
               </div>
             ) : viewMode === 'list' ? (
               visibleProducts.map((p) => {
-                const stock = productStock(p);
+                const stock = p.hasVariants ? groupStock(p) : productStock(p);
                 const stockRow = p.stock?.find((s) => s.businessLocationId === stockLocationId);
                 const minStock = num(p.saleUnit === 'KG' ? stockRow?.minQuantityKg : stockRow?.minQuantity);
                 const lowStock = stock <= minStock && minStock > 0 && !p.unlimitedStock;
                 const noStock = stock <= 0 && !p.isService && !p.unlimitedStock;
-                const retailPrice = resolvedPrice(p);
+                const variantPrices = p.hasVariants ? groupPrices(p) : [];
+                const retailPrice = p.hasVariants ? Math.min(...variantPrices) : resolvedPrice(p);
+                const pricePrefix = p.hasVariants && Math.max(...variantPrices) !== retailPrice ? 'desde ' : '';
 
                 return (
                   <button
                     key={p.id}
-                    onClick={() => addToCart(p, 'price')}
+                    onClick={() => pickProduct(p)}
                     disabled={noStock}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
@@ -929,6 +968,7 @@ export default function PosPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {p.name}
+                        {p.hasVariants && <span style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 400 }}> · {p.variants?.length} variantes</span>}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
                         <span style={{ fontSize: 10, color: lowStock ? 'var(--warn)' : 'var(--text3)', fontFamily: 'var(--mono)' }}>
@@ -945,19 +985,21 @@ export default function PosPage() {
                       </div>
                     </div>
                     <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--text)', flexShrink: 0 }}>
-                      {fmtMoney(retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                      {pricePrefix}{fmtMoney(retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
                     </span>
                   </button>
                 );
               })
             ) : (
               visibleProducts.map((p) => {
-                const stock = productStock(p);
+                const stock = p.hasVariants ? groupStock(p) : productStock(p);
                 const stockRow = p.stock?.find((s) => s.businessLocationId === stockLocationId);
                 const minStock = num(p.saleUnit === 'KG' ? stockRow?.minQuantityKg : stockRow?.minQuantity);
                 const lowStock = stock <= minStock && minStock > 0 && !p.unlimitedStock;
                 const noStock = stock <= 0 && !p.isService && !p.unlimitedStock;
-                const retailPrice = resolvedPrice(p);
+                const variantPrices = p.hasVariants ? groupPrices(p) : [];
+                const retailPrice = p.hasVariants ? Math.min(...variantPrices) : resolvedPrice(p);
+                const pricePrefix = p.hasVariants && Math.max(...variantPrices) !== retailPrice ? 'desde ' : '';
 
                 return (
                   <div
@@ -980,6 +1022,11 @@ export default function PosPage() {
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3, marginBottom: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: 30 }}>
                       {p.name}
                     </div>
+                    {p.hasVariants && (
+                      <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: -2, marginBottom: 4 }}>
+                        {p.variants?.length} variantes · {(p.variantOptions ?? []).map((o) => o.name).join(' / ')}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 6 }}>
                       <span style={{ fontSize: 10, color: lowStock ? 'var(--warn)' : 'var(--text3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
                         {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
@@ -1005,14 +1052,14 @@ export default function PosPage() {
                         -- apilados, cada uno usa el ancho completo de la
                         tarjeta y el precio entra comodo. */}
                     <button
-                      onClick={() => addToCart(p, 'price')}
+                      onClick={() => pickProduct(p)}
                       disabled={noStock}
                       className="btn btn-secondary pos-price-btn"
                       style={{ width: '100%', flexDirection: 'column', gap: 0, padding: '6px 4px', height: 'auto', cursor: noStock ? 'not-allowed' : 'pointer' }}
-                      title="Agregar al carrito"
+                      title={p.hasVariants ? 'Elegir variante' : 'Agregar al carrito'}
                     >
                       <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--mono)', color: 'var(--text)' }}>
-                        {fmtMoney(retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
+                        {pricePrefix}{fmtMoney(retailPrice)}{p.saleUnit === 'KG' ? '/kg' : ''}
                       </span>
                     </button>
                   </div>
@@ -1642,6 +1689,21 @@ export default function PosPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Selector de variantes (después de elegir, si es por KG sigue al
+          modal de KG de abajo, igual que un producto simple). */}
+      {variantPicker && (
+        <VariantPicker
+          parent={variantPicker}
+          locationId={stockLocationId}
+          priceOf={resolvedPrice}
+          onPick={(variant) => {
+            setVariantPicker(null);
+            addToCart(variant, 'price');
+          }}
+          onClose={() => setVariantPicker(null)}
+        />
       )}
 
       {/* KG Modal */}

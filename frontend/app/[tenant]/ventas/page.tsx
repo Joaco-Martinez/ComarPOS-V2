@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import type { Product, Sale, SalePayment } from '@/types';
 import { clientName, fmtDate, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
 import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
+import VariantPicker from '@/components/products/VariantPicker';
+import { groupByParent } from '@/lib/variants';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
 import Pagination from '@/components/mobile/Pagination';
@@ -231,7 +233,8 @@ export default function VentasPage() {
     if (products.length || loadingProducts) return;
     setLoadingProducts(true);
     try {
-      const { data } = await api.get('/products', { params: { isActive: true, limit: 500 } });
+      // sellable: simples y variantes (el padre no se vende).
+      const { data } = await api.get('/products', { params: { isActive: true, limit: 500, sellable: true } });
       setProducts(normalizeArray<Product>(data));
     } finally {
       setLoadingProducts(false);
@@ -256,7 +259,13 @@ export default function VentasPage() {
     loadProducts();
   };
 
+  const [variantPicker, setVariantPicker] = useState<Product | null>(null);
+
   const addProductToEdit = (p: Product) => {
+    if (p.hasVariants) {
+      setVariantPicker(p);
+      return;
+    }
     setEditItems((prev) => {
       const idx = prev.findIndex((i) => i.productId === p.id);
       if (idx >= 0) {
@@ -374,8 +383,12 @@ export default function VentasPage() {
 
   const filteredEditProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase();
-    if (!q) return products.slice(0, 30);
-    return products.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)).slice(0, 30);
+    // Las variantes se agrupan por producto; un SKU exacto de variante la
+    // ofrece sola para agregarla directo.
+    if (!q) return groupByParent(products).slice(0, 30);
+    const exact = products.filter((p) => p.sku && p.sku.trim().toLowerCase() === q);
+    if (exact.length) return exact;
+    return groupByParent(products.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q))).slice(0, 30);
   }, [products, productSearch]);
 
   const fetchSales = async (p = 1) => {
@@ -784,8 +797,14 @@ export default function VentasPage() {
                   ) : filteredEditProducts.map((p) => (
                     <button key={p.id} onClick={() => addProductToEdit(p)} className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start', gap: 8 }}>
                       <Package size={14} style={{ color: 'var(--text3)', flexShrink: 0 }} />
-                      <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{fmtMoney(productPrice(p, 'price'))}</span>
+                      <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.name}{p.hasVariants ? ` · ${p.variants?.length} variantes` : ''}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                        {p.hasVariants
+                          ? `desde ${fmtMoney(Math.min(...(p.variants ?? []).map((v) => productPrice(v, 'price'))))}`
+                          : fmtMoney(productPrice(p, 'price'))}
+                      </span>
                       <Plus size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                     </button>
                   ))}
@@ -925,6 +944,18 @@ export default function VentasPage() {
             </div>
           </div>
         </div>
+      )}
+      {variantPicker && (
+        <VariantPicker
+          parent={variantPicker}
+          locationId={itemsSale?.stockLocationId ?? null}
+          priceOf={(v) => productPrice(v, 'price')}
+          onPick={(variant) => {
+            setVariantPicker(null);
+            addProductToEdit(variant);
+          }}
+          onClose={() => setVariantPicker(null)}
+        />
       )}
     </AppLayout>
   );

@@ -89,7 +89,7 @@ export const groupByParent = (products: Product[]): Product[] => {
         id: p.parentId,
         name: p.parent?.name ?? p.name,
         sku: p.parent?.sku ?? null,
-        imageUrl: p.parent?.imageUrl ?? null,
+        imageUrl: p.parent?.imageUrl ?? p.imageUrl ?? null,
         parentId: null,
         parent: null,
         hasVariants: true,
