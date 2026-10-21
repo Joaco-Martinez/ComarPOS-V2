@@ -43,6 +43,11 @@ export function invoiceTypeLetter(code?: number | null): "A" | "B" | "C" | "M" |
   return null;
 }
 
+/** Notas de credito (A/B/C/M): restan en la liquidacion de IVA. */
+export function isCreditNoteType(code?: number | null): boolean {
+  return code != null && [3, 8, 13, 53].includes(code);
+}
+
 export function invoiceDiscriminatesIva(code?: number | null): boolean {
   const letter = invoiceTypeLetter(code);
   return letter === "A" || letter === "M";

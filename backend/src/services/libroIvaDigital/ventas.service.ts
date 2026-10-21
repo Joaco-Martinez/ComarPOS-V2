@@ -10,7 +10,14 @@
  */
 import prisma from "../../prisma";
 import { tenantScope } from "../../utils/tenantScope";
-import { invoiceTypeLabel } from "./invoiceTypes";
+import { invoiceTypeLabel, invoiceTypeLetter } from "./invoiceTypes";
+
+// Ventas: A y B discriminan IVA ante AFIP (la B lo informa aunque no se vea
+// en el comprobante); C no.
+function invoiceDiscriminatesIvaVentas(code: number) {
+  const letter = invoiceTypeLetter(code);
+  return letter === "A" || letter === "B" || letter === "M";
+}
 
 function round2(n: number) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -68,7 +75,6 @@ export async function getVentasLibroIvaDigital(params: { from: Date; to: Date; a
       sale: {
         include: {
           client: { select: { nombre: true, apellido: true } },
-          items: true,
         },
       },
     },
@@ -101,22 +107,18 @@ export async function getVentasLibroIvaDigital(params: { from: Date; to: Date; a
       cae: inv.cae,
     });
 
+    // Alicuotas tal como se declararon a AFIP (InvoiceAfip.ivaDetalle), asi
+    // el libro coincide con lo que AFIP ya tiene. Comprobantes viejos (sin
+    // ivaDetalle) se emitieron todo al 21%: un renglon con su neto/IVA. Los
+    // C no discriminan IVA y no llevan alicuotas.
     const ivaByRate = new Map<number, { neto: number; iva: number }>();
-    for (const item of inv.sale?.items ?? []) {
-      const rate = (item as any).ivaRate ?? 21;
-      const gross = round2(item.subtotal);
-      const neto = rate > 0 ? round2(gross / (1 + rate / 100)) : gross;
-      const iva = round2(gross - neto);
-      const cur = ivaByRate.get(rate) ?? { neto: 0, iva: 0 };
-      cur.neto = round2(cur.neto + neto);
-      cur.iva = round2(cur.iva + iva);
-      ivaByRate.set(rate, cur);
-    }
-
-    // Fallback si la venta no tiene items linkeados (ej. dato viejo): un
-    // solo renglon con el neto/iva ya calculado que trae la factura.
-    if (ivaByRate.size === 0 && inv.iva > 0) {
-      ivaByRate.set(21, { neto: round2(inv.neto), iva: round2(inv.iva) });
+    if (invoiceDiscriminatesIvaVentas(inv.tipoComprobante)) {
+      const detalle = Array.isArray(inv.ivaDetalle) ? (inv.ivaDetalle as { rate: number; baseImp: number; importe: number }[]) : [];
+      if (detalle.length > 0) {
+        for (const a of detalle) ivaByRate.set(Number(a.rate), { neto: round2(a.baseImp), iva: round2(a.importe) });
+      } else {
+        ivaByRate.set(21, { neto: round2(inv.neto), iva: round2(inv.iva) });
+      }
     }
 
     for (const [rate, v] of ivaByRate.entries()) {

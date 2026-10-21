@@ -900,6 +900,11 @@ model InvoiceAfip {
   neto                 Float
   iva                  Float
   condicionIVAReceptor Int
+  // Desglose por alicuota tal como se declaro a AFIP en el XML
+  // ([{ rate, id, baseImp, importe }], ver afip/utils/ivaAlicuotas.ts). Lo
+  // usa el Libro IVA Ventas para que coincida con lo declarado. Null en
+  // comprobantes viejos (emitidos todo al 21%) y en los C (sin IVA).
+  ivaDetalle           Json?
   moneda               String        @default("PES")
   urlQR                String?
   qrBase64             String?
@@ -957,10 +962,14 @@ model VatSettlement {
   closedAt             DateTime?
   closedByUserId       String?
   closedByUser         User?               @relation(fields: [closedByUserId], references: [id])
+  // Con multi-facturacion cada dueno (CUIT) es un contribuyente distinto y
+  // liquida su propio IVA. Null = tenant sin multi-facturacion (una sola
+  // liquidacion por periodo, como siempre).
+  arcaConfigId         String?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
-  @@unique([tenantId, year, month])
+  @@unique([tenantId, arcaConfigId, year, month])
   @@index([tenantId])
   @@index([status])
 }
@@ -995,6 +1004,10 @@ model Sale {
   nextRetryAt             DateTime?
   retryCount              Int               @default(0)
   afipPayloadJson         Json?
+  // Lock de emision AFIP: mientras esta en el futuro hay una emision en curso
+  // para esta venta (doble click, reintento manual + worker) y no se larga
+  // otra. Se libera al terminar (ver afip/facturacion.service.ts).
+  afipProcessingUntil     DateTime?
   // Que ArcaConfig (dueno/CUIT) se eligio para facturar esta venta, elegido
   // en el modal "Facturar en ARCA" -- se graba ANTES de llamar a AFIP para
   // que afipRetry.worker.ts sepa con que config reintentar sin depender de

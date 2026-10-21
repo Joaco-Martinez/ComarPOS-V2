@@ -71,10 +71,15 @@ export default function LibroIvaDigitalPage() {
     } finally { setLoading(false); }
   };
 
+  // Con varios dueños cada CUIT liquida su propio IVA: sin dueño elegido no
+  // hay liquidación que mostrar (el backend la rechaza).
+  const needsOwner = multiInvoicingEnabled && owners.length > 0 && !ownerFilter;
+
   const loadLiquidacion = async () => {
+    if (needsOwner) { setLiquidacion(null); return; }
     setLoadingLiquidacion(true);
     try {
-      const { data } = await api.get('/libro-iva-digital/liquidacion', { params: period });
+      const { data } = await api.get('/libro-iva-digital/liquidacion', { params: { ...period, arcaConfigId: ownerFilter || undefined } });
       setLiquidacion(data);
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? 'Error al calcular la liquidación');
@@ -82,7 +87,7 @@ export default function LibroIvaDigitalPage() {
     } finally { setLoadingLiquidacion(false); }
   };
 
-  useEffect(() => { load(); loadLiquidacion(); }, [period.year, period.month, ownerFilter]);
+  useEffect(() => { load(); loadLiquidacion(); }, [period.year, period.month, ownerFilter, owners.length]);
 
   const download = async (kind: 'ventas-cbte' | 'ventas-alicuotas' | 'compras-cbte' | 'compras-alicuotas') => {
     setDownloading(kind);
@@ -107,6 +112,7 @@ export default function LibroIvaDigitalPage() {
       const { data } = await api.post('/libro-iva-digital/liquidacion/cerrar', {
         year: Number(period.year),
         month: Number(period.month),
+        arcaConfigId: ownerFilter || undefined,
       });
       setLiquidacion(data);
       toast.success(`Período ${monthLabel} ${period.year} cerrado`);
@@ -127,6 +133,7 @@ export default function LibroIvaDigitalPage() {
       const { data } = await api.post('/libro-iva-digital/liquidacion/reabrir', {
         year: Number(period.year),
         month: Number(period.month),
+        arcaConfigId: ownerFilter || undefined,
       });
       setLiquidacion(data);
       toast.success('Período reabierto');
@@ -269,6 +276,10 @@ export default function LibroIvaDigitalPage() {
       {tab === 'liquidacion' && (
         loadingLiquidacion ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 160 }}><div className="spinner" /></div>
+        ) : needsOwner ? (
+          <div className="card" style={{ padding: 18 }}>
+            <p style={{ fontSize: 13, color: 'var(--text3)', margin: 0 }}>Cada dueño (CUIT) liquida su propio IVA: elegí un dueño arriba para ver su liquidación.</p>
+          </div>
         ) : !liquidacion ? (
           <div className="card" style={{ padding: 18 }}>
             <p style={{ fontSize: 13, color: 'var(--text3)', margin: 0 }}>No se pudo calcular la liquidación de este período.</p>

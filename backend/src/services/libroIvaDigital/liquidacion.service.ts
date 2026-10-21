@@ -36,6 +36,28 @@ import { AppError } from "../../utils/asyncHandler";
 import { monthRangeAR } from "../../utils/dateAR";
 import { getVentasLibroIvaDigital } from "./ventas.service";
 import { getComprasLibroIvaDigital } from "./compras.service";
+import { isCreditNoteType } from "./invoiceTypes";
+import { isMultiInvoicingEnabled } from "../arcaConfig/arcaConfig.core";
+
+// Una nota de credito resta IVA (ventas: baja el debito; compras: baja el credito).
+const signed = (tipoComprobante: number | null, importe: number) => (isCreditNoteType(tipoComprobante) ? -importe : importe);
+
+/**
+ * A que contribuyente corresponde la liquidacion. Con multi-facturacion
+ * cada dueno (CUIT) liquida su propio IVA y hay que elegirlo; sin
+ * multi-facturacion hay una sola (arcaConfigId null, como siempre).
+ */
+async function resolveOwner(arcaConfigId?: string | null): Promise<string | null> {
+  if (!(await isMultiInvoicingEnabled())) return null;
+  if (!arcaConfigId) {
+    throw new AppError(
+      "DUENO_REQUERIDO",
+      "Con varios dueños (CUIT) cada uno liquida su propio IVA: elegí de qué dueño querés la liquidación.",
+      400
+    );
+  }
+  return arcaConfigId;
+}
 
 function round2(n: number) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -88,10 +110,10 @@ function validatePeriod(year: number, month: number) {
 }
 
 /** Saldo a favor que se arrastra desde el periodo anterior CERRADO (0 si no hay o si dio a pagar). */
-async function getSaldoTecnicoAnteriorCarry(year: number, month: number): Promise<number> {
+async function getSaldoTecnicoAnteriorCarry(year: number, month: number, owner: string | null): Promise<number> {
   const { year: py, month: pm } = previousPeriod(year, month);
   const prev = await prisma.vatSettlement.findFirst({
-    where: { ...tenantScope(), year: py, month: pm, status: VatSettlementStatus.CERRADO },
+    where: { ...tenantScope(), arcaConfigId: owner, year: py, month: pm, status: VatSettlementStatus.CERRADO },
   });
   if (!prev) return 0;
   return prev.resultado === VatSettlementResult.A_FAVOR ? round2(Math.abs(prev.saldoTecnico)) : 0;
@@ -106,18 +128,18 @@ type PeriodoCalculado = {
 } & SaldoTecnicoCalcResult;
 
 /** Calcula el periodo en base a Ventas/Compras + el arrastre, sin tocar la tabla VatSettlement. */
-async function calcularPeriodo(year: number, month: number): Promise<PeriodoCalculado> {
+async function calcularPeriodo(year: number, month: number, owner: string | null): Promise<PeriodoCalculado> {
   const { start, end } = monthRangeAR(year, month);
 
   const [ventas, compras, saldoTecnicoAnterior] = await Promise.all([
-    getVentasLibroIvaDigital({ from: start, to: end }),
-    getComprasLibroIvaDigital({ from: start, to: end }),
-    getSaldoTecnicoAnteriorCarry(year, month),
+    getVentasLibroIvaDigital({ from: start, to: end, arcaConfigId: owner ?? undefined }),
+    getComprasLibroIvaDigital({ from: start, to: end, arcaConfigId: owner ?? undefined }),
+    getSaldoTecnicoAnteriorCarry(year, month, owner),
   ]);
 
-  const debitoFiscal = round2(ventas.cbte.reduce((sum, r) => sum + r.importeIva, 0));
+  const debitoFiscal = round2(ventas.cbte.reduce((sum, r) => sum + signed(r.tipoComprobante, r.importeIva), 0));
   const creditoFiscal = round2(
-    compras.cbte.reduce((sum, r) => sum + r.importeIvaLiquidado + r.percepcionIva, 0)
+    compras.cbte.reduce((sum, r) => sum + signed(r.tipoComprobante, r.importeIvaLiquidado + r.percepcionIva), 0)
   );
 
   const calc = calcularSaldoTecnico({ debitoFiscal, creditoFiscal, saldoTecnicoAnterior });
@@ -141,10 +163,11 @@ export type LiquidacionView = PeriodoCalculado & {
  * ya declarado). Si no esta cerrada (o no existe todavia registro), calcula
  * en vivo contra Ventas/Compras.
  */
-export async function getLiquidacion(year: number, month: number): Promise<LiquidacionView> {
+export async function getLiquidacion(year: number, month: number, arcaConfigId?: string | null): Promise<LiquidacionView> {
   validatePeriod(year, month);
+  const owner = await resolveOwner(arcaConfigId);
 
-  const stored = await prisma.vatSettlement.findFirst({ where: { ...tenantScope(), year, month } });
+  const stored = await prisma.vatSettlement.findFirst({ where: { ...tenantScope(), arcaConfigId: owner, year, month } });
 
   if (stored && stored.status === VatSettlementStatus.CERRADO) {
     return {
@@ -164,7 +187,7 @@ export async function getLiquidacion(year: number, month: number): Promise<Liqui
     };
   }
 
-  const calc = await calcularPeriodo(year, month);
+  const calc = await calcularPeriodo(year, month, owner);
 
   return {
     ...calc,
@@ -177,14 +200,14 @@ export async function getLiquidacion(year: number, month: number): Promise<Liqui
 }
 
 /** El periodo anterior tiene que estar CERRADO para no romper el arrastre, salvo que sea el primer cierre historico del tenant. */
-async function assertPreviousPeriodClosed(year: number, month: number) {
+async function assertPreviousPeriodClosed(year: number, month: number, owner: string | null) {
   const anyClosed = await prisma.vatSettlement.count({
-    where: { ...tenantScope(), status: VatSettlementStatus.CERRADO },
+    where: { ...tenantScope(), arcaConfigId: owner, status: VatSettlementStatus.CERRADO },
   });
   if (anyClosed === 0) return; // primer cierre historico: no hay arrastre previo que pueda romperse
 
   const { year: py, month: pm } = previousPeriod(year, month);
-  const prev = await prisma.vatSettlement.findFirst({ where: { ...tenantScope(), year: py, month: pm } });
+  const prev = await prisma.vatSettlement.findFirst({ where: { ...tenantScope(), arcaConfigId: owner, year: py, month: pm } });
 
   if (!prev || prev.status !== VatSettlementStatus.CERRADO) {
     throw new AppError(
@@ -200,11 +223,13 @@ export async function cerrarLiquidacion(params: {
   year: number;
   month: number;
   userId: string | null;
+  arcaConfigId?: string | null;
 }): Promise<VatSettlement> {
   validatePeriod(params.year, params.month);
+  const owner = await resolveOwner(params.arcaConfigId);
 
   const existing = await prisma.vatSettlement.findFirst({
-    where: { ...tenantScope(), year: params.year, month: params.month },
+    where: { ...tenantScope(), arcaConfigId: owner, year: params.year, month: params.month },
   });
 
   if (existing?.status === VatSettlementStatus.CERRADO) {
@@ -215,13 +240,14 @@ export async function cerrarLiquidacion(params: {
     );
   }
 
-  await assertPreviousPeriodClosed(params.year, params.month);
+  await assertPreviousPeriodClosed(params.year, params.month, owner);
 
-  const calc = await calcularPeriodo(params.year, params.month);
+  const calc = await calcularPeriodo(params.year, params.month, owner);
   const tenantId = currentTenantId();
 
   const data = {
     tenantId,
+    arcaConfigId: owner,
     year: params.year,
     month: params.month,
     debitoFiscal: calc.debitoFiscal,
@@ -247,11 +273,12 @@ export async function cerrarLiquidacion(params: {
  * su saldo a favor NO se recalculan solos -- si el saldo cambia, hay que
  * reabrirlos y cerrarlos de nuevo en orden.
  */
-export async function reabrirLiquidacion(params: { year: number; month: number }): Promise<VatSettlement> {
+export async function reabrirLiquidacion(params: { year: number; month: number; arcaConfigId?: string | null }): Promise<VatSettlement> {
   validatePeriod(params.year, params.month);
+  const owner = await resolveOwner(params.arcaConfigId);
 
   const existing = await prisma.vatSettlement.findFirst({
-    where: { ...tenantScope(), year: params.year, month: params.month },
+    where: { ...tenantScope(), arcaConfigId: owner, year: params.year, month: params.month },
   });
 
   if (!existing || existing.status !== VatSettlementStatus.CERRADO) {

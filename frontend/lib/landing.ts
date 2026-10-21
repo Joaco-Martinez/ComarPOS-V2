@@ -18,6 +18,8 @@ const ONBOARDING_STEP_IDS = [
  */
 export async function getLandingHref(user: { tenantSlug?: string | null; role: string }): Promise<string> {
   const base = `/${user.tenantSlug}`;
+  // El contador no vende: entra directo a su reporte.
+  if (user.role === 'CONTADOR') return `${base}/contador`;
   if (user.role !== 'ADMIN') return `${base}/pos`;
 
   try {

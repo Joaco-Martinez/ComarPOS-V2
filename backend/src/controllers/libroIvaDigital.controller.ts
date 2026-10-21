@@ -117,7 +117,8 @@ export const libroIvaDigitalController = {
     try {
       const year = Number(req.query.year);
       const month = Number(req.query.month);
-      const liquidacion = await getLiquidacion(year, month);
+      const arcaConfigId = typeof req.query.arcaConfigId === "string" && req.query.arcaConfigId ? req.query.arcaConfigId : undefined;
+      const liquidacion = await getLiquidacion(year, month, arcaConfigId);
       res.json(liquidacion);
     } catch (err) {
       next(err);
@@ -128,7 +129,7 @@ export const libroIvaDigitalController = {
     try {
       const { year, month } = parsePeriodBody(req);
       const userId = (req as any).user?.id ?? null;
-      const liquidacion = await cerrarLiquidacion({ year, month, userId });
+      const liquidacion = await cerrarLiquidacion({ year, month, userId, arcaConfigId: req.body?.arcaConfigId || undefined });
       res.json(liquidacion);
     } catch (err) {
       next(err);
@@ -138,7 +139,7 @@ export const libroIvaDigitalController = {
   async reabrirLiquidacion(req: Request, res: Response, next: NextFunction) {
     try {
       const { year, month } = parsePeriodBody(req);
-      const liquidacion = await reabrirLiquidacion({ year, month });
+      const liquidacion = await reabrirLiquidacion({ year, month, arcaConfigId: req.body?.arcaConfigId || undefined });
       res.json(liquidacion);
     } catch (err) {
       next(err);

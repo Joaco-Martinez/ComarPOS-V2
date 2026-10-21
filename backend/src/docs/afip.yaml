@@ -47,11 +47,14 @@ paths:
   /afip/facturar:
     post:
       tags: [AFIP]
-      summary: Emite una Factura C electronica para una venta
+      summary: Emite una factura electronica (A, B o C) para una venta
       description: >
-        Emite Factura C (tipo 11) contra WSFE. Solo admite
-        comprobante tipo 11 — cualquier otro valor enviado en el body
-        es ignorado por seguridad. Genera PDF y lo sube a Cloudinary.
+        Emite la factura contra WSFE con la config ARCA del negocio (o del
+        dueno elegido con multi-facturacion). El tipo permitido depende de la
+        condicion frente al IVA del negocio (RI -> A/B, resto -> C). El
+        importe y el desglose de IVA por alicuota salen siempre de la venta
+        guardada. Si faltan tipo/documento (ej. reintento) se reutilizan los
+        del intento anterior o los del cliente. Genera PDF y lo imprime.
       security:
         - bearerAuth: []
       requestBody:
@@ -65,31 +68,26 @@ paths:
                 saleId:
                   type: string
                   description: ID de la venta a facturar
-                cuit:
+                tipoComprobante:
+                  type: integer
+                  enum: [1, 6, 11]
+                  description: 1 = A, 6 = B, 11 = C (opcional)
+                receiverDoc:
                   type: string
-                  description: CUIT del cliente (opcional, se toma de la venta)
-                nombreCliente:
+                  description: DNI/CUIT/CUIL del receptor; vacio = consumidor final (opcional)
+                condicionIVAReceptor:
+                  type: integer
+                  description: Codigo AFIP de condicion IVA del receptor (opcional, por defecto sale del cliente)
+                arcaConfigId:
                   type: string
-                productos:
-                  type: array
-                  description: Override de productos (opcional, se toman de la venta)
-                  items:
-                    type: object
-                    properties:
-                      descripcion:
-                        type: string
-                      cantidad:
-                        type: number
-                      precioUnitario:
-                        type: number
-                      subtotal:
-                        type: number
-                metodoPago:
-                  type: string
-                  description: Override de metodo de pago (opcional)
+                  description: Dueno (CUIT) que factura, solo con multi-facturacion (opcional)
       responses:
         200:
           description: Factura emitida y PDF generado
+        202:
+          description: AFIP no disponible, queda PENDING_AFIP para reintento automatico
+        409:
+          description: AFIP rechazo el comprobante, o ya hay una emision en curso para esta venta
           content:
             application/json:
               schema:
@@ -119,7 +117,7 @@ paths:
   /afip/nota-credito:
     post:
       tags: [AFIP]
-      summary: Emite una Nota de Credito C para una factura existente
+      summary: Emite una Nota de Credito (A, B o C) para una factura existente
       security:
         - bearerAuth: []
       requestBody:
@@ -128,11 +126,16 @@ paths:
           application/json:
             schema:
               type: object
-              required: [saleId]
+              required: [facturaOriginalId]
               properties:
-                saleId:
+                facturaOriginalId:
                   type: string
-                  description: ID de la venta/factura a anular
+                  description: ID de la InvoiceAfip (factura) a acreditar
+                motivo:
+                  type: string
+                importe:
+                  type: number
+                  description: Importe a acreditar (opcional, por defecto el total; no puede superar lo que queda sin acreditar)
       responses:
         200:
           description: Nota de credito emitida
