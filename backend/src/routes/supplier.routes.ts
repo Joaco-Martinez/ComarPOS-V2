@@ -16,6 +16,12 @@ router.post("/", requireAnyRole(["ADMIN"]), requirePlanFeature("proveedores"), s
 router.put("/:id", requireAnyRole(["ADMIN"]), requirePlanFeature("proveedores"), supplierController.update);
 router.delete("/:id", requireAnyRole(["ADMIN"]), requirePlanFeature("proveedores"), supplierController.remove);
 router.post(
+  "/:id/link-products",
+  requireAnyRole(["ADMIN"]),
+  requirePlanFeature("proveedores"),
+  supplierController.linkProducts
+);
+router.post(
   "/:id/bulk-price-update",
   requireAnyRole(["ADMIN"]),
   requirePlanFeature("proveedores"),

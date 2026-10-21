@@ -44,6 +44,19 @@ export const supplierController = {
 
   getPurchaseHistory: wrap(async (req) => supplierService.getPurchaseHistory(req.params.id as string)),
 
+  async linkProducts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const productIds = Array.isArray(req.body.productIds) ? req.body.productIds : [];
+      const result = await supplierService.linkProducts(req.params.id as string, productIds);
+      if (!(result as any)?.statusCode) {
+        logAudit(req, "UPDATE", "Supplier", req.params.id as string, { linkProducts: productIds.length });
+      }
+      return sendServiceResponse(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async bulkPriceUpdate(req: Request, res: Response, next: NextFunction) {
     try {
       const target = req.body.target === "cost" || req.body.target === "both" ? req.body.target : "sale";

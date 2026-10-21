@@ -182,6 +182,27 @@ export function getProductSku(item: CotizacionPDFSale["items"][number]) {
   return item.productSkuSnapshot || item.product?.sku || "-";
 }
 
+/** Nombre de la lista de precios de la cotizacion si no es la default (Minorista). */
+export function getAlternatePriceListName(sale: Pick<CotizacionPDFSale, "priceList">) {
+  return sale.priceList && !sale.priceList.isDefault ? sale.priceList.name : null;
+}
+
+/**
+ * Precio unitario de lista (Minorista = precio actual del producto) de un
+ * item. Un precio cargado a mano en la cotizacion no tiene "precio de
+ * lista" distinto, se usa ese mismo.
+ */
+export function getItemListUnitPrice(item: CotizacionPDFSale["items"][number]) {
+  if (item.priceType === "MANUAL" || !item.product) return Number(item.price || 0);
+  const listPrice = item.product.saleUnit === "KG" ? item.product.pricePerKg : item.product.price;
+  return listPrice != null ? Number(listPrice) : Number(item.price || 0);
+}
+
+/** Subtotal a precio de lista de toda la cotizacion. */
+export function getListSubtotal(sale: Pick<CotizacionPDFSale, "items">) {
+  return sale.items.reduce((acc, item) => acc + getItemListUnitPrice(item) * getProductQty(item), 0);
+}
+
 export function getProductQty(item: CotizacionPDFSale["items"][number]) {
   if (item.product?.saleUnit === "KG") {
     return Number(item.quantityKg ?? 0);

@@ -523,8 +523,9 @@ export const productController = {
       const productIds = parseIdsParam(req.query.productIds);
       const quantities = parseQuantitiesParam(req.query.quantities);
       const sizes = parseQuantitiesParam(req.query.sizes) as Record<string, string> | undefined;
+      const priceListIds = parseIdsParam(req.query.priceListIds);
 
-      const buffer = await barcodeService.exportPdf({ productIds, quantities, sizes });
+      const buffer = await barcodeService.exportPdf({ productIds, quantities, sizes, priceListIds });
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", 'attachment; filename="codigos-de-barra.pdf"');
@@ -538,7 +539,9 @@ export const productController = {
     try {
       const productIds = parseIdsParam(req.query.productIds);
 
-      const buffer = await barcodeService.exportExcel({ productIds });
+      const priceListIds = parseIdsParam(req.query.priceListIds);
+
+      const buffer = await barcodeService.exportExcel({ productIds, priceListIds });
 
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", 'attachment; filename="codigos-de-barra.xlsx"');

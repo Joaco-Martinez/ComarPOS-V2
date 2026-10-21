@@ -102,6 +102,7 @@ export async function generarCotizacion(saleId: string) {
       user: { select: { id: true, name: true, email: true, role: true } },
       client: true,
       discounts: { orderBy: { order: "asc" } },
+      priceList: { select: { name: true, isDefault: true } },
     },
   });
 
@@ -137,6 +138,7 @@ export async function generarCotizacion(saleId: string) {
         user: { select: { id: true, name: true, email: true, role: true } },
         client: true,
         discounts: { orderBy: { order: "asc" } },
+        priceList: { select: { name: true, isDefault: true } },
       },
     });
   }

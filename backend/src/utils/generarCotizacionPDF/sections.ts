@@ -26,6 +26,9 @@ import {
   getItemDiscountBreakdown,
   getDiscountRowLabel,
   getQuotationNumber,
+  getAlternatePriceListName,
+  getItemListUnitPrice,
+  getListSubtotal,
 } from "./format";
 import { findLogoPath, getImageBuffer } from "./assets";
 import { COMARPOS_FOOTER_TEXT } from "../comarposBranding";
@@ -218,6 +221,9 @@ type TableLayout = {
   codigo: TableColumn;
   cant: TableColumn;
   precioUnit: TableColumn;
+  // Solo con una lista de precios alternativa (ej. "Efectivo"): precio de
+  // lista al lado del precio de esa lista.
+  precioLista: TableColumn | null;
   iva: TableColumn;
   subtotal: TableColumn;
   discountCols: (TableColumn & { discount: DiscountRef })[];
@@ -250,7 +256,8 @@ function computeTableLayout(sale: CotizacionPDFSale): TableLayout {
   const minProductoW = 120;
 
   const discounts = getTableDiscountColumns(sale);
-  const reservedFixed = codigoW + cantW + precioW + ivaW + subtotalW + gap * 5;
+  const hasListColumn = Boolean(getAlternatePriceListName(sale));
+  const reservedFixed = codigoW + cantW + precioW + ivaW + subtotalW + gap * 5 + (hasListColumn ? precioW + gap : 0);
   const availableForDiscounts = right - left - minProductoW - reservedFixed - gap * discounts.length;
   const discW = discounts.length > 0
     ? Math.max(26, Math.min(46, availableForDiscounts / discounts.length))
@@ -274,6 +281,13 @@ function computeTableLayout(sale: CotizacionPDFSale): TableLayout {
   const precioX = cursorRight - precioW;
   cursorRight = precioX - gap;
 
+  let precioLista: TableColumn | null = null;
+  if (hasListColumn) {
+    const listaX = cursorRight - precioW;
+    precioLista = { x: listaX, width: precioW };
+    cursorRight = listaX - gap;
+  }
+
   const cantX = cursorRight - cantW;
   cursorRight = cantX - gap;
 
@@ -285,6 +299,7 @@ function computeTableLayout(sale: CotizacionPDFSale): TableLayout {
     codigo: { x: codigoX, width: codigoW },
     cant: { x: cantX, width: cantW },
     precioUnit: { x: precioX, width: precioW },
+    precioLista,
     iva: { x: ivaX, width: ivaW },
     subtotal: { x: subtotalX, width: subtotalW },
     discountCols,
@@ -310,9 +325,22 @@ export function drawTableHeader(doc: PDFKit.PDFDocument, y: number, sale: Cotiza
     .text("PRODUCTO", layout.producto.x, textY, { width: layout.producto.width, characterSpacing: 0.3 })
     .text("CÓD.", layout.codigo.x, textY, { width: layout.codigo.width, characterSpacing: 0.3 })
     .text("CANT.", layout.cant.x, textY, { width: layout.cant.width, align: "right", characterSpacing: 0.3 })
-    .text("P. UNIT.", layout.precioUnit.x, textY, { width: layout.precioUnit.width, align: "right", characterSpacing: 0.3 })
+    .text(
+      layout.precioLista ? `P. ${String(getAlternatePriceListName(sale)).toUpperCase()}` : "P. UNIT.",
+      layout.precioUnit.x,
+      textY,
+      { width: layout.precioUnit.width, height: 10, align: "right", ellipsis: true, lineBreak: false }
+    )
     .text("IVA", layout.iva.x, textY, { width: layout.iva.width, align: "right", characterSpacing: 0.3 })
     .text("SUBTOTAL", layout.subtotal.x, textY, { width: layout.subtotal.width, align: "right", characterSpacing: 0.3 });
+
+  if (layout.precioLista) {
+    doc
+      .fillColor(C.text)
+      .font("Helvetica-Bold")
+      .fontSize(7.5)
+      .text("P. LISTA", layout.precioLista.x, textY, { width: layout.precioLista.width, align: "right", characterSpacing: 0.3 });
+  }
 
   layout.discountCols.forEach((col, i) => {
     doc
@@ -374,6 +402,14 @@ export async function drawProductRow(
     .font("Helvetica")
     .fontSize(8.5)
     .text(money(item.price), layout.precioUnit.x, textY, { width: layout.precioUnit.width, align: "right" });
+
+  if (layout.precioLista) {
+    doc
+      .fillColor(C.muted)
+      .font("Helvetica")
+      .fontSize(8.5)
+      .text(money(getItemListUnitPrice(item)), layout.precioLista.x, textY, { width: layout.precioLista.width, align: "right" });
+  }
 
   const { rate: ivaRate } = getItemIvaBreakdown(item);
 
@@ -576,6 +612,71 @@ export function drawDiscountOptions(doc: PDFKit.PDFDocument, sale: CotizacionPDF
 
   doc.moveTo(x, y).lineTo(right, y).strokeColor(C.lightLine).lineWidth(1).stroke();
 
+  return y + 10;
+}
+
+/**
+ * Con una lista alternativa (ej. "Efectivo", mas barata que Minorista): el
+ * precio de lista (el "real") y cuanto le queda al cliente abonando con esa
+ * lista, lado a lado. Sin lista alternativa, o si no cambia nada, no dibuja.
+ */
+export function drawPriceListComparison(doc: PDFKit.PDFDocument, sale: CotizacionPDFSale, y: number) {
+  const listName = getAlternatePriceListName(sale);
+  if (!listName) return y;
+
+  const listSubtotal = getListSubtotal(sale);
+  const listTotal = Number(sale.subtotal || 0);
+  if (Math.abs(listSubtotal - listTotal) < 0.01) return y;
+
+  const x = PAGE.marginX;
+  const right = PAGE.width - x;
+  const gap = 8;
+  const cardH = 38;
+
+  if (y + cardH + 30 > PAGE.bottom) {
+    doc.addPage({ size: "A4", margin: 0 });
+    drawPageBackground(doc);
+    y = 50;
+  }
+
+  const cards = [
+    { title: "PRECIO DE LISTA", value: money(listSubtotal), highlight: false },
+    { title: `ABONANDO CON ${listName.toUpperCase()}`, value: money(listTotal), highlight: true },
+  ];
+  const diff = listSubtotal - listTotal;
+  const cardW = (right - x - gap * (cards.length - 1)) / cards.length;
+
+  cards.forEach((card, i) => {
+    const cardX = x + i * (cardW + gap);
+    doc.rect(cardX, y, cardW, cardH).fillAndStroke(C.soft, C.lightLine);
+    if (card.highlight) doc.rect(cardX, y, 3, cardH).fill(C.black);
+
+    doc
+      .fillColor(C.muted)
+      .font("Helvetica-Bold")
+      .fontSize(6.5)
+      .text(card.title, cardX + 8, y + 6, { width: cardW - 16, height: 9, ellipsis: true, characterSpacing: 0.3 });
+
+    doc
+      .fillColor(C.black)
+      .font("Helvetica-Bold")
+      .fontSize(11)
+      .text(card.value, cardX + 8, y + cardH - 17, { width: cardW - 16 });
+
+    if (card.highlight) {
+      doc
+        .fillColor(C.muted)
+        .font("Helvetica")
+        .fontSize(7)
+        .text(`${diff > 0 ? "Ahorro" : "Recargo"}: ${money(Math.abs(diff))}`, cardX + 8, y + cardH - 15, {
+          width: cardW - 16,
+          align: "right",
+        });
+    }
+  });
+
+  y += cardH + 4;
+  doc.moveTo(x, y).lineTo(right, y).strokeColor(C.lightLine).lineWidth(1).stroke();
   return y + 10;
 }
 

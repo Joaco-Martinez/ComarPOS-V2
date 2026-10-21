@@ -16,6 +16,7 @@ import {
   drawTableHeader,
   drawProductRow,
   drawDiscountOptions,
+  drawPriceListComparison,
   drawTotals,
   drawFooter,
 } from "./generarCotizacionPDF/sections";
@@ -53,7 +54,9 @@ export async function generarCotizacionPDF(
         y = await drawProductRow(doc, sale, sale.items[i], y, i);
       }
 
-      y = drawDiscountOptions(doc, sale, y + 6);
+      y = drawPriceListComparison(doc, sale, y + 6);
+
+      y = drawDiscountOptions(doc, sale, y);
 
       drawTotals(doc, sale, y);
 
