@@ -20,6 +20,9 @@ type BarcodeProduct = {
   parentId?: string | null;
   parentName?: string | null;
   variantLabel?: string | null;
+  // Precios de otras listas elegidas para imprimir debajo del principal
+  // (ej. "Efectivo: $900"). Solo las listas donde el producto tiene precio.
+  extraPrices: { label: string; price: number }[];
 };
 
 async function renderBarcodePng(text: string): Promise<Buffer> {
@@ -33,7 +36,11 @@ async function renderBarcodePng(text: string): Promise<Buffer> {
   });
 }
 
-async function getProducts(productIds?: string[]): Promise<BarcodeProduct[]> {
+function formatPrice(n: number) {
+  return `$${n.toFixed(2)}`;
+}
+
+async function getProducts(productIds?: string[], priceListIds?: string[]): Promise<BarcodeProduct[]> {
   const where: any = { ...tenantScope(), isActive: true, sku: { not: null } };
   if (productIds && productIds.length > 0) {
     // Elegir un padre incluye todas sus variantes (cada una con su SKU). El
@@ -53,9 +60,30 @@ async function getProducts(productIds?: string[]): Promise<BarcodeProduct[]> {
     },
   });
 
+  // Listas adicionales (la default "Minorista" ya es el precio del producto).
+  const priceLists = priceListIds && priceListIds.length > 0
+    ? await prisma.priceList.findMany({
+        where: { ...tenantScope(), id: { in: priceListIds }, isDefault: false, isActive: true },
+        orderBy: { name: "asc" },
+        select: {
+          name: true,
+          items: {
+            where: { productId: { in: products.map((p) => p.id) } },
+            select: { productId: true, price: true, pricePerKg: true },
+          },
+        },
+      })
+    : [];
+
   return products
     .filter((p) => !!p.sku)
     .map((p) => ({
+      extraPrices: priceLists.flatMap((list) => {
+        const item = list.items.find((i) => i.productId === p.id);
+        if (!item) return [];
+        const price = p.saleUnit === "KG" ? item.pricePerKg ?? item.price : item.price;
+        return [{ label: list.name, price }];
+      }),
       id: p.id,
       name: p.name,
       sku: p.sku as string,
@@ -90,8 +118,9 @@ async function exportPdf(params: {
   productIds?: string[];
   quantities?: Record<string, number>;
   sizes?: Record<string, string>;
+  priceListIds?: string[];
 }): Promise<Buffer> {
-  const products = await getProducts(params.productIds);
+  const products = await getProducts(params.productIds, params.priceListIds);
 
   if (products.length === 0) {
     throw new Error("No hay productos con SKU para generar códigos de barra");
@@ -168,7 +197,11 @@ async function drawLabel(doc: PDFKit.PDFDocument, label: BarcodeLabel, x: number
   const nameSize = Math.max(6, Math.round(8 * k));
   const skuSize = Math.max(6, Math.round(9 * k));
   const priceSize = Math.max(7, Math.round(10 * k));
-  const imgHeight = Math.max(20, Math.round(36 * k));
+  // Con precios de otras listas, el codigo se achica para hacerles lugar
+  // (una linea por lista, hasta 2) sin salirse de la etiqueta.
+  const extras = label.extraPrices.slice(0, 2);
+  const extraLineH = Math.round(priceSize * 1.25);
+  const imgHeight = Math.max(14, Math.round(36 * k) - extras.length * extraLineH);
   const imgY = y + Math.round(26 * k);
 
   doc.rect(x, y, w - 8, h - 8).stroke("#dddddd");
@@ -193,16 +226,35 @@ async function drawLabel(doc: PDFKit.PDFDocument, label: BarcodeLabel, x: number
   doc
     .fontSize(skuSize)
     .text(label.sku, x + 6, imgY + imgHeight + 4, { width: w - 20, align: "center" });
+  const priceY = imgY + imgHeight + 4 + Math.round(skuSize * 1.4);
+  if (extras.length === 0) {
+    doc
+      .fontSize(priceSize)
+      .text(formatPrice(label.price), x + 6, priceY, {
+        width: w - 20,
+        align: "center",
+      });
+    return;
+  }
+  // Precio principal + una linea por lista (ej. "Precio: $1.000" / "Efectivo: $900").
   doc
+    .font("Helvetica-Bold")
     .fontSize(priceSize)
-    .text(`$${label.price.toFixed(2)}`, x + 6, imgY + imgHeight + 4 + Math.round(skuSize * 1.4), {
+    .text(`Precio: ${formatPrice(label.price)}`, x + 6, priceY, { width: w - 20, align: "center", height: extraLineH, ellipsis: true });
+  extras.forEach((extra, i) => {
+    doc.text(`${extra.label}: ${formatPrice(extra.price)}`, x + 6, priceY + extraLineH * (i + 1), {
       width: w - 20,
       align: "center",
+      height: extraLineH,
+      ellipsis: true,
     });
+  });
+  doc.font("Helvetica");
 }
 
-async function exportExcel(params: { productIds?: string[] }): Promise<ExcelJS.Buffer> {
-  const products = await getProducts(params.productIds);
+async function exportExcel(params: { productIds?: string[]; priceListIds?: string[] }): Promise<ExcelJS.Buffer> {
+  const products = await getProducts(params.productIds, params.priceListIds);
+  const extraLabels = Array.from(new Set(products.flatMap((p) => p.extraPrices.map((e) => e.label))));
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "ComarPOS";
@@ -213,12 +265,18 @@ async function exportExcel(params: { productIds?: string[] }): Promise<ExcelJS.B
     { header: "SKU", key: "sku", width: 16 },
     { header: "Producto", key: "name", width: 32 },
     { header: "Precio", key: "price", width: 14 },
+    ...extraLabels.map((label, i) => ({ header: label, key: `extra${i}`, width: 14 })),
   ];
   ws.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
 
   for (const p of products) {
-    const row = ws.addRow({ sku: p.sku, name: p.name, price: Number(p.price.toFixed(2)) });
+    const extraValues: Record<string, number> = {};
+    extraLabels.forEach((label, i) => {
+      const extra = p.extraPrices.find((e) => e.label === label);
+      if (extra) extraValues[`extra${i}`] = Number(extra.price.toFixed(2));
+    });
+    const row = ws.addRow({ sku: p.sku, name: p.name, price: Number(p.price.toFixed(2)), ...extraValues });
     row.height = 42;
 
     const png = await renderBarcodePng(p.sku);
@@ -227,6 +285,7 @@ async function exportExcel(params: { productIds?: string[] }): Promise<ExcelJS.B
   }
 
   ws.getColumn("price").numFmt = '"$"#,##0.00';
+  extraLabels.forEach((_, i) => { ws.getColumn(`extra${i}`).numFmt = '"$"#,##0.00'; });
 
   return wb.xlsx.writeBuffer();
 }

@@ -17,6 +17,10 @@ export default function ListasDePreciosPage() {
 
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [form, setForm] = useState({ name: '', description: '' });
+  // Al crear: cargar todos los productos de una (mismo bulk-apply que el
+  // detalle), con un % sobre Minorista (ej. -10 para una lista "Efectivo").
+  const [loadAll, setLoadAll] = useState(true);
+  const [loadAllPct, setLoadAllPct] = useState('0');
   const [editing, setEditing] = useState<PriceList | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -73,7 +77,7 @@ export default function ListasDePreciosPage() {
     }
   };
 
-  const openCreate = () => { setForm({ name: '', description: '' }); setEditing(null); setModal('create'); };
+  const openCreate = () => { setForm({ name: '', description: '' }); setLoadAll(true); setLoadAllPct('0'); setEditing(null); setModal('create'); };
   const openEdit = (list: PriceList) => {
     setForm({ name: list.name, description: list.description ?? '' });
     setEditing(list);
@@ -85,8 +89,14 @@ export default function ListasDePreciosPage() {
     setSaving(true);
     try {
       if (modal === 'create') {
-        await api.post('/price-lists', form);
-        toast.success('Lista de precios creada');
+        const { data: created } = await api.post('/price-lists', form);
+        if (loadAll && created?.id) {
+          const pct = num(loadAllPct);
+          const { data: bulk } = await api.post(`/price-lists/${created.id}/bulk-apply`, { percentage: pct });
+          toast.success(`Lista creada con ${bulk.count} productos${pct !== 0 ? ` (${pct > 0 ? '+' : ''}${pct}% sobre Minorista)` : ''}`);
+        } else {
+          toast.success('Lista de precios creada');
+        }
       } else if (editing) {
         await api.put(`/price-lists/${editing.id}`, form);
         toast.success('Lista actualizada');
@@ -229,10 +239,36 @@ export default function ListasDePreciosPage() {
                 <label className="form-label">Descripción</label>
                 <input value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} placeholder="Opcional" />
               </div>
+              {modal === 'create' && (
+                <div style={{ padding: 10, background: 'var(--bg2)', borderRadius: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={loadAll} onChange={(e) => setLoadAll(e.target.checked)} />
+                    Agregar todos los productos
+                  </label>
+                  {loadAll && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text2)' }}>Ajuste sobre Minorista:</span>
+                        <input
+                          type="number" step="any"
+                          value={loadAllPct}
+                          onChange={(e) => setLoadAllPct(e.target.value)}
+                          style={{ width: 90 }}
+                        />
+                        <span style={{ fontSize: 12, color: 'var(--text3)' }}>%</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+                        Negativo = más barato (ej. -10 para una lista de pago en efectivo), positivo = recargo, 0 = mismo precio.
+                        Después podés cambiar el precio de cada producto desde el detalle de la lista.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
-              <button onClick={save} disabled={saving || !form.name.trim()} className="btn btn-primary btn-sm">
+              <button onClick={save} disabled={saving || !form.name.trim() || (modal === 'create' && loadAll && (loadAllPct === '' || num(loadAllPct) <= -100))} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Guardar'}
               </button>
             </div>

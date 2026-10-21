@@ -135,6 +135,32 @@ export const supplierService = {
     return { ok: true, count: updated.length };
   },
 
+  /**
+   * Vincula varios productos al proveedor de una sola vez (pantalla de
+   * Proveedores, "vincular productos"). Un producto tiene un unico
+   * proveedor (Product.supplierId), asi que si ya tenia otro se reemplaza.
+   * Las variantes heredan el proveedor del padre (INHERITED_FIELDS en
+   * product.variants.helpers.ts), por eso se actualizan junto con el.
+   */
+  async linkProducts(supplierId: string, productIds: string[]) {
+    const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, ...tenantScope() } });
+    if (!supplier) {
+      return { statusCode: 404, message: "Proveedor no encontrado" };
+    }
+
+    const ids = Array.isArray(productIds) ? productIds.filter((id) => typeof id === "string" && id) : [];
+    if (ids.length === 0) {
+      return { statusCode: 400, message: "Elegí al menos un producto" };
+    }
+
+    const result = await prisma.product.updateMany({
+      where: { ...tenantScope(), OR: [{ id: { in: ids } }, { parentId: { in: ids } }] },
+      data: { supplierId },
+    });
+
+    return { ok: true, count: result.count };
+  },
+
   async getPurchaseHistory(supplierId: string) {
     const scope = tenantScope();
     const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, ...scope } });

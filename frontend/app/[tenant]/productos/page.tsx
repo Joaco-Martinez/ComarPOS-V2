@@ -9,7 +9,7 @@ import SkuScannerModal from '@/components/SkuScannerModal';
 import ImageCropModal, { PRODUCT_IMAGE_SIZE } from '@/components/ImageCropModal';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { Product, ProductCategory, Supplier, BusinessLocation } from '@/types';
+import type { Product, ProductCategory, Supplier, BusinessLocation, PriceList } from '@/types';
 import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
@@ -77,6 +77,10 @@ export default function ProductosPage() {
   const [barcodeSize, setBarcodeSize] = useState<Record<string, BarcodeSize>>({});
   const [barcodeSearch, setBarcodeSearch] = useState('');
   const [barcodeDownloading, setBarcodeDownloading] = useState<'pdf' | 'excel' | null>(null);
+  // Listas de precios extra para imprimir en la etiqueta debajo del precio
+  // principal (ej. "Efectivo"). La default (Minorista) ya es el precio.
+  const [barcodePriceLists, setBarcodePriceLists] = useState<PriceList[]>([]);
+  const [barcodeListSel, setBarcodeListSel] = useState<Record<string, boolean>>({});
 
   // Variantes: opciones + grilla de combinaciones del form, padres
   // desplegados en el listado y el modal de "convertir".
@@ -428,6 +432,27 @@ export default function ProductosPage() {
     setBarcodeSize(size);
     setBarcodeSearch('');
     setBarcodeModal(true);
+    api.get('/price-lists')
+      .then(({ data }) => setBarcodePriceLists(normalizeArray<PriceList>(data).filter((pl) => !pl.isDefault)))
+      .catch(() => setBarcodePriceLists([]));
+  };
+
+  // Una etiqueta por unidad en stock (ej. 15 cocas = 15 etiquetas). Los
+  // productos por kilo quedan en 1 (no se cuenta por unidad) y los que no
+  // tienen stock se desmarcan.
+  const barcodeQtyFromStock = (p: Product) => (p.saleUnit === 'KG' ? 1 : Math.max(0, Math.floor(productStock(p))));
+
+  const applyStockQtyToAll = () => {
+    const qty: Record<string, string> = { ...barcodeQty };
+    const selected: Record<string, boolean> = { ...barcodeSelected };
+    barcodeFiltered.forEach((p) => {
+      if (!selected[p.id]) return;
+      const n = barcodeQtyFromStock(p);
+      if (n > 0) qty[p.id] = String(n);
+      else selected[p.id] = false;
+    });
+    setBarcodeQty(qty);
+    setBarcodeSelected(selected);
   };
 
   const toggleBarcodeAll = (checked: boolean) => {
@@ -455,6 +480,8 @@ export default function ProductosPage() {
     setBarcodeDownloading(type);
     try {
       const params: Record<string, string> = { productIds: barcodeSelectedIds.join(',') };
+      const priceListIds = barcodePriceLists.filter((pl) => barcodeListSel[pl.id]).map((pl) => pl.id);
+      if (priceListIds.length > 0) params.priceListIds = priceListIds.join(',');
       if (type === 'pdf') {
         const quantities: Record<string, number> = {};
         const sizes: Record<string, BarcodeSize> = {};
@@ -1097,7 +1124,7 @@ export default function ProductosPage() {
                 onChange={(e) => setBarcodeSearch(e.target.value)}
                 placeholder="Buscar por nombre o SKU..."
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                   <input
                     type="checkbox"
@@ -1107,6 +1134,13 @@ export default function ProductosPage() {
                   Seleccionar todos
                 </label>
                 <span>· {barcodeSelectedIds.length} seleccionados</span>
+                <button
+                  onClick={applyStockQtyToAll}
+                  className="btn btn-secondary btn-xs"
+                  title="Pone como cantidad de etiquetas el stock actual de cada producto seleccionado"
+                >
+                  Cantidad = stock
+                </button>
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
                   Tamaño para todos:
                   <select
@@ -1125,6 +1159,21 @@ export default function ProductosPage() {
                 </span>
               </div>
 
+              {barcodePriceLists.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)', padding: '8px 10px', background: 'var(--bg2)', borderRadius: 6 }}>
+                  <span style={{ fontWeight: 600 }}>Mostrar también el precio de:</span>
+                  {barcodePriceLists.map((pl) => (
+                    <label key={pl.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!barcodeListSel[pl.id]}
+                        onChange={(e) => setBarcodeListSel((prev) => ({ ...prev, [pl.id]: e.target.checked }))}
+                      />
+                      {pl.name}
+                    </label>
+                  ))}
+                </div>
+              )}
               <div style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid var(--border2)', borderRadius: 6 }}>
                 {barcodeFiltered.length === 0 ? (
                   <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
@@ -1145,7 +1194,9 @@ export default function ProductosPage() {
                           <td style={{ padding: '6px 8px', fontSize: 12 }}>
                             <div style={{ fontWeight: 600, color: 'var(--text)' }}>{p.parent ? p.parent.name : p.name}</div>
                             {p.parent && <div style={{ fontSize: 11, color: 'var(--text2)' }}>{p.variantLabel}</div>}
-                            <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text3)' }}>{p.sku}</div>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text3)' }}>
+                              {p.sku} · stock {p.saleUnit === 'KG' ? fmtKg(productStock(p)) : productStock(p)}
+                            </div>
                           </td>
                           <td style={{ padding: '6px 8px', width: 100 }}>
                             <select

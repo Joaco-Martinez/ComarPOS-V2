@@ -118,6 +118,12 @@ export default function CotizacionesPage() {
     return override?.price ?? num(product.price);
   };
 
+  // Lista alternativa elegida (ej. "Efectivo"): se muestra el precio de
+  // lista (Minorista) al lado, para que el cliente vea el precio real y
+  // cuánto le queda con esa lista.
+  const alternateList = priceLists.find((pl) => pl.id === priceListId && !pl.isDefault) ?? null;
+  const listUnitPrice = (product: Product) => (product.saleUnit === 'KG' ? num(product.pricePerKg) : num(product.price));
+
   const [variantPicker, setVariantPicker] = useState<Product | null>(null);
 
   const filteredProducts = useMemo(() => {
@@ -167,6 +173,14 @@ export default function CotizacionesPage() {
   };
 
   const subtotal = cart.reduce((acc, line) => acc + lineSubtotal(line), 0);
+
+  // Precio cargado a mano: no hay "precio de lista" distinto, se usa ese.
+  const lineListUnitPrice = (line: CartLine) => (line.manualPrice !== undefined && line.manualPrice !== '' ? num(line.manualPrice) : listUnitPrice(line.product));
+  const listSubtotal = cart.reduce(
+    (acc, line) => acc + lineListUnitPrice(line) * (line.product.saleUnit === 'KG' ? num(line.quantityKg) : line.quantity),
+    0
+  );
+  const showListComparison = Boolean(alternateList) && Math.abs(listSubtotal - subtotal) > 0.01;
 
   const activeDiscounts = discounts.filter((d) => d.applied && num(d.value) > 0);
 
@@ -274,7 +288,7 @@ export default function CotizacionesPage() {
 
   return (
     <AppLayout title="Cotizaciones" subtitle="Armá presupuestos con descuentos y listas de precios">
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+      <div className="grid-responsive" style={{ ['--gtc' as any]: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
         {/* Carrito */}
         <div className="card" style={{ padding: 16 }}>
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Productos</div>
@@ -287,7 +301,7 @@ export default function CotizacionesPage() {
               style={{ paddingLeft: 30 }}
             />
             {filteredProducts.length > 0 && (
-              <div className="card" style={{ position: 'absolute', zIndex: 10, top: 38, left: 0, right: 0, maxHeight: 260, overflowY: 'auto', padding: 4 }}>
+              <div className="card" style={{ position: 'absolute', zIndex: 10, top: '100%', marginTop: 4, left: 0, right: 0, maxHeight: 260, overflowY: 'auto', padding: 4 }}>
                 {filteredProducts.map((p) => (
                   <div
                     key={p.id}
@@ -296,11 +310,11 @@ export default function CotizacionesPage() {
                     onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg2)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
-                    <span style={{ fontSize: 13 }}>
+                    <span style={{ fontSize: 13, minWidth: 0 }}>
                       {p.name}
                       {p.hasVariants && <span style={{ fontSize: 11, color: 'var(--text3)' }}> · {p.variants?.length} variantes</span>}
                     </span>
-                    <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', flex: '0 0 auto' }}>
                       {p.hasVariants
                         ? `desde ${fmtMoney(Math.min(...(p.variants ?? []).map((v) => resolvedPrice(v))))}`
                         : fmtMoney(resolvedPrice(p))}
@@ -319,11 +333,16 @@ export default function CotizacionesPage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {cart.map((line) => (
-                <div key={line.product.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                <div key={line.product.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 160px', minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line.product.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{fmtMoney(lineUnitPrice(line))} / {line.product.saleUnit === 'KG' ? 'kg' : 'un.'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                      {alternateList && Math.abs(lineListUnitPrice(line) - lineUnitPrice(line)) > 0.01 ? (
+                        <>Lista: {fmtMoney(lineListUnitPrice(line))} · {alternateList.name}: <strong style={{ color: 'var(--text2)' }}>{fmtMoney(lineUnitPrice(line))}</strong></>
+                      ) : fmtMoney(lineUnitPrice(line))} / {line.product.saleUnit === 'KG' ? 'kg' : 'un.'}
+                    </div>
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
                   {line.product.saleUnit === 'KG' ? (
                     <input
                       type="number" min="0" step="0.01"
@@ -351,6 +370,7 @@ export default function CotizacionesPage() {
                     {fmtMoney(lineSubtotal(line))}
                   </div>
                   <button onClick={() => removeLine(line.product.id)} className="btn btn-ghost btn-xs"><Trash2 size={13} /></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -387,7 +407,7 @@ export default function CotizacionesPage() {
           </div>
 
           <div className="card" style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
               <span style={{ fontWeight: 800, fontSize: 14 }}>Descuentos</span>
               <button onClick={addDiscount} className="btn btn-secondary btn-xs" style={{ gap: 4 }}><Plus size={12} /> Agregar</button>
             </div>
@@ -446,16 +466,26 @@ export default function CotizacionesPage() {
           </div>
 
           <div className="card" style={{ padding: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>
-              <span>Subtotal</span><span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(subtotal)}</span>
+            {showListComparison && alternateList && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>
+                <span>Precio de lista</span><span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(listSubtotal)}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>
+              <span>{showListComparison && alternateList ? `Con ${alternateList.name}` : 'Subtotal'}</span><span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(subtotal)}</span>
             </div>
+            {showListComparison && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: 'var(--success)', marginBottom: 4 }}>
+                <span>{listSubtotal > subtotal ? 'Ahorro' : 'Recargo'}</span><span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(Math.abs(listSubtotal - subtotal))}</span>
+              </div>
+            )}
             {discountAmount > 0.01 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>
                 <span>Descuento</span><span style={{ fontFamily: 'var(--mono)' }}>- {fmtMoney(discountAmount)}</span>
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-              <span>Total</span><span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(total)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 16, fontWeight: 800, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+              <span>{alternateList ? `Total (${alternateList.name})` : 'Total'}</span><span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(total)}</span>
             </div>
             <button
               onClick={save}
@@ -482,8 +512,8 @@ export default function CotizacionesPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {pending.map((s) => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 160px', minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{clientName(s.client)}</div>
                   <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                     {fmtDate(s.createdAt)}

@@ -15,6 +15,10 @@ export type CotizacionPDFSale = {
     applied: boolean;
   }[];
   discountsAccumulate?: boolean;
+  // Lista de precios con la que se armo la cotizacion. Si no es la default
+  // (ej. "Efectivo"), el PDF muestra tambien el precio de lista (Minorista)
+  // para que el cliente vea el precio real y cuanto le queda con esa lista.
+  priceList?: { name: string; isDefault: boolean } | null;
   paymentMethod?: string | null;
   receiptType?: string | null;
   status?: string | null;
@@ -57,6 +61,7 @@ export type CotizacionPDFSale = {
     quantity: number;
     quantityKg?: number | null;
     price: number;
+    priceType?: string | null;
     subtotal: number;
     ivaRate?: number | null;
     productNameSnapshot?: string | null;
@@ -67,6 +72,8 @@ export type CotizacionPDFSale = {
       imageUrl?: string | null;
       saleUnit?: string | null;
       ivaRate?: number | null;
+      price?: number | null;
+      pricePerKg?: number | null;
     } | null;
   }[];
 };

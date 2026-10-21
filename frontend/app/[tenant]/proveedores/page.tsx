@@ -32,6 +32,9 @@ export default function ProveedoresPage() {
   const [bulkTarget, setBulkTarget] = useState<'sale' | 'cost' | 'both'>('sale');
   const [applyingBulk, setApplyingBulk] = useState(false);
   const [linking, setLinking] = useState<string | null>(null);
+  const [linkSelected, setLinkSelected] = useState<Record<string, boolean>>({});
+  const [onlyUnassigned, setOnlyUnassigned] = useState(true);
+  const [linkingMany, setLinkingMany] = useState(false);
   const [rowPct, setRowPct] = useState<Record<string, string>>({});
   const [applyingRow, setApplyingRow] = useState<string | null>(null);
 
@@ -49,33 +52,38 @@ export default function ProveedoresPage() {
 
   useEffect(() => { load(); }, []);
 
-  const openDetail = (s: Supplier) => { setDetail(s); setDetailSearch(''); setBulkPct(''); setBulkTarget('sale'); setRowPct({}); };
+  const openDetail = (s: Supplier) => { setDetail(s); setDetailSearch(''); setBulkPct(''); setBulkTarget('sale'); setRowPct({}); setLinkSelected({}); setOnlyUnassigned(true); };
 
   const linkedProducts = products.filter((p) => p.supplierId === detail?.id);
-  const searchResults = detailSearch.trim()
-    ? products
-        .filter((p) => p.supplierId !== detail?.id)
-        .filter((p) => p.name.toLowerCase().includes(detailSearch.toLowerCase()) || p.sku?.toLowerCase().includes(detailSearch.toLowerCase()))
-        .slice(0, 20)
-    : [];
+  // Candidatos a vincular: un producto tiene un solo proveedor, así que se
+  // listan todos los que no son de este (por defecto solo los que no tienen
+  // ninguno). Las variantes heredan el proveedor del padre, no se listan.
+  const searchResults = products
+    .filter((p) => !p.parentId && p.supplierId !== detail?.id)
+    .filter((p) => !onlyUnassigned || !p.supplierId)
+    .filter((p) => !detailSearch.trim() || p.name.toLowerCase().includes(detailSearch.toLowerCase()) || p.sku?.toLowerCase().includes(detailSearch.toLowerCase()));
+  const linkSelectedIds = searchResults.filter((p) => linkSelected[p.id]).map((p) => p.id);
+  const replacingCount = searchResults.filter((p) => linkSelected[p.id] && p.supplierId).length;
 
-  const linkProduct = async (p: Product) => {
-    if (!detail) return;
-    setLinking(p.id);
+  const linkSelectedProducts = async () => {
+    if (!detail || linkSelectedIds.length === 0) return;
+    setLinkingMany(true);
     try {
-      await api.put(`/products/${p.id}`, { supplierId: detail.id });
-      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, supplierId: detail.id } : x)));
-      toast.success(`"${p.name}" vinculado a ${detail.name}`);
+      await api.post(`/suppliers/${detail.id}/link-products`, { productIds: linkSelectedIds });
+      const ids = new Set(linkSelectedIds);
+      setProducts((prev) => prev.map((x) => (ids.has(x.id) || (x.parentId && ids.has(x.parentId)) ? { ...x, supplierId: detail.id, supplier: detail } : x)));
+      toast.success(`${linkSelectedIds.length} productos vinculados a ${detail.name}`);
+      setLinkSelected({});
     } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'No se pudo vincular el producto');
-    } finally { setLinking(null); }
+      toast.error(err?.response?.data?.message ?? 'No se pudieron vincular los productos');
+    } finally { setLinkingMany(false); }
   };
 
   const unlinkProduct = async (p: Product) => {
     setLinking(p.id);
     try {
       await api.put(`/products/${p.id}`, { supplierId: '' });
-      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, supplierId: null } : x)));
+      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, supplierId: null, supplier: null } : x)));
     } catch {
       toast.error('No se pudo quitar el producto');
     } finally { setLinking(null); }
@@ -398,28 +406,75 @@ export default function ProveedoresPage() {
                 ))}
               </div>
 
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Vincular otro producto</div>
-              <div style={{ position: 'relative', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>Vincular productos</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={onlyUnassigned} onChange={(e) => setOnlyUnassigned(e.target.checked)} />
+                  Solo productos sin proveedor
+                </label>
+              </div>
+              <div style={{ position: 'relative', marginBottom: 8 }}>
                 <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--text3)' }} />
                 <input
                   value={detailSearch}
                   onChange={(e) => setDetailSearch(e.target.value)}
-                  placeholder="Buscar producto por nombre o SKU..."
+                  placeholder="Filtrar por nombre o SKU..."
                   style={{ paddingLeft: 30 }}
                 />
               </div>
-              {searchResults.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
-                  {searchResults.map((p) => (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                        {p.supplier && <div style={{ fontSize: 11, color: 'var(--text3)' }}>Actualmente: {p.supplier.name}</div>}
-                      </div>
-                      <button onClick={() => linkProduct(p)} disabled={linking === p.id} className="btn btn-secondary btn-xs">Vincular</button>
-                    </div>
-                  ))}
+              {searchResults.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--text3)', padding: '10px 0' }}>
+                  {onlyUnassigned ? 'No hay productos sin proveedor que coincidan.' : 'No hay productos que coincidan.'}
                 </div>
+              ) : (
+                <>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)', marginBottom: 6, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={searchResults.every((p) => linkSelected[p.id])}
+                      onChange={(e) => {
+                        const next = { ...linkSelected };
+                        searchResults.forEach((p) => { next[p.id] = e.target.checked; });
+                        setLinkSelected(next);
+                      }}
+                    />
+                    Seleccionar todos ({searchResults.length})
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 260, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 4 }}>
+                    {searchResults.map((p) => (
+                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!linkSelected[p.id]}
+                          onChange={(e) => setLinkSelected((prev) => ({ ...prev, [p.id]: e.target.checked }))}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                          {(p.sku || p.supplier) && (
+                            <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                              {p.sku && <span style={{ fontFamily: 'var(--mono)' }}>{p.sku}</span>}
+                              {p.supplier && `${p.sku ? ' · ' : ''}Actualmente: ${p.supplier.name}`}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                    {replacingCount > 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        {replacingCount} ya tienen otro proveedor: se reemplaza (cada producto tiene un solo proveedor).
+                      </span>
+                    )}
+                    <button
+                      onClick={linkSelectedProducts}
+                      disabled={linkingMany || linkSelectedIds.length === 0}
+                      className="btn btn-primary btn-sm"
+                    >
+                      {linkingMany ? <span className="spinner" style={{ width: 12, height: 12 }} /> : `Vincular seleccionados (${linkSelectedIds.length})`}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>
