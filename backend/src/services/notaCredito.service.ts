@@ -1,17 +1,19 @@
 /**
  * Orquesta la emision de una Nota de Credito para una venta ya facturada,
- * desde el Historial de Ventas. emitirNotaCreditoAFIP (ver
- * afip/wsfe/wsfe.notaCredito.ts) es codigo WSFE legacy que espera un
- * saleId PROPIO para la nota de credito (InvoiceAfip.saleId es @unique, y
- * la venta original ya tiene su propia InvoiceAfip de la factura) -- este
- * service arma esa venta "espejo" (mismos items/cliente, sin tocar stock:
- * la reversion de stock es responsabilidad de Devoluciones, algo aparte)
- * antes de llamar al emisor real.
+ * desde el Historial de Ventas. emitirNotaCreditoAFIPBase (ver
+ * afip/wsfe-base.service.ts) necesita un saleId PROPIO para la nota de
+ * credito (InvoiceAfip.saleId es @unique, y la venta original ya tiene su
+ * propia InvoiceAfip de la factura) -- este service arma esa venta "espejo"
+ * (mismos items/cliente, sin tocar stock: la reversion de stock es
+ * responsabilidad de Devoluciones, algo aparte) antes de llamar al emisor.
+ *
+ * La venta espejo NO es una venta real: nace CANCELLED + isNoteCredit para
+ * que no sume como ingreso en reportes, caja ni dashboard.
  */
 import prisma from "../prisma";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
-import { emitirNotaCreditoAFIP } from "../afip/wsfe.service";
+import { emitirNotaCreditoAFIPBase } from "../afip/wsfe-base.service";
 import { AppError } from "../utils/asyncHandler";
 
 export const notaCreditoService = {
@@ -39,7 +41,14 @@ export const notaCreditoService = {
       throw new AppError("ALREADY_CREDITED", "Esta venta ya tiene una nota de crédito aprobada.", 400);
     }
 
-    const importe = opts?.importe && opts.importe > 0 ? opts.importe : sale.total;
+    const importe = opts?.importe && opts.importe > 0 ? opts.importe : sale.invoiceAfip.total;
+    if (importe > Number(sale.invoiceAfip.total) + 0.001) {
+      throw new AppError(
+        "CREDIT_EXCEEDS_INVOICE",
+        `La nota de crédito no puede superar el total de la factura (${Number(sale.invoiceAfip.total).toFixed(2)}).`,
+        400
+      );
+    }
     const motivo = opts?.motivo?.trim() || "Devolución de productos";
 
     // Venta espejo: solo para que la NC tenga su propio comprobante y
@@ -53,7 +62,8 @@ export const notaCreditoService = {
         paymentMethod: sale.paymentMethod,
         receiptType: sale.receiptType,
         businessLocationId: sale.businessLocationId,
-        status: "COMPLETED",
+        status: "CANCELLED",
+        isNoteCredit: true,
         subtotal: importe,
         total: importe,
         returnReason: motivo,
@@ -72,10 +82,9 @@ export const notaCreditoService = {
       },
     });
 
-    const notaCredito = await emitirNotaCreditoAFIP({
+    const notaCredito = await emitirNotaCreditoAFIPBase({
       saleId: ncSale.id,
       facturaOriginalId: sale.invoiceAfip.id,
-      motivo,
       importe,
     });
 

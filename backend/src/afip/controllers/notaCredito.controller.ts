@@ -3,7 +3,7 @@
  * Extraido de afip.controller.ts (doc seccion 4.3 - modularizacion).
  */
 import { Request, Response } from "express";
-import { emitirNotaCreditoAFIP } from "../wsfe.service";
+import { notaCreditoService } from "../../services/notaCredito.service";
 import { generarNotaCreditoAfipPDF } from "../utils/generarNotaCreditoAfipPDF";
 import { financeService } from "../../services/finance.service";
 import prisma from "../../prisma";
@@ -13,7 +13,6 @@ import { arcaConfigService } from "../../services/arcaConfig.service";
 export async function notaCreditoController(req: Request, res: Response) {
   try {
     const {
-      saleId,
       facturaOriginalId,
       motivo = "Devolución de productos",
       importe,
@@ -40,12 +39,20 @@ export async function notaCreditoController(req: Request, res: Response) {
       });
     }
 
-    const notaCredito = await emitirNotaCreditoAFIP({
-      saleId,
-      facturaOriginalId,
+    if (!facturaOriginal.saleId) {
+      return res.status(400).json({ ok: false, error: "La factura original no está asociada a una venta" });
+    }
+
+    // Mismo camino que Historial de Ventas: arma la venta "espejo" de la NC
+    // (InvoiceAfip.saleId es unico y la venta original ya tiene su factura).
+    const { notaCredito, ncSaleId } = await notaCreditoService.generarParaVenta(facturaOriginal.saleId, {
       motivo,
-      importe,
+      importe: importe !== undefined ? Number(importe) : undefined,
     });
+
+    if (notaCredito.resultado !== "A" || !notaCredito.cae) {
+      return res.status(422).json({ ok: false, error: "AFIP no aprobó la nota de crédito.", notaCredito: { id: notaCredito.id, resultado: notaCredito.resultado } });
+    }
 
     const safeNotaCredito = JSON.parse(
       JSON.stringify(notaCredito, (_, v) =>
@@ -58,7 +65,7 @@ export async function notaCreditoController(req: Request, res: Response) {
 
     // Multi-facturacion: razon social/domicilio en el PDF tienen que ser
     // los del dueno que emitio esta NC (notaCredito.arcaConfigId, ya
-    // heredado de la factura original en emitirNotaCreditoAFIP), no "la"
+    // heredado de la factura original en emitirNotaCreditoAFIPBase), no "la"
     // config generica del tenant.
     const arcaConfig = notaCredito.arcaConfigId
       ? await arcaConfigService.getConfigById(notaCredito.arcaConfigId).catch(() => arcaConfigService.getConfig().catch(() => null))
@@ -66,7 +73,7 @@ export async function notaCreditoController(req: Request, res: Response) {
 
     try {
       await generarNotaCreditoAfipPDF({
-        saleId,
+        saleId: ncSaleId,
         tipoComprobante: notaCredito.tipoComprobante,
         puntoVenta: notaCredito.puntoVenta,
         numero: notaCredito.numero,
@@ -111,7 +118,7 @@ export async function notaCreditoController(req: Request, res: Response) {
     }
 
     await financeService.registerCreditNote(
-      importe,
+      notaCredito.total,
       `Nota de crédito: ${motivo}`,
       userId
     );
@@ -130,7 +137,8 @@ export async function notaCreditoController(req: Request, res: Response) {
         : {}),
     });
   } catch (err: any) {
-    console.error("❌ Error en /afip/nota-credito:", err);
-    return res.status(500).json({ ok: false, error: err.message });
+    console.error("❌ Error en /afip/nota-credito:", err?.message);
+    const status = Number(err?.statusCode ?? err?.status) || 500;
+    return res.status(status).json({ ok: false, error: err.message, message: err.message });
   }
 }

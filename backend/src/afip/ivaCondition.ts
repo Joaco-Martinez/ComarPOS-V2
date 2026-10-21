@@ -27,6 +27,42 @@ export function getAllowedCbteTipos(ivaCondition?: string | null): number[] {
   return [CBTE_TIPO_C];
 }
 
+/**
+ * Codigo AFIP de condicion frente al IVA del RECEPTOR (CondicionIVAReceptorId,
+ * obligatorio por RG 5616) a partir de Client.ivaCondition (mismos valores que
+ * CLIENT_IVA_CONDITIONS del frontend). null = el cliente no la tiene cargada.
+ */
+export const CONDICION_IVA_RECEPTOR = {
+  RESPONSABLE_INSCRIPTO: 1,
+  SUJETO_EXENTO: 4,
+  CONSUMIDOR_FINAL: 5,
+  MONOTRIBUTO: 6,
+  // "IVA No Responsable" no existe en la tabla de RG 5616: lo mas cercano
+  // es 15 (IVA No Alcanzado).
+  NO_ALCANZADO: 15,
+} as const;
+
+export function condicionIvaReceptorFromClient(ivaCondition?: string | null): number | null {
+  const normalized = String(ivaCondition ?? "").trim().toUpperCase();
+  switch (normalized) {
+    case RESPONSABLE_INSCRIPTO:
+      return CONDICION_IVA_RECEPTOR.RESPONSABLE_INSCRIPTO;
+    case "RESPONSABLE MONOTRIBUTO":
+      return CONDICION_IVA_RECEPTOR.MONOTRIBUTO;
+    case "IVA SUJETO EXENTO":
+      return CONDICION_IVA_RECEPTOR.SUJETO_EXENTO;
+    case "CONSUMIDOR FINAL":
+      return CONDICION_IVA_RECEPTOR.CONSUMIDOR_FINAL;
+    case "IVA NO RESPONSABLE":
+      return CONDICION_IVA_RECEPTOR.NO_ALCANZADO;
+    default:
+      return null;
+  }
+}
+
+/** Condiciones de receptor que admiten Factura A (RI y monotributistas). */
+export const CONDICIONES_FACTURA_A: number[] = [1, 6, 13, 16];
+
 export function cbteTipoLabel(tipo: number): "A" | "B" | "C" {
   if (tipo === CBTE_TIPO_A) return "A";
   if (tipo === CBTE_TIPO_B) return "B";

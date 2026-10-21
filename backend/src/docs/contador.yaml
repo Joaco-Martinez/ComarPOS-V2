@@ -1,0 +1,51 @@
+tags:
+  - name: Contador
+    description: Reporte fiscal del periodo para el contador (lectura, ADMIN y CONTADOR)
+
+paths:
+  /contador/reporte:
+    get:
+      tags: [Contador]
+      summary: Todo lo fiscal del mes en un solo JSON
+      description: >
+        Resumen de ventas (facturadas y sin facturar), comprobantes emitidos
+        (facturas y notas de credito con CAE), IVA ventas por alicuota,
+        compras, IVA compras por alicuota y liquidacion de IVA del periodo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { in: query, name: year, required: true, schema: { type: integer } }
+        - { in: query, name: month, required: true, schema: { type: integer, minimum: 1, maximum: 12 } }
+        - { in: query, name: arcaConfigId, required: false, schema: { type: string }, description: Dueno (CUIT) con multi-facturacion }
+      responses:
+        200: { description: Reporte del periodo }
+        400: { description: Periodo invalido }
+        403: { description: Rol o plan sin acceso }
+  /contador/reporte.pdf:
+    get:
+      tags: [Contador]
+      summary: El mismo reporte en PDF (A4 apaisado)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { in: query, name: year, required: true, schema: { type: integer } }
+        - { in: query, name: month, required: true, schema: { type: integer } }
+        - { in: query, name: arcaConfigId, required: false, schema: { type: string } }
+      responses:
+        200:
+          description: PDF
+          content: { application/pdf: {} }
+  /contador/reporte.docx:
+    get:
+      tags: [Contador]
+      summary: El mismo reporte en Word (.docx)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { in: query, name: year, required: true, schema: { type: integer } }
+        - { in: query, name: month, required: true, schema: { type: integer } }
+        - { in: query, name: arcaConfigId, required: false, schema: { type: string } }
+      responses:
+        200:
+          description: Documento Word
+          content: { application/vnd.openxmlformats-officedocument.wordprocessingml.document: {} }

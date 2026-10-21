@@ -103,6 +103,8 @@ export const ADMIN_NAV: NavItem[] = [
     intro: 'Cargá tus certificados y punto de venta de AFIP/ARCA — sin esto no podés emitir facturas con CAE real.' },
   { href: '/libro-iva-digital',                icon: FacturacionIcon,        label: 'Libro IVA Digital',   color: '#00B4DB', moduleKey: 'facturacion', group: 'Facturación',
     intro: 'El libro IVA digital con tus ventas y compras, listo para exportar y presentar.' },
+  { href: '/contador',                         icon: FacturacionIcon,        label: 'Contador',            color: '#00B4DB', moduleKey: 'facturacion', group: 'Facturación',
+    intro: 'Todo lo fiscal del mes en una sola página: ventas, facturas emitidas, notas de crédito, compras, IVA y liquidación. Exportalo en PDF o Word para pasárselo a tu contador.' },
 ];
 
 /** Items destacados en el bottom nav mobile (el resto vive en el sheet "Más"). */

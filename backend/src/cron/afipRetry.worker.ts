@@ -1,27 +1,8 @@
 import "../config/timezone";
 import prisma from "../prisma";
-import { emitirFacturaAFIP } from "../afip/wsfe.service";
-import { generarFacturaAfipPDF } from "../afip/utils/generarFacturaAfipPDF";
-import { arcaConfigService } from "../services/arcaConfig.service";
-import { runWithTenant, currentTenantId } from "../context/tenantContext";
-
-function isAfipUnavailable(err: any) {
-  const status = err?.response?.status;
-  const data = err?.response?.data;
-
-  const htmlUnavailable =
-    typeof data === "string" && data.toLowerCase().includes("service unavailable");
-
-  return (
-    status === 503 ||
-    status === 502 ||
-    status === 504 ||
-    htmlUnavailable ||
-    err?.code === "ETIMEDOUT" ||
-    err?.code === "ECONNRESET" ||
-    err?.code === "ECONNABORTED"
-  );
-}
+import { facturarVenta, generarPdfFacturaVenta, FacturacionError } from "../afip/facturacion.service";
+import { isAfipUnavailable } from "../afip/utils/isAfipUnavailable";
+import { runWithTenant } from "../context/tenantContext";
 
 function calcNextRetry(retryCount: number) {
   // Backoff: 5m, 10m, 15m, 20m, ... máx 60m
@@ -67,60 +48,19 @@ async function processSale(sale: any, now: Date) {
   if (locked.count === 0) return;
 
   try {
-    const payload: any = sale.afipPayloadJson;
-    if (!payload?.saleId) {
-      await prisma.sale.update({
-        where: { id: sale.id },
-        data: {
-          invoiceStatus: "ERROR",
-          afipLastError: "NO_AFIP_PAYLOAD",
-        },
-      });
-      return;
-    }
-
-    const { saleId, products, metodoPago, ...facturaData } = payload;
-
-    // A nombre de que dueno se pidio originalmente esta factura (grabado en
-    // facturar.controller.ts antes de la primera llamada AFIP) -- sin esto
-    // el retry caeria al CUIT "activo" del tenant, que con multi-facturacion
-    // puede no ser el que el usuario eligio en el modal.
-    const arcaConfigId = sale.requestedArcaConfigId ?? undefined;
-
-    const factura = await emitirFacturaAFIP({
-      ...facturaData,
-      saleId,
-      arcaConfigId,
+    // Mismo camino que el boton "Facturar": reutiliza el tipo, documento,
+    // condicion IVA y dueno grabados en el intento original
+    // (afipPayloadJson / requestedArcaConfigId).
+    const { factura, sale: fullSale, arcaConfig, nroDoc } = await facturarVenta({
+      saleId: sale.id,
+      arcaConfigId: sale.requestedArcaConfigId ?? undefined,
     });
 
     // Si aprobó => PDF + estado OK
     if (factura.resultado === "A" && factura.cae) {
-      const [arcaConfig, tenantForTicket] = await Promise.all([
-        (arcaConfigId ? arcaConfigService.getConfigById(arcaConfigId) : arcaConfigService.getConfig()).catch(() => null),
-        currentTenantId()
-          ? prisma.tenant
-              .findUnique({ where: { id: currentTenantId()! }, select: { ticketPhone: true } })
-              .catch(() => null)
-          : Promise.resolve(null),
-      ]);
-
-      await generarFacturaAfipPDF({
-        tipoComprobante: factura.tipoComprobante,
-        puntoVenta: factura.puntoVenta,
-        saleId,
-        numero: factura.numero,
-        fechaEmision: new Date(factura.fechaEmision),
-        total: factura.total,
-        products: products ?? [],
-        metodoPago: metodoPago ?? "EFECTIVO",
-        cae: factura.cae,
-        caeVto: factura.caeVto ? new Date(factura.caeVto) : new Date(),
-        cuit: factura.cuit,
-        razonSocial: arcaConfig?.businessName || undefined,
-        direccion: arcaConfig?.fiscalAddress || undefined,
-        telefonoNegocio: tenantForTicket?.ticketPhone || undefined,
-        qrBase64: factura.qrBase64 ?? null,
-      });
+      await generarPdfFacturaVenta(factura, fullSale, arcaConfig, nroDoc).catch((e: any) =>
+        console.warn("⚠️ AFIP retry OK pero falló el PDF/impresión:", sale.id, e?.message)
+      );
 
       await prisma.sale.update({
         where: { id: sale.id },
@@ -147,6 +87,10 @@ async function processSale(sale: any, now: Date) {
 
     console.warn("⚠️ AFIP rechazó en retry:", sale.id);
   } catch (err: any) {
+    // Otra emision de esta misma venta en curso (ej. reintento manual): se
+    // deja como esta, el lock de 2 min ya lo patea para mas adelante.
+    if (err instanceof FacturacionError && err.code === "INVOICE_IN_PROGRESS") return;
+
     const retryCount = (sale.retryCount ?? 0) + 1;
 
     // Si sigue caído => reprogramar

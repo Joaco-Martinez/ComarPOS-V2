@@ -131,7 +131,9 @@ function normalizeSaleStatusFilter(value?: string | SaleStatus) {
 }
 
 function buildSalesWhere(params: GetSalesParams = {}, includeStatus = true) {
-  const where: any = { ...tenantScope() };
+  // Las ventas "espejo" de las notas de credito (isNoteCredit, ver
+  // notaCredito.service.ts) no son ventas: la NC se ve desde la venta original.
+  const where: any = { ...tenantScope(), isNoteCredit: false };
   const status = includeStatus ? normalizeSaleStatusFilter(params.status) : undefined;
   const search = String(params.search ?? "").trim();
 

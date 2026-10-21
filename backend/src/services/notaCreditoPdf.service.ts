@@ -146,7 +146,7 @@ export async function regenerarNotaCreditoPDFService(
 
   // Multi-facturacion: razon social/domicilio/condicion IVA tienen que ser
   // los del dueno que REALMENTE emitio esta nota de credito
-  // (notaCredito.arcaConfigId, ya seteado en emitirNotaCreditoAFIP a partir
+  // (notaCredito.arcaConfigId, ya seteado en emitirNotaCreditoAFIPBase a partir
   // de la factura original), no "la" config generica del tenant.
   const [arcaConfig, tenant] = await Promise.all([
     notaCredito.arcaConfigId

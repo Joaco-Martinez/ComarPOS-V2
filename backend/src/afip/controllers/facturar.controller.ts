@@ -1,590 +1,82 @@
 /**
  * Handler de emision de factura AFIP.
- * Extraido de afip.controller.ts (doc seccion 4.3 - modularizacion).
+ * La logica (que se factura, validaciones, lock y emision) vive en
+ * afip/facturacion.service.ts -- compartida con el reintento automatico.
+ * Aca solo se arma la respuesta HTTP, la impresion y el pase a PENDING_AFIP.
  */
 import { Request, Response } from "express";
-import {
-  emitirFacturaCConsumidorFinal,
-  emitirFacturaCACliente,
-} from "../wsfe-C.service";
-import { emitirFacturaA } from "../wsfe-A.service";
-import { emitirFacturaB } from "../wsfe-B.service";
-import { getAllowedCbteTipos, cbteTipoLabel, CBTE_TIPO_A, CBTE_TIPO_B, CBTE_TIPO_C } from "../ivaCondition";
-import { generarFacturaAfipPDF } from "../utils/generarFacturaAfipPDF";
 import { isAfipUnavailable } from "../utils/isAfipUnavailable";
 import prisma from "../../prisma";
-import { tenantScope } from "../../utils/tenantScope";
-import { currentTenantId } from "../../context/tenantContext";
-import { arcaConfigService } from "../../services/arcaConfig.service";
-import {
-  normalizarDocumento,
-  detectarTipoDocumento,
-  mapTipoCliente,
-  getNombreCliente,
-  getDocumentoCliente,
-  getDomicilioCliente,
-  mapProductsFromSaleOrBody,
-  getMetodoPago,
-  getFacturaQrUrl,
-} from "../utils/afipMappers";
+import { facturarVenta, generarPdfFacturaVenta, FacturacionError } from "../facturacion.service";
 
 export async function facturarController(req: Request, res: Response) {
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const startedAt = Date.now();
+  const { saleId, arcaConfigId, tipoComprobante, condicionIVAReceptor } = req.body ?? {};
+  // El frontend historico manda "receiverDoc"; tambien se acepta "nroDoc".
+  const nroDoc = req.body?.nroDoc !== undefined ? req.body.nroDoc : req.body?.receiverDoc;
 
-  const { saleId, arcaConfigId: rawArcaConfigId, ...facturaData } = req.body;
-
-  // El frontend historico mandaba "receiverDoc"; el resto del controller usa
-  // "nroDoc" - normalizamos aca para no perder el dato.
-  if (facturaData.nroDoc === undefined && facturaData.receiverDoc !== undefined) {
-    facturaData.nroDoc = facturaData.receiverDoc;
-  }
-
-  // Multi-facturacion: a nombre de cual dueno (ArcaConfig) se factura esta
-  // venta puntual, elegido en el modal "Facturar en ARCA". Solo se honra si
-  // el tenant tiene el flag habilitado (super-admin) -- sin eso, cualquier
-  // arcaConfigId que mande el cliente se ignora y se usa el flujo de
-  // siempre (config unica del tenant), asi ningun tenant existente cambia
-  // de comportamiento.
-  const multiInvoicingEnabled = await arcaConfigService.isMultiInvoicingEnabled();
-  const selectedArcaConfigId =
-    multiInvoicingEnabled && rawArcaConfigId ? String(rawArcaConfigId) : undefined;
-
-  // Que tipo de comprobante puede emitir este tenant segun su condicion frente
-  // al IVA (ArcaConfig.ivaCondition): Responsable Inscripto -> A o B,
-  // Monotributo/Exento/sin config -> solo C. Si el frontend no pide un tipo
-  // puntual, se usa el primero permitido (compatibilidad con el flujo viejo).
-  // Con multi-facturacion, la condicion de IVA que manda es la del dueno
-  // elegido, no "la ultima config" del tenant.
-  let arcaConfig: Awaited<ReturnType<typeof arcaConfigService.getConfig>> | null = null;
-
-  if (selectedArcaConfigId) {
-    try {
-      arcaConfig = await arcaConfigService.getConfigById(selectedArcaConfigId);
-    } catch {
-      return res.status(400).json({
-        ok: false,
-        error: "La configuración ARCA (dueño) seleccionada no existe o no pertenece a este negocio.",
-      });
-    }
-  } else {
-    arcaConfig = await arcaConfigService.getConfig().catch(() => null);
-  }
-
-  const allowedTipos = getAllowedCbteTipos(arcaConfig?.ivaCondition);
-  const requestedTipo = Number(facturaData.tipoComprobante ?? allowedTipos[0]);
-
-  // Telefono del negocio para el ticket impreso: no vive en ArcaConfig (esa
-  // es la config fiscal), sale del Tenant (mismo dato que usa la cotizacion).
-  const tenantForTicket = currentTenantId()
-    ? await prisma.tenant.findUnique({
-        where: { id: currentTenantId()! },
-        select: { ticketPhone: true },
-      }).catch(() => null)
-    : null;
-
-  if (!allowedTipos.includes(requestedTipo)) {
-    return res.status(400).json({
-      ok: false,
-      error: `Tu condición frente al IVA no te permite emitir Factura ${cbteTipoLabel(requestedTipo)}. Tipos permitidos: ${allowedTipos.map(cbteTipoLabel).join(", ")}.`,
-    });
-  }
-
-  facturaData.tipoComprobante = requestedTipo;
-  req.body.tipoComprobante = requestedTipo;
-
-  console.log("============================================================");
-  console.log(`🟦 [${requestId}] INICIO POST /afip/facturar`);
-  console.log(`🟦 [${requestId}] Timestamp:`, new Date().toISOString());
-  console.log(`🟦 [${requestId}] Body completo:`, JSON.stringify(req.body, null, 2));
-  console.log(`🟦 [${requestId}] Body resumen:`, {
-    saleId,
-    tipoComprobante: facturaData.tipoComprobante,
-    tipoDoc: facturaData.tipoDoc,
-    nroDoc: facturaData.nroDoc,
-    cuit: facturaData.cuit,
-    importe: facturaData.importe,
-    condicionIVAReceptor: facturaData.condicionIVAReceptor,
-  });
+  console.log(`🟦 [${requestId}] POST /afip/facturar`, { saleId, tipoComprobante, arcaConfigId: arcaConfigId ?? null });
 
   try {
-    console.log(`🔎 [${requestId}] Validando saleId...`);
-
-    if (!saleId) {
-      console.warn(`⚠️ [${requestId}] saleId faltante`);
-      return res.status(400).json({ ok: false, error: "saleId es requerido" });
-    }
-
-    console.log(`🔎 [${requestId}] Buscando venta en DB:`, saleId);
-
-    const sale = await prisma.sale.findFirst({
-      where: { id: saleId, ...tenantScope() },
-      include: {
-        invoiceAfip: true,
-        client: true,
-        items: {
-          include: {
-            product: true,
-          },
-        },
-        payments: true,
-      },
+    const { factura, sale, arcaConfig, nroDoc: docUsado } = await facturarVenta({
+      saleId,
+      tipoComprobante,
+      nroDoc,
+      condicionIVAReceptor,
+      arcaConfigId,
     });
-
-    if (!sale) {
-      console.warn(`❌ [${requestId}] Venta no encontrada:`, saleId);
-      return res.status(404).json({ ok: false, error: "Venta no encontrada" });
-    }
-
-    // El frontend no siempre manda "importe" (ej. facturacion/page.tsx solo
-    // manda saleId/tipoComprobante/receiverDoc al facturar manualmente una
-    // venta ya guardada) -- sin este fallback, emitirFacturaA/B/C recibia
-    // importe undefined y crasheaba en un .toFixed() mas abajo
-    // (wsfe-base.service.ts#calcularImportes). sale.total ya es la fuente
-    // de verdad del monto, asi que se usa siempre que el body no traiga un
-    // numero valido (nunca se confia ciegamente en lo que manda el cliente
-    // para el monto que se le declara a AFIP).
-    if (facturaData.importe === undefined || facturaData.importe === null || Number.isNaN(Number(facturaData.importe))) {
-      facturaData.importe = sale.total;
-    }
-
-    console.log(`✅ [${requestId}] Venta encontrada:`, {
-      id: sale.id,
-      total: sale.total,
-      subtotal: (sale as any).subtotal,
-      discount: (sale as any).discount,
-      status: sale.status,
-      isInvoiced: sale.isInvoiced,
-      invoiceStatus: sale.invoiceStatus,
-      tieneInvoiceAfip: Boolean(sale.invoiceAfip),
-      invoiceAfipId: sale.invoiceAfip?.id ?? null,
-      clientId: sale.clientId,
-      tieneCliente: Boolean(sale.client),
-      itemsLength: sale.items.length,
-      paymentsLength: sale.payments.length,
-      afipLastError: sale.afipLastError,
-      nextRetryAt: sale.nextRetryAt,
-      retryCount: sale.retryCount,
-    });
-
-    console.log(`👤 [${requestId}] Cliente:`, sale.client
-      ? {
-          id: sale.client.id,
-          nombre: sale.client.nombre,
-          apellido: sale.client.apellido,
-          dni: sale.client.dni,
-          gmail: sale.client.gmail,
-          telefono: sale.client.telefono,
-          category: sale.client.category,
-        }
-      : null
-    );
-
-    console.log(`📦 [${requestId}] Items de venta:`, sale.items.map((item: any) => ({
-      id: item.id,
-      productId: item.productId,
-      productName: item.productNameSnapshot ?? item.product?.name,
-      sku: item.product?.sku,
-      quantity: item.quantity,
-      quantityKg: item.quantityKg,
-      price: item.price,
-      subtotal: item.subtotal,
-    })));
-
-    console.log(`💳 [${requestId}] Pagos:`, sale.payments.map((payment: any) => ({
-      id: payment.id,
-      method: payment.method,
-      amount: payment.amount,
-    })));
-
-    const invoiceApproved =
-      sale.isInvoiced ||
-      sale.invoiceStatus === "INVOICED" ||
-      Boolean(sale.invoiceAfip?.cae);
-
-    if (invoiceApproved) {
-      console.warn(`⚠️ [${requestId}] Venta ya facturada/aprobada:`, {
-        saleId,
-        isInvoiced: sale.isInvoiced,
-        invoiceStatus: sale.invoiceStatus,
-        invoiceAfipId: sale.invoiceAfip?.id ?? null,
-        cae: sale.invoiceAfip?.cae ?? null,
-      });
-
-      return res.status(400).json({
-        ok: false,
-        error: "Esta venta ya fue facturada.",
-      });
-    }
-
-    if (sale.invoiceStatus === "PENDING_AFIP") {
-      console.warn(`🔁 [${requestId}] Venta pendiente AFIP. Reintentando facturación manualmente...`, {
-        saleId,
-        nextRetryAt: sale.nextRetryAt,
-        retryCount: sale.retryCount,
-        afipLastError: sale.afipLastError,
-      });
-
-      await prisma.sale.update({
-        where: { id: saleId },
-        data: {
-          afipLastError: null,
-          nextRetryAt: null,
-        },
-      });
-    }
-
-    console.log(`📝 [${requestId}] Guardando payload AFIP en sale.afipPayloadJson...`);
-
-    await prisma.sale.update({
-      where: { id: saleId },
-      data: {
-        afipPayloadJson: req.body,
-        afipLastError: null,
-        nextRetryAt: null,
-        // Se graba ANTES de llamar a AFIP para que afipRetry.worker.ts sepa
-        // con que dueno/CUIT reintentar si esta llamada falla por AFIP
-        // caido (ver isAfipUnavailable mas abajo).
-        requestedArcaConfigId: selectedArcaConfigId ?? null,
-      },
-    });
-
-    console.log(`✅ [${requestId}] Payload AFIP guardado correctamente`);
-
-    let factura: any;
-
-    console.log(`🧾 [${requestId}] Decidiendo tipo de comprobante...`, {
-      tipoComprobante: facturaData.tipoComprobante,
-      tipoComprobanteNumber: Number(facturaData.tipoComprobante),
-    });
-
-    if (requestedTipo === CBTE_TIPO_A) {
-      console.log(`🇦 [${requestId}] Entró a Factura A`);
-
-      const docDetectado = detectarTipoDocumento(facturaData.nroDoc);
-
-      if (!docDetectado || docDetectado.tipoDoc !== 80) {
-        console.warn(`⚠️ [${requestId}] Factura A sin CUIT válido del receptor`);
-        return res.status(400).json({
-          ok: false,
-          error: "Para Factura A el receptor debe tener un CUIT válido (es para Responsables Inscriptos).",
-        });
-      }
-
-      console.log(`🚀 [${requestId}] Llamando emitirFacturaA...`, {
-        saleId,
-        cuit: facturaData.cuit,
-        nroDoc: docDetectado.nroDoc,
-        importe: facturaData.importe,
-      });
-
-      factura = await emitirFacturaA({
-        saleId,
-        cuit: facturaData.cuit,
-        arcaConfigId: selectedArcaConfigId,
-        nroDoc: docDetectado.nroDoc,
-        importe: facturaData.importe,
-        condicionIVAReceptor: facturaData.condicionIVAReceptor,
-      });
-
-      console.log(`✅ [${requestId}] emitirFacturaA respondió`);
-    } else if (requestedTipo === CBTE_TIPO_B) {
-      console.log(`🇧 [${requestId}] Entró a Factura B`);
-
-      const docDetectado = detectarTipoDocumento(facturaData.nroDoc) ?? { tipoDoc: 99, nroDoc: 0 };
-
-      console.log(`🚀 [${requestId}] Llamando emitirFacturaB...`, {
-        saleId,
-        cuit: facturaData.cuit,
-        tipoDoc: docDetectado.tipoDoc,
-        nroDoc: docDetectado.nroDoc,
-        importe: facturaData.importe,
-      });
-
-      factura = await emitirFacturaB({
-        saleId,
-        cuit: facturaData.cuit,
-        arcaConfigId: selectedArcaConfigId,
-        tipoDoc: docDetectado.tipoDoc,
-        nroDoc: docDetectado.nroDoc,
-        importe: facturaData.importe,
-        condicionIVAReceptor: facturaData.condicionIVAReceptor,
-      });
-
-      console.log(`✅ [${requestId}] emitirFacturaB respondió`);
-    } else {
-      console.log(`🇨 [${requestId}] Entró a Factura C`);
-
-      const docLimpio = normalizarDocumento(facturaData.nroDoc);
-
-      const quiereConsumidorFinal =
-        Number(facturaData.tipoDoc) === 99 ||
-        docLimpio === "" ||
-        Number(docLimpio) === 0;
-
-      console.log(`🪪 [${requestId}] Documento Factura C:`, {
-        tipoDocOriginal: facturaData.tipoDoc,
-        nroDocOriginal: facturaData.nroDoc,
-        docLimpio,
-        quiereConsumidorFinal,
-      });
-
-      if (quiereConsumidorFinal) {
-        console.log(`👤 [${requestId}] Factura C consumidor final`);
-
-        console.log(`🚀 [${requestId}] Llamando emitirFacturaCConsumidorFinal...`, {
-          saleId,
-          cuit: facturaData.cuit,
-          importe: facturaData.importe,
-        });
-
-        factura = await emitirFacturaCConsumidorFinal({
-          saleId,
-          cuit: facturaData.cuit,
-          arcaConfigId: selectedArcaConfigId,
-          importe: facturaData.importe,
-        });
-
-        console.log(`✅ [${requestId}] emitirFacturaCConsumidorFinal respondió`);
-      } else {
-        const docDetectado = detectarTipoDocumento(facturaData.nroDoc);
-
-        console.log(`🪪 [${requestId}] Documento detectado Factura C cliente:`, docDetectado);
-
-        if (!docDetectado) {
-          console.warn(`⚠️ [${requestId}] Factura C con cliente sin documento válido`);
-          return res.status(400).json({
-            ok: false,
-            error:
-              "Para Factura C con cliente, el documento debe ser válido. Puede ser DNI, CUIT o CUIL.",
-          });
-        }
-
-        console.log(`🚀 [${requestId}] Llamando emitirFacturaCACliente...`, {
-          saleId,
-          cuit: facturaData.cuit,
-          tipoDoc: docDetectado.tipoDoc,
-          nroDoc: docDetectado.nroDoc,
-          importe: facturaData.importe,
-          condicionIVAReceptor: facturaData.condicionIVAReceptor,
-        });
-
-        factura = await emitirFacturaCACliente({
-          saleId,
-          cuit: facturaData.cuit,
-          arcaConfigId: selectedArcaConfigId,
-          tipoDoc: docDetectado.tipoDoc,
-          nroDoc: docDetectado.nroDoc,
-          importe: facturaData.importe,
-          condicionIVAReceptor: facturaData.condicionIVAReceptor,
-        });
-
-        console.log(`✅ [${requestId}] emitirFacturaCACliente respondió`);
-      }
-    }
-
-    console.log(`📨 [${requestId}] Respuesta cruda de AFIP/factura:`, factura);
 
     const safeFactura = JSON.parse(
       JSON.stringify(factura, (_, v) => (typeof v === "bigint" ? v.toString() : v))
     );
 
-    console.log(`🧾 [${requestId}] Factura safe:`, safeFactura);
-
-    console.log(`🔎 [${requestId}] Evaluando resultado AFIP:`, {
-      resultado: factura?.resultado,
-      cae: factura?.cae,
-      numero: factura?.numero,
-      tipoComprobante: factura?.tipoComprobante,
-      puntoVenta: factura?.puntoVenta,
-      total: factura?.total,
-    });
-
     if (factura.resultado === "A" && factura.cae) {
-      console.log(`✅ [${requestId}] AFIP APROBÓ la factura`);
-
-      let posDisconnected = false;
       let posErrorMessage: string | null = null;
 
       try {
-        console.log(`🖨️ [${requestId}] Preparando generación PDF / impresión POS...`);
-
-        const client = sale.client;
-
-        console.log(`👤 [${requestId}] Mapeando cliente para PDF...`);
-
-        const tipoCliente = mapTipoCliente(client?.category);
-        const nombreCliente = getNombreCliente(client, facturaData);
-        const _docCliente = getDocumentoCliente(client, facturaData);
-        const documentoCliente: string | number = _docCliente.nroDoc || "";
-        const telefonoCliente = client?.telefono ?? undefined;
-        const domicilioCliente = getDomicilioCliente(client);
-
-        console.log(`👤 [${requestId}] Cliente PDF:`, {
-          tipoCliente,
-          nombreCliente,
-          documentoCliente,
-          telefonoCliente,
-          domicilioCliente,
-        });
-
-        console.log(`📦 [${requestId}] Mapeando productos para PDF...`);
-
-        const products = mapProductsFromSaleOrBody(req.body, sale).map((p) => ({
-          name: p.descripcion,
-          quantity: p.cantidad,
-          price: p.precioUnitario,
-          subtotal: p.subtotal,
-        }));
-
-        console.log(`📦 [${requestId}] Productos PDF:`, products);
-
-        console.log(`💳 [${requestId}] Mapeando método de pago...`);
-
-        const metodoPago = getMetodoPago(req.body, sale);
-
-        console.log(`💳 [${requestId}] Método de pago PDF:`, metodoPago);
-
-        const qrUrl = getFacturaQrUrl(factura);
-
-        console.log(`🧾 [${requestId}] QR URL enviado al agente:`, qrUrl ?? "SIN QR URL");
-
-        console.log(`🚀 [${requestId}] Llamando generarFacturaAfipPDF...`, {
-          tipoComprobante: Number(factura.tipoComprobante),
-          puntoVenta: Number(factura.puntoVenta),
-          saleId,
-          numero: Number(factura.numero),
-          fechaEmision: factura.fechaEmision ? new Date(factura.fechaEmision) : new Date(),
-          total: Number(factura.total),
-          metodoPago,
-          cae: String(factura.cae),
-          caeVto: factura.caeVto ? new Date(factura.caeVto) : new Date(),
-          cuit: String(factura.cuit),
-          tieneQrBase64: Boolean(factura.qrBase64),
-          qrUrl,
-        });
-
-        await generarFacturaAfipPDF({
-          tipoComprobante: Number(factura.tipoComprobante),
-          puntoVenta: Number(factura.puntoVenta),
-          saleId,
-          numero: Number(factura.numero),
-          fechaEmision: factura.fechaEmision
-            ? new Date(factura.fechaEmision)
-            : new Date(),
-          total: Number(factura.total),
-          products,
-          metodoPago,
-          cae: String(factura.cae),
-          caeVto: factura.caeVto ? new Date(factura.caeVto) : new Date(),
-          cuit: String(factura.cuit),
-          razonSocial: arcaConfig?.businessName || undefined,
-          direccion: arcaConfig?.fiscalAddress || undefined,
-          telefonoNegocio: tenantForTicket?.ticketPhone || undefined,
-
-          qrBase64: factura.qrBase64 ?? null,
-          qrUrl,
-
-          tipoCliente,
-          nombreCliente,
-          documentoCliente,
-          telefonoCliente,
-          domicilioCliente,
-        });
-
-        console.log(`✅ [${requestId}] PDF generado, subido y ticket enviado correctamente`);
+        await generarPdfFacturaVenta(factura, sale, arcaConfig, docUsado);
       } catch (printErr: any) {
-        posDisconnected = true;
-
-        console.error(`❌ [${requestId}] Error en generación PDF / impresión POS`);
-        console.error(`📛 [${requestId}] printErr message:`, printErr?.message);
-        console.error(`📛 [${requestId}] printErr name:`, printErr?.name);
-        console.error(`📛 [${requestId}] printErr code:`, printErr?.code);
-        console.error(`📛 [${requestId}] printErr stack:`, printErr?.stack);
-
-        if (printErr?.response) {
-          console.error(`🌐 [${requestId}] printErr response status:`, printErr.response.status);
-          console.error(`🌐 [${requestId}] printErr response data:`, printErr.response.data);
-          console.error(`🌐 [${requestId}] printErr response headers:`, printErr.response.headers);
-        }
-
-        if (printErr?.config) {
-          console.error(`🌐 [${requestId}] printErr axios config:`, {
-            method: printErr.config.method,
-            url: printErr.config.url,
-            baseURL: printErr.config.baseURL,
-            timeout: printErr.config.timeout,
-          });
-        }
-
         const status = printErr?.response?.status;
         const ngrokCode = printErr?.response?.headers?.["ngrok-error-code"];
         const url = printErr?.config?.url;
 
         posErrorMessage =
           ngrokCode === "ERR_NGROK_3200" || status === 404
-            ? `AFIP aprobó y se facturó, pero el POS está desconectado. Endpoint: ${
-                url ?? "desconocido"
-              }`
-            : `AFIP aprobó y se facturó, pero falló la impresión en el POS. ${
-                printErr?.message ?? ""
-              }`;
+            ? `AFIP aprobó y se facturó, pero el POS está desconectado. Endpoint: ${url ?? "desconocido"}`
+            : `AFIP aprobó y se facturó, pero falló la impresión en el POS. ${printErr?.message ?? ""}`;
 
         console.warn(`⚠️ [${requestId}]`, posErrorMessage);
       }
-
-      console.log(`📝 [${requestId}] Actualizando venta como INVOICED...`, {
-        saleId,
-        posDisconnected,
-        posErrorMessage,
-      });
 
       await prisma.sale.update({
         where: { id: saleId },
         data: {
           invoiceStatus: "INVOICED",
-          afipLastError: posDisconnected ? "POS_DISCONNECTED" : null,
+          afipLastError: posErrorMessage ? "POS_DISCONNECTED" : null,
           nextRetryAt: null,
           retryCount: 0,
         },
       });
 
-      console.log(`✅ [${requestId}] Venta actualizada como INVOICED`);
+      console.log(`🟩 [${requestId}] Factura aprobada en ${Date.now() - startedAt}ms`, {
+        tipoComprobante: factura.tipoComprobante,
+        puntoVenta: factura.puntoVenta,
+        numero: factura.numero,
+      });
 
-      const responsePayload = {
+      return res.status(200).json({
         ok: true,
         invoiceStatus: "INVOICED",
         factura: safeFactura,
-        ...(posDisconnected
-          ? {
-              warning: "AFIP aprobó y se facturó, pero el POS está desconectado.",
-              posError: posErrorMessage,
-            }
+        ...(posErrorMessage
+          ? { warning: "AFIP aprobó y se facturó, pero el POS está desconectado.", posError: posErrorMessage }
           : {}),
-      };
-
-      console.log(`🟩 [${requestId}] Respondiendo 200:`, responsePayload);
-      console.log(`🟩 [${requestId}] FIN OK en ${Date.now() - startedAt}ms`);
-      console.log("============================================================");
-
-      return res.status(200).json(responsePayload);
+      });
     }
 
-    console.warn(`🟥 [${requestId}] AFIP rechazó o no aprobó la factura:`, safeFactura);
-
-    console.log(`📝 [${requestId}] Actualizando venta como ERROR / AFIP_REJECTED...`);
-
-    await prisma.sale.update({
-      where: { id: saleId },
-      data: {
-        invoiceStatus: "ERROR",
-        afipLastError: "AFIP_REJECTED",
-      },
-    });
-
-    console.log(`🟥 [${requestId}] Respondiendo 409 AFIP_REJECTED`);
-    console.log(`🟥 [${requestId}] FIN REJECTED en ${Date.now() - startedAt}ms`);
-    console.log("============================================================");
+    // emitirFacturaAFIPBase ya dejo la venta en ERROR con los mensajes de AFIP.
+    console.warn(`🟥 [${requestId}] AFIP rechazó la factura`, { saleId, resultado: factura.resultado });
 
     return res.status(409).json({
       ok: false,
@@ -593,37 +85,13 @@ export async function facturarController(req: Request, res: Response) {
       factura: safeFactura,
     });
   } catch (err: any) {
-    console.error(`❌ [${requestId}] ERROR GENERAL EN /afip/facturar`);
-    console.error(`📛 [${requestId}] Message:`, err?.message);
-    console.error(`📛 [${requestId}] Name:`, err?.name);
-    console.error(`📛 [${requestId}] Code:`, err?.code);
-    console.error(`📛 [${requestId}] Stack:`, err?.stack);
-
-    if (err?.response) {
-      console.error(`🌐 [${requestId}] Error response status:`, err.response.status);
-      console.error(`🌐 [${requestId}] Error response data:`, err.response.data);
-      console.error(`🌐 [${requestId}] Error response headers:`, err.response.headers);
+    if (err instanceof FacturacionError) {
+      return res.status(err.status).json({ ok: false, error: err.message, message: err.message, code: err.code });
     }
 
-    if (err?.config) {
-      console.error(`🌐 [${requestId}] Error axios config:`, {
-        method: err.config.method,
-        url: err.config.url,
-        baseURL: err.config.baseURL,
-        timeout: err.config.timeout,
-      });
-    }
-
-    if (err?.cause) {
-      console.error(`🧨 [${requestId}] Cause:`, err.cause);
-    }
-
-    console.error(`🧾 [${requestId}] Body que causó error:`, JSON.stringify(req.body, null, 2));
-    console.error(`🧾 [${requestId}] saleId:`, saleId);
+    console.error(`❌ [${requestId}] Error en /afip/facturar:`, err?.message, err?.code ?? "");
 
     if (isAfipUnavailable(err)) {
-      console.warn(`🟨 [${requestId}] Detectado AFIP_UNAVAILABLE. Marcando venta como PENDING_AFIP...`);
-
       const nextRetryAt = new Date(Date.now() + 5 * 60 * 1000);
 
       try {
@@ -634,23 +102,11 @@ export async function facturarController(req: Request, res: Response) {
             afipLastError: "AFIP_UNAVAILABLE",
             nextRetryAt,
             retryCount: { increment: 1 },
-            afipPayloadJson: req.body,
           },
         });
-
-        console.log(`✅ [${requestId}] Venta marcada como PENDING_AFIP`, {
-          saleId,
-          nextRetryAt,
-        });
       } catch (updateErr: any) {
-        console.error(`❌ [${requestId}] No se pudo marcar PENDING_AFIP`);
-        console.error(`📛 [${requestId}] updateErr message:`, updateErr?.message);
-        console.error(`📛 [${requestId}] updateErr stack:`, updateErr?.stack);
+        console.error(`❌ [${requestId}] No se pudo marcar PENDING_AFIP:`, updateErr?.message);
       }
-
-      console.log(`🟨 [${requestId}] Respondiendo 202 PENDING_AFIP`);
-      console.log(`🟨 [${requestId}] FIN PENDING_AFIP en ${Date.now() - startedAt}ms`);
-      console.log("============================================================");
 
       return res.status(202).json({
         ok: true,
@@ -659,17 +115,11 @@ export async function facturarController(req: Request, res: Response) {
       });
     }
 
-    const responsePayload = {
+    return res.status(500).json({
       ok: false,
       error: err?.message || "Error interno al facturar",
-      detail: err?.response?.data ?? null,
+      message: err?.message || "Error interno al facturar",
       code: err?.code ?? null,
-    };
-
-    console.error(`🟥 [${requestId}] Respondiendo 500:`, responsePayload);
-    console.error(`🟥 [${requestId}] FIN ERROR en ${Date.now() - startedAt}ms`);
-    console.error("============================================================");
-
-    return res.status(500).json(responsePayload);
+    });
   }
 }

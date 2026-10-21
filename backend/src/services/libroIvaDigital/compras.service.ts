@@ -23,7 +23,7 @@
 import prisma from "../../prisma";
 import { PurchaseStatus } from "@prisma/client";
 import { tenantScope } from "../../utils/tenantScope";
-import { invoiceTypeLabel } from "./invoiceTypes";
+import { invoiceTypeLabel, invoiceDiscriminatesIva } from "./invoiceTypes";
 
 function round2(n: number) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -97,15 +97,23 @@ export async function getComprasLibroIvaDigital(params: { from: Date; to: Date; 
   for (const p of purchases) {
     const ivaByRate = new Map<number, { neto: number; iva: number }>();
 
-    for (const item of p.items) {
-      const rate = item.ivaRate ?? 21;
-      const gross = round2(item.subtotal);
-      const neto = rate > 0 ? round2(gross / (1 + rate / 100)) : gross;
-      const iva = round2(gross - neto);
-      const cur = ivaByRate.get(rate) ?? { neto: 0, iva: 0 };
-      cur.neto = round2(cur.neto + neto);
-      cur.iva = round2(cur.iva + iva);
-      ivaByRate.set(rate, cur);
+    // Solo los comprobantes A y M discriminan IVA y dan credito fiscal. Una
+    // factura B o C de un proveedor trae el IVA adentro del precio y no se
+    // puede computar: va todo a alicuota 0 (no gravado), IVA 0.
+    if (!invoiceDiscriminatesIva(p.invoiceType)) {
+      const gross = round2(p.items.reduce((acc, item) => acc + item.subtotal, 0));
+      if (gross > 0) ivaByRate.set(0, { neto: gross, iva: 0 });
+    } else {
+      for (const item of p.items) {
+        const rate = item.ivaRate ?? 21;
+        const gross = round2(item.subtotal);
+        const neto = rate > 0 ? round2(gross / (1 + rate / 100)) : gross;
+        const iva = round2(gross - neto);
+        const cur = ivaByRate.get(rate) ?? { neto: 0, iva: 0 };
+        cur.neto = round2(cur.neto + neto);
+        cur.iva = round2(cur.iva + iva);
+        ivaByRate.set(rate, cur);
+      }
     }
 
     const importeIvaLiquidado = round2(

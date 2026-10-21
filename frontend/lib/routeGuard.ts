@@ -23,7 +23,7 @@ const SINGLE_DYNAMIC_SEGMENT_PAGES = new Set(['para', 'presupuesto']);
 // segundo tramo de un posible slug de tenant no puede resolver a nada.
 const TENANT_SUBROUTES = new Set([
   'alertas', 'auditoria', 'ayuda', 'caja', 'categorias', 'clientes', 'compras',
-  'configuracion', 'conteo-stock', 'cotizaciones', 'cuentas-corrientes', 'dashboard', 'devoluciones',
+  'configuracion', 'contador', 'conteo-stock', 'cotizaciones', 'cuentas-corrientes', 'dashboard', 'devoluciones',
   'facturacion', 'fidelidad', 'finanzas', 'gastos-recurrentes', 'guia', 'hoteleria',
   'libro-iva-digital', 'objetivos-ventas', 'ordenes-compra', 'pos', 'productos',
   'promociones', 'proveedores', 'remitos', 'reportes', 'servicios', 'stock',
