@@ -198,11 +198,11 @@ type SaleSpec = {
   const suppliers = await prisma.supplier.findMany({ where: { tenantId: TENANT }, select: { id: true, name: true, cuit: true } });
   const supplier = (name: string) => suppliers.find((s) => s.name === name)!;
   const purchases = [
-    { day: 4, supplier: "Distribuidora Sur SRL", type: 1, pv: 3, nro: "00003-00012456", percIva: 1500, percIibb: 900, method: "TRANSFERENCIA" as const,
+    { day: 4, supplier: "Distribuidora Sur SRL", type: 1, pv: 3, nro: "00012456", percIva: 1500, percIibb: 900, method: "TRANSFERENCIA" as const,
       lines: [{ name: "Coca-Cola 2.25L", qty: 24 }, { name: "Harina Pureza 000 1kg", qty: 40 }] },
-    { day: 11, supplier: "Insumos del Centro SA", type: 1, pv: 2, nro: "00002-00045720", percIva: 0, percIibb: 600, method: "TRANSFERENCIA" as const,
+    { day: 11, supplier: "Insumos del Centro SA", type: 1, pv: 2, nro: "00045720", percIva: 0, percIibb: 600, method: "TRANSFERENCIA" as const,
       lines: [{ name: "Detergente Magistral 750ml", qty: 20 }, { name: "Lavandina Ayudín 1L", qty: 20 }] },
-    { day: 16, supplier: "Mayorista Norte", type: 6, pv: 1, nro: "00001-00079010", percIva: 0, percIibb: 0, method: "EFECTIVO" as const,
+    { day: 16, supplier: "Mayorista Norte", type: 6, pv: 1, nro: "00079010", percIva: 0, percIibb: 0, method: "EFECTIVO" as const,
       lines: [{ name: "Alfajores", qty: 40 }] },
   ];
   for (const pu of purchases) {

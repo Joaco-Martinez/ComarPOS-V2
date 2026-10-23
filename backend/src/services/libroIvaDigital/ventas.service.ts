@@ -36,6 +36,7 @@ const DOC_TYPE_LABEL: Record<number, string> = {
 export type VentasCbteRow = {
   saleId: string | null;
   invoiceAfipId: string;
+  arcaConfigId: string | null; // dueno (CUIT) que emitio, con multi-facturacion
   fecha: Date;
   tipoComprobante: number;
   tipoComprobanteLabel: string;
@@ -92,6 +93,7 @@ export async function getVentasLibroIvaDigital(params: { from: Date; to: Date; a
     cbte.push({
       saleId: inv.saleId,
       invoiceAfipId: inv.id,
+      arcaConfigId: inv.arcaConfigId,
       fecha: inv.fechaEmision,
       tipoComprobante: inv.tipoComprobante,
       tipoComprobanteLabel: invoiceTypeLabel(inv.tipoComprobante),
