@@ -27,17 +27,23 @@ import { getVentasLibroIvaDigital, type VentasCbteRow } from "./ventas.service";
 import { getComprasLibroIvaDigital, type ComprasCbteRow } from "./compras.service";
 import { getLiquidacion, type LiquidacionView } from "./liquidacion.service";
 import { isCreditNoteType } from "./invoiceTypes";
+import { getAllowedCbteTipos, CBTE_TIPO_A } from "../../afip/ivaCondition";
 
 function round2(n: number) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
 
 type AlicuotaResumen = { alicuota: number; base: number; iva: number };
+type Dueno = { id: string; businessName: string; cuit: string; ivaCondition: string | null };
 
 export type ContadorReport = {
   periodo: { year: number; month: number; label: string };
   generadoEl: Date;
   negocio: { razonSocial: string | null; cuit: string | null; condicionIva: string | null };
+  // Multi-facturacion sin dueno elegido: el reporte mezcla todos los CUIT,
+  // asi que se listan los duenos y cada comprobante dice de quien es.
+  combinado: boolean;
+  duenos: Dueno[];
   resumen: {
     ventasTotal: number | null;
     ventasFacturadas: number | null;
@@ -49,9 +55,9 @@ export type ContadorReport = {
     comprasTotal: number;
     comprasConDatosFaltantes: number;
   };
-  comprobantes: (VentasCbteRow & { esNotaCredito: boolean })[];
+  comprobantes: (VentasCbteRow & { esNotaCredito: boolean; dueno: string | null })[];
   ivaVentas: AlicuotaResumen[];
-  compras: ComprasCbteRow[];
+  compras: (ComprasCbteRow & { dueno: string | null })[];
   ivaCompras: AlicuotaResumen[];
   liquidacion: LiquidacionView | null;
   liquidacionNota: string | null;
@@ -73,18 +79,37 @@ export async function getContadorReport(params: { year: number; month: number; a
   const { year, month, arcaConfigId } = params;
   const { start, end } = monthRangeAR(year, month);
 
-  const [ventas, compras, config] = await Promise.all([
+  const [ventas, compras, config, multi] = await Promise.all([
     getVentasLibroIvaDigital({ from: start, to: end, arcaConfigId }),
     getComprasLibroIvaDigital({ from: start, to: end, arcaConfigId }),
     (arcaConfigId ? arcaConfigService.getConfigById(arcaConfigId) : arcaConfigService.getConfig()).catch(() => null),
+    arcaConfigService.isMultiInvoicingEnabled(),
   ]);
+
+  const combinado = multi && !arcaConfigId;
+  const duenos: Dueno[] = multi
+    ? await prisma.arcaConfig.findMany({
+        where: { ...tenantScope() },
+        select: { id: true, businessName: true, cuit: true, ivaCondition: true },
+        orderBy: { createdAt: "asc" },
+      })
+    : [];
+  const duenoName = new Map(duenos.map((d) => [d.id, d.businessName]));
+  const duenoDe = (id: string | null) => (id ? duenoName.get(id) ?? null : null);
 
   let liquidacion: LiquidacionView | null = null;
   let liquidacionNota: string | null = null;
-  try {
-    liquidacion = await getLiquidacion(year, month, arcaConfigId);
-  } catch (err: any) {
-    liquidacionNota = err?.message ?? "No se pudo calcular la liquidación.";
+  // Monotributo/exento solo emite Factura C (sin IVA discriminado): no
+  // liquida IVA, paga la cuota del monotributo.
+  const noLiquidaIva = !combinado && !!config && !getAllowedCbteTipos((config as any).ivaCondition).includes(CBTE_TIPO_A);
+  if (noLiquidaIva) {
+    liquidacionNota = `No liquida IVA (${(config as any).ivaCondition ?? "sin condición de IVA"}): las Facturas C no discriminan IVA.`;
+  } else {
+    try {
+      liquidacion = await getLiquidacion(year, month, arcaConfigId);
+    } catch (err: any) {
+      liquidacionNota = err?.message ?? "No se pudo calcular la liquidación.";
+    }
   }
 
   // Ventas del periodo (facturadas o no). Una venta sin factura no tiene
@@ -111,7 +136,7 @@ export async function getContadorReport(params: { year: number; month: number; a
     };
   }
 
-  const comprobantes = ventas.cbte.map((r) => ({ ...r, esNotaCredito: isCreditNoteType(r.tipoComprobante) }));
+  const comprobantes = ventas.cbte.map((r) => ({ ...r, esNotaCredito: isCreditNoteType(r.tipoComprobante), dueno: duenoDe(r.arcaConfigId) }));
   const facturado = round2(comprobantes.filter((c) => !c.esNotaCredito).reduce((s, c) => s + c.importeTotal, 0));
   const notasCredito = round2(comprobantes.filter((c) => c.esNotaCredito).reduce((s, c) => s + c.importeTotal, 0));
 
@@ -122,11 +147,15 @@ export async function getContadorReport(params: { year: number; month: number; a
       label: new Date(year, month - 1, 1).toLocaleDateString("es-AR", { month: "long", year: "numeric" }),
     },
     generadoEl: new Date(),
-    negocio: {
-      razonSocial: (config as any)?.businessName ?? null,
-      cuit: (config as any)?.cuit ?? null,
-      condicionIva: (config as any)?.ivaCondition ?? null,
-    },
+    negocio: combinado
+      ? { razonSocial: `Todos los dueños combinados (${duenos.length})`, cuit: null, condicionIva: null }
+      : {
+          razonSocial: (config as any)?.businessName ?? null,
+          cuit: (config as any)?.cuit ?? null,
+          condicionIva: (config as any)?.ivaCondition ?? null,
+        },
+    combinado,
+    duenos: combinado ? duenos : [],
     resumen: {
       ...ventasResumen,
       facturado,
@@ -137,7 +166,7 @@ export async function getContadorReport(params: { year: number; month: number; a
     },
     comprobantes,
     ivaVentas: sumAlicuotas(ventas.alicuotas),
-    compras: compras.cbte,
+    compras: compras.cbte.map((c) => ({ ...c, dueno: duenoDe(c.arcaConfigId) })),
     ivaCompras: sumAlicuotas(compras.alicuotas),
     liquidacion,
     liquidacionNota,
@@ -240,15 +269,32 @@ function buildSections(r: ContadorReport): { resumen: [string, string][]; sectio
     },
   ];
 
+  if (r.combinado) {
+    sections[0] = addDuenoColumn(sections[0], 3, r.comprobantes.map((c) => c.dueno), [8, 12, 12, 11, 13, 10, 9, 8, 8, 9]);
+    sections[2] = addDuenoColumn(sections[2], 1, r.compras.map((c) => c.dueno), [8, 11, 15, 10, 12, 12, 8, 7, 8, 9]);
+  }
+
   return { resumen, sections };
+}
+
+// Columna "Dueño", solo en el reporte combinado de multi-facturacion.
+function addDuenoColumn(s: Section, at: number, duenos: (string | null)[], widths: number[]): Section {
+  return {
+    ...s,
+    headers: [...s.headers.slice(0, at), "Dueño", ...s.headers.slice(at)],
+    widths,
+    align: [...s.align.slice(0, at), "left", ...s.align.slice(at)],
+    rows: s.rows.map((row, i) => [...row.slice(0, at), duenos[i] ?? "—", ...row.slice(at)]),
+  };
 }
 
 function headerLines(r: ContadorReport) {
   return [
     `Período: ${r.periodo.label}`,
     [r.negocio.razonSocial, r.negocio.cuit ? `CUIT ${r.negocio.cuit}` : null, r.negocio.condicionIva].filter(Boolean).join(" · "),
+    r.duenos.length ? `Dueños: ${r.duenos.map((d) => `${d.businessName} (CUIT ${d.cuit})`).join(" · ")}` : null,
     `Generado el ${dateFmt(r.generadoEl)} con ComarPOS`,
-  ].filter(Boolean);
+  ].filter((l): l is string => Boolean(l));
 }
 
 // ---------------------------------------------------------------------------

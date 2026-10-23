@@ -28,6 +28,7 @@ type Comprobante = {
   importeIva: number;
   cae: string | null;
   esNotaCredito: boolean;
+  dueno: string | null;
 };
 
 type Compra = {
@@ -46,11 +47,14 @@ type Compra = {
   impuestosInternos: number;
   importeIvaLiquidado: number;
   missingFields: string[];
+  dueno: string | null;
 };
 
 type Report = {
   periodo: { year: number; month: number; label: string };
   negocio: { razonSocial: string | null; cuit: string | null; condicionIva: string | null };
+  combinado: boolean;
+  duenos: { id: string; businessName: string; cuit: string; ivaCondition: string | null }[];
   resumen: {
     ventasTotal: number | null;
     ventasFacturadas: number | null;
@@ -207,8 +211,11 @@ export default function ContadorPage() {
             </div>
           )}
           {r && (
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 'auto' }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 'auto', textAlign: 'right' }}>
               {[r.negocio.razonSocial, r.negocio.cuit && `CUIT ${r.negocio.cuit}`, r.negocio.condicionIva].filter(Boolean).join(' · ')}
+              {r.duenos.map((d) => (
+                <div key={d.id} style={{ fontSize: 11 }}>{d.businessName} · CUIT {d.cuit}{d.ivaCondition ? ` · ${d.ivaCondition}` : ''}</div>
+              ))}
             </div>
           )}
         </div>
@@ -273,7 +280,7 @@ export default function ContadorPage() {
                 <table style={{ fontSize: 12.5 }}>
                   <thead>
                     <tr>
-                      <th>Fecha</th><th>Comprobante</th><th>Número</th><th>Receptor</th><th>Documento</th>
+                      <th>Fecha</th><th>Comprobante</th><th>Número</th>{r.combinado && <th>Dueño</th>}<th>Receptor</th><th>Documento</th>
                       <th style={{ textAlign: 'right' }}>Neto</th><th style={{ textAlign: 'right' }}>IVA</th><th style={{ textAlign: 'right' }}>Total</th><th>CAE</th>
                     </tr>
                   </thead>
@@ -286,6 +293,7 @@ export default function ContadorPage() {
                           {c.esNotaCredito && <span className="badge badge-amber" style={{ marginLeft: 6, fontSize: 9 }}>resta</span>}
                         </td>
                         <td style={{ fontFamily: 'var(--mono)', whiteSpace: 'nowrap' }}>{cbteNumero(c.puntoVenta, c.numeroComprobante)}</td>
+                        {r.combinado && <td style={{ whiteSpace: 'nowrap' }}>{c.dueno ?? '—'}</td>}
                         <td>{c.denominacionComprador}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>{c.codigoDocComprador === 99 ? 'Cons. final' : `${c.codigoDocCompradorLabel} ${c.nroDocComprador}`}</td>
                         <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtMoney(c.importeNeto)}</td>
@@ -312,7 +320,7 @@ export default function ContadorPage() {
                 <table style={{ fontSize: 12.5 }}>
                   <thead>
                     <tr>
-                      <th>Fecha</th><th>Proveedor</th><th>CUIT</th><th>Comprobante</th><th>Número</th>
+                      <th>Fecha</th>{r.combinado && <th>Dueño</th>}<th>Proveedor</th><th>CUIT</th><th>Comprobante</th><th>Número</th>
                       <th style={{ textAlign: 'right' }}>IVA</th><th style={{ textAlign: 'right' }}>Percep. IVA</th>
                       <th style={{ textAlign: 'right' }}>Otras percep.</th><th style={{ textAlign: 'right' }}>Total</th>
                     </tr>
@@ -321,6 +329,7 @@ export default function ContadorPage() {
                     {r.compras.map((c) => (
                       <tr key={c.purchaseId}>
                         <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.fecha)}</td>
+                        {r.combinado && <td style={{ whiteSpace: 'nowrap' }}>{c.dueno ?? '—'}</td>}
                         <td>
                           {c.denominacionVendedor ?? '—'}
                           {c.missingFields.length > 0 && (

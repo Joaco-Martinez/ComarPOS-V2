@@ -31,6 +31,7 @@ function round2(n: number) {
 
 export type ComprasCbteRow = {
   purchaseId: string;
+  arcaConfigId: string | null; // dueno (CUIT) al que se cargo, con multi-facturacion
   fecha: Date;
   tipoComprobante: number | null;
   tipoComprobanteLabel: string;
@@ -122,6 +123,7 @@ export async function getComprasLibroIvaDigital(params: { from: Date; to: Date; 
 
     cbte.push({
       purchaseId: p.id,
+      arcaConfigId: p.arcaConfigId,
       fecha: p.date,
       tipoComprobante: p.invoiceType,
       tipoComprobanteLabel: invoiceTypeLabel(p.invoiceType),
