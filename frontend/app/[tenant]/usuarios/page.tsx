@@ -12,7 +12,7 @@ import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile
 import FilterBar from '@/components/mobile/FilterBar';
 
 const roleBadge = (r: string) =>
-  r === 'ADMIN' ? 'badge-blue' : r === 'EMPLEADO' ? 'badge-green' : 'badge-gray';
+  r === 'ADMIN' ? 'badge-blue' : r === 'EMPLEADO' ? 'badge-green' : r === 'CONTADOR' ? 'badge-amber' : 'badge-gray';
 
 const emptyForm = {
   name: '', email: '', password: '', role: 'EMPLEADO',
@@ -201,9 +201,15 @@ export default function UsuariosPage() {
                 <select value={form.role} onChange={f('role')}>
                   <option value="EMPLEADO">Empleado</option>
                   <option value="ADMIN">Administrador</option>
+                  <option value="CONTADOR">Contador</option>
                 </select>
+                {form.role === 'CONTADOR' && (
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                    Solo ve el reporte Contador y las facturas, no vende. No ocupa un usuario de tu plan.
+                  </div>
+                )}
               </div>
-              {showLocationPicker && (
+              {showLocationPicker && form.role !== 'CONTADOR' && (
                 <>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Sucursal de base</label>

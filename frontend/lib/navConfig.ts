@@ -142,6 +142,17 @@ export function groupNavItems(items: NavItem[]): [string, NavItem[]][] {
 
 const ALL_NAV_ITEMS = [...NAV, ...ADMIN_NAV];
 
+// El contador no vende: solo ve lo fiscal (el backend tambien lo limita, ver
+// contador.routes.ts y afip.routes.ts).
+const CONTADOR_HREFS = ['/contador', '/facturacion', '/ayuda'];
+
+/** Items de menu segun el rol, compartido por Sidebar y BottomNav. */
+export function navForRole(role?: string | null): NavItem[] {
+  if (role === 'ADMIN') return ALL_NAV_ITEMS;
+  if (role === 'CONTADOR') return ALL_NAV_ITEMS.filter((i) => CONTADOR_HREFS.includes(i.href));
+  return NAV;
+}
+
 /**
  * De una ruta relativa al tenant (ej. "/configuracion/arca") al modulo que
  * la gatea, si tiene uno -- usado por AppLayout para bloquear la pantalla

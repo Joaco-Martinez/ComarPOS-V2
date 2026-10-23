@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
-import { NAV, ADMIN_NAV, groupNavItems, type NavItem } from '@/lib/navConfig';
+import { navForRole, groupNavItems, type NavItem } from '@/lib/navConfig';
 import {
   PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, Lock,
 } from 'lucide-react';
@@ -185,7 +185,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             arrays (ej. "Catálogo y stock": Stock es de todos, Conteo de
             Stock es solo ADMIN) no aparezca partido en dos secciones
             iguales no contiguas. */}
-        {groupNavItems(user?.role === 'ADMIN' ? [...NAV, ...ADMIN_NAV] : NAV).map(([groupName, items], idx) => (
+        {groupNavItems(navForRole(user?.role)).map(([groupName, items], idx) => (
           <div key={groupName}>
             {!collapsed && (
               <div style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', fontFamily: 'var(--mono)', padding: idx === 0 ? '8px 10px 4px' : '14px 10px 4px' }}>

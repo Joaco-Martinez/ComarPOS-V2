@@ -13,6 +13,7 @@ function normalizeRole(value: string): Role {
   if (value === "ADMIN") return Role.ADMIN;
   if (value === "EMPLEADO") return Role.EMPLEADO;
   if (value === "CLIENTE") return Role.CLIENTE;
+  if (value === "CONTADOR") return Role.CONTADOR;
   throw new Error("Rol inválido");
 }
 
@@ -482,8 +483,11 @@ export const userService = {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     if (role !== Role.CLIENTE) {
-      const limitCheck = await planLimitsService.checkLimit(currentTenantId(), "users");
-      if (!limitCheck.ok) throw new AppError("PLAN_LIMIT_REACHED", limitCheck.message, 403);
+      // El contador no ocupa lugar del plan (planLimits solo cuenta ADMIN/EMPLEADO).
+      if (role !== Role.CONTADOR) {
+        const limitCheck = await planLimitsService.checkLimit(currentTenantId(), "users");
+        if (!limitCheck.ok) throw new AppError("PLAN_LIMIT_REACHED", limitCheck.message, 403);
+      }
 
       const defaultBusinessLocationId = await requireLocationOrNull(data.defaultBusinessLocationId);
       if (data.restrictToDefaultLocation && !defaultBusinessLocationId) {
@@ -589,10 +593,17 @@ export const userService = {
 
     const existing = await prisma.user.findFirst({
       where: { id, ...tenantScope() },
-      select: { id: true, defaultBusinessLocationId: true },
+      select: { id: true, defaultBusinessLocationId: true, role: true },
     });
 
     if (!existing) throw new Error("Usuario no encontrado");
+
+    // Pasar un contador a ADMIN/EMPLEADO si ocupa lugar del plan.
+    const countsForPlan = (r: Role) => r === Role.ADMIN || r === Role.EMPLEADO;
+    if (cleanData.role && countsForPlan(cleanData.role) && !countsForPlan(existing.role)) {
+      const limitCheck = await planLimitsService.checkLimit(currentTenantId(), "users");
+      if (!limitCheck.ok) throw new AppError("PLAN_LIMIT_REACHED", limitCheck.message, 403);
+    }
 
     if (data.defaultBusinessLocationId !== undefined) {
       cleanData.defaultBusinessLocationId = await requireLocationOrNull(data.defaultBusinessLocationId);
