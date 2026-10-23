@@ -10,7 +10,7 @@ import { useParams } from 'next/navigation';
 // navegador. No usa el store de notificaciones (Notification model) a
 // proposito: esto es un anuncio de producto para TODOS los usuarios, no un
 // evento de negocio individual.
-const LATEST_ID = 'variantes-de-producto-2026-10-20';
+const LATEST_ID = 'contador-multinegocio-2026-10-23';
 const STORAGE_KEY = 'comarpos-whatsnew-seen';
 
 export default function WhatsNewModal() {
@@ -40,25 +40,24 @@ export default function WhatsNewModal() {
             </div>
             <div>
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Novedades</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Variantes de producto: talles, colores, sabores…</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Tu contador, sacar stock y etiquetas nuevas</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-xs" onClick={dismiss}><X size={14} /></button>
         </div>
 
         <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, margin: '0 0 12px' }}>
-          Ahora un mismo producto puede tener variantes (ej. una Remera en talles S, M, L y colores Rojo y Negro). Cada combinación tiene su propio SKU, precio, foto y stock por sucursal.
+          Ahora tu contador puede entrar a ComarPOS con su propia cuenta, y una misma cuenta le sirve para todos los negocios que atiende.
         </p>
 
         <ul style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 18px', paddingLeft: 18 }}>
-          <li><strong>Cómo se carga</strong>: en Productos → Nuevo producto tildá &quot;Tiene variantes&quot;, cargá las opciones (Talle, Color…) con sus valores y se arma una variante por cada combinación. Podés cargar el stock inicial de cada una.</li>
-          <li><strong>Precio</strong>: cargás un precio y un costo generales que se copian a todas. Si cambiás el de una variante queda &quot;personalizado&quot;; con &quot;volver al precio general&quot; lo revertís.</li>
-          <li><strong>Vender</strong>: en el POS el producto aparece una sola vez; al tocarlo elegís la variante y ves su stock. Si escaneás el código de la variante, se agrega directo.</li>
-          <li><strong>Stock, compras y cambios</strong>: todo es por variante. En Compras cargás cantidades de varias variantes de una (10 M, 5 L…) y en Devoluciones podés cambiar un M por un L.</li>
-          <li><strong>Tickets, facturas y alertas</strong> muestran el nombre completo (&quot;Remera - M / Rojo&quot;). En Reportes elegís ver por variante o agrupar por producto.</li>
-          <li><strong>Tienda online</strong>: el cliente elige talle y color; las combinaciones sin stock aparecen deshabilitadas.</li>
-          <li><strong>¿Ya tenés el producto cargado?</strong> Usá &quot;Convertir a producto con variantes&quot; en el listado: podés convertirlo en la primera variante (conserva stock e historial) o empezar de cero.</li>
-          <li>Solo el producto principal cuenta para el límite de tu plan; las variantes no.</li>
+          <li><strong>Usuario Contador</strong>: en Usuarios → Nuevo usuario elegí el rol Contador. Solo ve el reporte Contador y las facturas, no vende y no ocupa un usuario de tu plan.</li>
+          <li><strong>¿Tu contador ya usa ComarPOS con otro negocio?</strong> Poné solo su email: entra con su cuenta de siempre y elige tu negocio desde el menú. Le podés desactivar o quitar el acceso cuando quieras.</li>
+          <li><strong>Sacar stock</strong>: en Stock → Movimiento elegí &quot;Egreso (sacar stock)&quot; para roturas, vencimientos o consumo interno.</li>
+          <li><strong>Etiquetas</strong>: el nombre del producto se ve grande y en negrita, y podés filtrar por proveedor para imprimir lo que te llegó.</li>
+          <li><strong>SKU solo con letras y números</strong>: sacamos guiones y puntos porque algunos lectores los leían mal. Las etiquetas que ya imprimiste se siguen escaneando bien.</li>
+          <li><strong>POS</strong>: si elegís el cliente o la lista de precios al final, ahora se recalculan los precios del carrito.</li>
+          <li><strong>PCs viejas</strong>: la pantalla ya no se corta en monitores chicos, y hay un agente de impresión para Windows 7 en Configuración → PrintBox.</li>
         </ul>
 
         <div style={{ display: 'flex', gap: 8 }}>

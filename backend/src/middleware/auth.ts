@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import prisma from "../prisma";
 import { runWithTenant } from "../context/tenantContext";
 import { resolveTenantById, isSuspensionExempt, getTenantBlock } from "./tenant";
+import { resolveTenantAccessCached } from "../services/tenantAccess.service";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET.length < 64) {
@@ -13,6 +14,10 @@ type JwtPayload = {
   userId: string;
   role: string;
   tenantId?: string | null;
+  // true = tenantId NO es el negocio de base del usuario sino uno al que
+  // tiene acceso via UserTenantAccess (contador de varios negocios, ver
+  // services/tenantAccess.service.ts). Solo estos tokens se re-validan.
+  ext?: boolean;
 };
 
 // El tenant de un request autenticado es el que trae el JWT (tenantId), no
@@ -30,6 +35,24 @@ async function runWithAuthenticatedTenant(
 ) {
   if (!decoded.tenantId) {
     return next();
+  }
+
+  // Negocio ajeno: el acceso se puede revocar en cualquier momento, asi que
+  // no alcanza con que el JWT este firmado. Tambien se toma el rol del
+  // acceso vigente (no el del token) por si se lo cambiaron.
+  if (decoded.ext) {
+    const access = await resolveTenantAccessCached(decoded.userId, decoded.tenantId);
+    if (!access) {
+      // Listar/cambiar de negocio sigue andando (sin contexto de ese
+      // negocio, no lo necesitan) para que pueda volver a uno propio.
+      const path = req.originalUrl.split("?")[0];
+      if (path === "/auth/tenants" || path === "/auth/switch-tenant") return next();
+      return res.status(401).json({
+        code: "TENANT_ACCESS_REVOKED",
+        message: "Ya no tenés acceso a este negocio",
+      });
+    }
+    (req as any).user = { ...(req as any).user, role: access.role };
   }
 
   const tenant = await resolveTenantById(decoded.tenantId);

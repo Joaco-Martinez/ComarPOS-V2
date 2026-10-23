@@ -109,15 +109,15 @@ async function loadTakenSkus(tx: Tx, excludeIds: string[] = []) {
   return new Set(rows.map((r) => String(r.sku).toUpperCase()));
 }
 
-// Igual criterio que generateSku() (PRD-000001...), pero generando varios en
+// Igual criterio que generateSku() (PRD000001...), pero generando varios en
 // la misma operacion sin chocar entre si.
 async function makeSkuGenerator(tx: Tx, taken: Set<string>) {
   let seq = (await tx.product.count({ where: { ...tenantScope() } })) + 1;
   return () => {
-    let candidate = `PRD-${String(seq).padStart(6, "0")}`;
+    let candidate = `PRD${String(seq).padStart(6, "0")}`;
     while (taken.has(candidate)) {
       seq += 1;
-      candidate = `PRD-${String(seq).padStart(6, "0")}`;
+      candidate = `PRD${String(seq).padStart(6, "0")}`;
     }
     taken.add(candidate);
     seq += 1;

@@ -7,7 +7,7 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { BusinessLocation, User } from '@/types';
 import { fmtDate, normalizeArray } from '@/lib/helpers';
-import { UserCog, Plus, Edit2, X, ShieldCheck } from 'lucide-react';
+import { UserCog, Plus, Edit2, X, ShieldCheck, Trash2 } from 'lucide-react';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
 
@@ -62,8 +62,13 @@ export default function UsuariosPage() {
     setModal('edit');
   };
 
+  // Contador nuevo: si ya usa ComarPOS en otro negocio alcanza con el email
+  // (se le da acceso con su cuenta de siempre); si no, el backend pide
+  // nombre y contraseña para crearle una.
+  const inviteContador = modal === 'create' && form.role === 'CONTADOR';
+
   const save = async () => {
-    if (!form.name.trim() || !form.email.trim()) return;
+    if (!form.email.trim() || (!inviteContador && !form.name.trim())) return;
     setSaving(true);
     try {
       const body: Record<string, any> = {
@@ -73,8 +78,12 @@ export default function UsuariosPage() {
       };
       if (form.password) body.password = form.password;
       if (modal === 'create') {
-        await api.post('/users', { ...body, password: form.password });
-        toast.success('Usuario creado');
+        const { data } = await api.post('/users', { ...body, password: form.password });
+        if (data?.accessGranted) {
+          toast.success(`Le diste acceso a ${data.name}: entra con su cuenta de siempre y elige tu negocio en el menú`);
+        } else {
+          toast.success('Usuario creado');
+        }
       } else if (editing) {
         await api.put(`/users/${editing.id}`, body);
         toast.success('Usuario actualizado');
@@ -85,6 +94,31 @@ export default function UsuariosPage() {
       toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally { setSaving(false); }
   };
+
+  const removeAccess = async (u: User) => {
+    if (!confirm(`¿Quitarle a ${u.name} el acceso a tu negocio? Su cuenta sigue existiendo en su otro negocio.`)) return;
+    try {
+      await api.delete(`/users/${u.id}`);
+      toast.success('Acceso quitado');
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'No se pudo quitar el acceso');
+    }
+  };
+
+  // Contador de otro negocio: no se edita su cuenta, solo se quita el acceso.
+  const rowAction = (u: User) => (u.external ? (
+    <button onClick={() => removeAccess(u)} className="btn btn-ghost btn-xs" title="Quitar acceso a este negocio"><Trash2 size={12} /></button>
+  ) : (
+    <button onClick={() => openEdit(u)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
+  ));
+
+  const roleCell = (u: User) => (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+      <span className={`badge ${roleBadge(u.role)}`}>{u.role}</span>
+      {u.external && <span className="badge badge-gray" title="Tiene su cuenta en otro negocio">Otro negocio</span>}
+    </span>
+  );
 
   const toggleActive = async (u: User) => {
     try {
@@ -133,7 +167,7 @@ export default function UsuariosPage() {
                 ),
               },
               { key: 'email', header: 'Email', render: (u) => <span style={{ fontSize: 12, color: 'var(--text2)' }}>{u.email}</span> },
-              { key: 'rol', header: 'Rol', render: (u) => <span className={`badge ${roleBadge(u.role)}`}>{u.role}</span> },
+              { key: 'rol', header: 'Rol', render: (u) => roleCell(u) },
               { key: 'creado', header: 'Creado', render: (u) => <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtDate(u.createdAt)}</span> },
               {
                 key: 'estado', header: 'Estado', render: (u) => (
@@ -143,9 +177,7 @@ export default function UsuariosPage() {
                 ),
               },
               {
-                key: 'acciones', header: '', render: (u) => (
-                  <button onClick={() => openEdit(u)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
-                ),
+                key: 'acciones', header: '', render: (u) => rowAction(u),
               },
             ] as ResponsiveTableColumn<User>[]}
             renderMobileCard={(u) => (
@@ -164,11 +196,11 @@ export default function UsuariosPage() {
                 </div>
                 <div className="mobile-card-row">
                   <span style={{ color: 'var(--text2)' }}>{u.email}</span>
-                  <span className={`badge ${roleBadge(u.role)}`}>{u.role}</span>
+                  {roleCell(u)}
                 </div>
                 <div className="mobile-card-row">
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtDate(u.createdAt)}</span>
-                  <button onClick={() => openEdit(u)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
+                  {rowAction(u)}
                 </div>
               </div>
             )}
@@ -185,7 +217,7 @@ export default function UsuariosPage() {
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Nombre *</label>
+                <label className="form-label">Nombre{inviteContador ? '' : ' *'}</label>
                 <input value={form.name} onChange={f('name')} placeholder="Nombre completo" autoFocus />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
@@ -193,7 +225,7 @@ export default function UsuariosPage() {
                 <input type="email" value={form.email} onChange={f('email')} placeholder="usuario@empresa.com" />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">{modal === 'create' ? 'Contraseña *' : 'Nueva contraseña (dejar vacío para no cambiar)'}</label>
+                <label className="form-label">{modal === 'create' ? (inviteContador ? 'Contraseña' : 'Contraseña *') : 'Nueva contraseña (dejar vacío para no cambiar)'}</label>
                 <input type="password" value={form.password} onChange={f('password')} placeholder="••••••••" />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
@@ -206,6 +238,9 @@ export default function UsuariosPage() {
                 {form.role === 'CONTADOR' && (
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
                     Solo ve el reporte Contador y las facturas, no vende. No ocupa un usuario de tu plan.
+                    {inviteContador && (
+                      <> Si tu contador ya usa ComarPOS con otro negocio, poné solo su email: entra con su cuenta de siempre y elige tu negocio en el menú. Si no, completá nombre y contraseña para crearle una.</>
+                    )}
                   </div>
                 )}
               </div>
@@ -245,7 +280,7 @@ export default function UsuariosPage() {
             </div>
             <div className="modal-footer">
               <button onClick={() => setModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
-              <button onClick={save} disabled={saving || !form.name.trim() || !form.email.trim() || (modal === 'create' && !form.password)} className="btn btn-primary btn-sm">
+              <button onClick={save} disabled={saving || !form.email.trim() || (!inviteContador && (!form.name.trim() || (modal === 'create' && !form.password)))} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : modal === 'create' ? 'Crear usuario' : 'Guardar'}
               </button>
             </div>

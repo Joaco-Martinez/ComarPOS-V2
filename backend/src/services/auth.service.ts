@@ -5,6 +5,7 @@ import { Response, Request } from "express";
 import { CategoryClient, Role } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { issueCsrfCookie, clearCsrfCookie } from "../middleware/csrf";
+import { resolveTenantAccess, listUserTenants, invalidateTenantAccess } from "./tenantAccess.service";
 
 const isProd = process.env.NODE_ENV === "production";
 // JWT_SECRET ya se valida (>=64 chars, sin fallback) al boot en src/index.ts
@@ -51,6 +52,50 @@ function sanitizeUser(user: any) {
     defaultBusinessLocationId: user.defaultBusinessLocationId ?? null,
     restrictToDefaultLocation: user.restrictToDefaultLocation ?? false,
   };
+}
+
+// Negocio activo de la sesion cuando NO es el de base del usuario (contador
+// con acceso a varios negocios, ver tenantAccess.service.ts): pisa los datos
+// de negocio y el rol que sanitizeUser saca de la fila del usuario.
+type ActiveTenant = { tenantId: string; slug: string; name: string; role: Role };
+
+function sanitizeSessionUser(user: any, active?: ActiveTenant | null) {
+  const clean = sanitizeUser(user);
+  if (!active) return clean;
+  return { ...clean, role: active.role, tenantId: active.tenantId, tenantSlug: active.slug, tenantName: active.name };
+}
+
+function signSession(userId: string, role: Role | string, tenantId: string | null, ext: boolean) {
+  return jwt.sign(
+    ext ? { userId, role, tenantId, ext: true } : { userId, role, tenantId },
+    JWT_SECRET,
+    { expiresIn: SESSION_DURATION_JWT }
+  );
+}
+
+/**
+ * Usuario de la sesion para el negocio que trae el token. Si es un negocio
+ * ajeno (contador), verifica que el acceso siga vigente y devuelve los
+ * datos de ESE negocio -- si no, el frontend (AppLayout) lo mandaria de
+ * vuelta al negocio de base en cada carga.
+ */
+async function loadSessionUser(userId: string, tokenTenantId?: string | null) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { client: true, tenant: { select: { slug: true, name: true } } },
+  });
+
+  if (!user) throw new Error("Usuario no encontrado");
+  if (user.isActive === false) throw new Error("Usuario deshabilitado");
+
+  if (!tokenTenantId || tokenTenantId === user.tenantId) return sanitizeSessionUser(user);
+
+  const access = await resolveTenantAccess(user.id, tokenTenantId);
+  if (!access) throw new Error("Ya no tenés acceso a este negocio");
+  const tenant = await prisma.tenant.findUnique({ where: { id: tokenTenantId }, select: { slug: true, name: true } });
+  if (!tenant) throw new Error("Negocio no encontrado");
+
+  return sanitizeSessionUser(user, { tenantId: tokenTenantId, slug: tenant.slug, name: tenant.name, role: access.role });
 }
 
 function setAuthCookies(res: Response, cleanUser: any, token: string) {
@@ -164,16 +209,24 @@ export const authService = {
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) throw new Error("Credenciales inválidas");
 
-    const token = jwt.sign(
-      { userId: user.id, role: user.role, tenantId: user.tenantId },
-      JWT_SECRET,
-      { expiresIn: SESSION_DURATION_JWT }
-    );
-
     // Auditoria de platform-admin (ver platformTenant.service.ts): no
     // bloquea el login si falla.
     prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});
 
+    // Contador con varios negocios: vuelve al ultimo en el que estuvo, si
+    // todavia tiene acceso; si no (o nunca cambio), a su negocio de base.
+    const lastAccess =
+      user.lastActiveTenantId && user.lastActiveTenantId !== user.tenantId
+        ? await resolveTenantAccess(user.id, user.lastActiveTenantId)
+        : null;
+
+    if (lastAccess) {
+      const cleanUser = await loadSessionUser(user.id, lastAccess.tenantId);
+      setAuthCookies(res, cleanUser, signSession(user.id, lastAccess.role, lastAccess.tenantId, true));
+      return cleanUser;
+    }
+
+    const token = signSession(user.id, user.role, user.tenantId, false);
     const cleanUser = sanitizeUser(user);
 
     setAuthCookies(res, cleanUser, token);
@@ -213,7 +266,8 @@ export const authService = {
     userId: string,
     currentPasswordValue: string,
     newPasswordValue: string,
-    res?: Response
+    res?: Response,
+    activeTenantId?: string | null
   ) {
     const currentPassword = String(currentPasswordValue || "");
     const newPassword = String(newPasswordValue || "");
@@ -266,15 +320,13 @@ export const authService = {
       },
     });
 
-    const cleanUser = sanitizeUser(updatedUser);
+    // La sesion nueva sigue en el negocio en el que estaba (un contador que
+    // cambia la contraseña desde otro negocio no vuelve al de base).
+    const cleanUser = await loadSessionUser(updatedUser.id, activeTenantId ?? updatedUser.tenantId);
 
     if (res) {
-      const token = jwt.sign(
-        { userId: updatedUser.id, role: updatedUser.role, tenantId: updatedUser.tenantId },
-        JWT_SECRET,
-        { expiresIn: SESSION_DURATION_JWT }
-      );
-
+      const ext = Boolean(cleanUser.tenantId && cleanUser.tenantId !== updatedUser.tenantId);
+      const token = signSession(updatedUser.id, cleanUser.role, cleanUser.tenantId, ext);
       setAuthCookies(res, cleanUser, token);
     }
 
@@ -284,7 +336,7 @@ export const authService = {
     };
   },
 
-  async updateQuickAccessConfig(userId: string | undefined, config: unknown) {
+  async updateQuickAccessConfig(userId: string | undefined, config: unknown, activeTenantId?: string | null) {
     if (!userId) throw new Error("No autenticado");
 
     if (
@@ -301,13 +353,12 @@ export const authService = {
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: { quickAccessConfig: config as any },
-      include: {
-        client: true,
-        tenant: { select: { slug: true, name: true } },
-      },
+      select: { id: true, tenantId: true },
     });
 
-    return sanitizeUser(updatedUser);
+    // Con los datos del negocio activo (no del de base): el frontend pisa
+    // el usuario guardado con esta respuesta.
+    return loadSessionUser(updatedUser.id, activeTenantId ?? updatedUser.tenantId);
   },
 
   async logout(res: Response) {
@@ -335,22 +386,7 @@ export const authService = {
 
     try {
       const payload = jwt.verify(token, JWT_SECRET) as { userId: string; tenantId?: string | null };
-
-      const user = await prisma.user.findUnique({
-        where: { id: payload.userId },
-        include: {
-          client: true,
-          tenant: { select: { slug: true, name: true } },
-        },
-      });
-
-      if (!user) throw new Error("Usuario no encontrado");
-
-      if (user.isActive === false) {
-        throw new Error("Usuario deshabilitado");
-      }
-
-      return sanitizeUser(user);
+      return await loadSessionUser(payload.userId, payload.tenantId);
     } catch {
       throw new Error("Token inválido");
     }
@@ -358,26 +394,40 @@ export const authService = {
 
   async getMe(token: string) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.userId },
-        include: {
-          client: true,
-          tenant: { select: { slug: true, name: true } },
-        },
-      });
-
-      if (!user) throw new Error("Usuario no encontrado");
-
-      if (user.isActive === false) {
-        throw new Error("Usuario deshabilitado");
-      }
-
-      return sanitizeUser(user);
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; tenantId?: string | null };
+      return await loadSessionUser(decoded.userId, decoded.tenantId);
     } catch {
       throw new Error("Token inválido");
     }
+  },
+
+  /** Negocios a los que puede entrar la cuenta (selector de negocio del contador). */
+  async listTenants(userId: string | undefined) {
+    if (!userId) throw new Error("No autenticado");
+    return listUserTenants(userId);
+  },
+
+  /**
+   * Cambia el negocio activo sin cerrar sesion: firma un token nuevo para
+   * `tenantId` (con el rol de ese acceso) y pisa las cookies. Solo entra a
+   * un negocio propio o con acceso vigente (UserTenantAccess).
+   */
+  async switchTenant(userId: string | undefined, tenantId: string, res: Response) {
+    if (!userId) throw new Error("No autenticado");
+    if (!tenantId) throw new Error("Falta el negocio");
+
+    const access = await resolveTenantAccess(userId, tenantId);
+    if (!access) throw new Error("No tenés acceso a ese negocio");
+    invalidateTenantAccess(userId, tenantId);
+
+    const cleanUser = await loadSessionUser(userId, tenantId);
+    const token = signSession(userId, access.role, tenantId, !access.isHome);
+    setAuthCookies(res, cleanUser, token);
+
+    // El proximo login arranca en este negocio (ver login()).
+    await prisma.user.update({ where: { id: userId }, data: { lastActiveTenantId: access.isHome ? null : tenantId } });
+
+    return cleanUser;
   },
 
   async deleteUser(id: string) {

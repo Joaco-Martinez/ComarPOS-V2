@@ -14,7 +14,7 @@ import { AppError } from "../utils/asyncHandler";
 import { saleService } from "./sale.service";
 import { generarPresupuestoReparacionPDF } from "../utils/generarPresupuestoReparacionPDF";
 
-const SERVICE_LABOR_SKU = "SERVICIO-TECNICO";
+const SERVICE_LABOR_SKU = "SERVICIOTECNICO";
 const APPROVAL_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
 
 const LOCKED_STATUSES = new Set<RepairOrderStatus>([
@@ -102,10 +102,16 @@ async function recalcTotal(id: string) {
 // primera vez que hace falta cada alicuota.
 async function ensureServiceLaborProduct(ivaRate: number) {
   const rate = round2(ivaRate);
-  const sku = `${SERVICE_LABOR_SKU}-${rate}`;
+  // Solo letras y numeros (10.5 -> "105"), mismo criterio que normalizeSku.
+  const sku = `${SERVICE_LABOR_SKU}${String(rate).replace(/[^0-9]/g, "")}`;
   const scope = tenantScope();
   const existing = await prisma.product.findFirst({ where: { sku, ...scope } });
   if (existing) return existing;
+
+  // Formato viejo ("SERVICIO-TECNICO-21"), de antes de que los SKUs quedaran
+  // sin guiones: se renombra al encontrarlo en vez de crear otro.
+  const legacy = await prisma.product.findFirst({ where: { sku: `SERVICIO-TECNICO-${rate}`, ...scope } });
+  if (legacy) return prisma.product.update({ where: { id: legacy.id }, data: { sku } });
 
   return prisma.product.create({
     data: {

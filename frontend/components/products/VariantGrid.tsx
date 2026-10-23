@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { ImagePlus, RotateCcw, Package } from 'lucide-react';
 import type { BusinessLocation, Product, VariantOption } from '@/types';
 import ImageCropModal from '@/components/ImageCropModal';
-import { fmtKg, fmtMoney, num } from '@/lib/helpers';
+import { cleanSku, fmtKg, fmtMoney, num } from '@/lib/helpers';
 import { attributesOf, buildCombinations, labelOf, stockAt, valuesKey, variantValues } from '@/lib/variants';
 
 export interface VariantRow {
@@ -250,7 +250,7 @@ export default function VariantGrid({
                     <span style={fieldLabel}>SKU</span>
                     <input
                       value={row.sku}
-                      onChange={(e) => patch(row.key, { sku: e.target.value })}
+                      onChange={(e) => patch(row.key, { sku: cleanSku(e.target.value) })}
                       placeholder={generalSku.trim() ? `${generalSku.trim()}-…` : 'Automático'}
                       style={{ fontFamily: 'var(--mono)', fontSize: 12 }}
                     />

@@ -9,7 +9,7 @@ import { MovementType, SaleUnit, ProductType } from "@prisma/client";
 import alertService from "../alert.service";
 import { tenantScope } from "../../utils/tenantScope";
 import { currentTenantId } from "../../context/tenantContext";
-import { ResolvedSaleItem, StockLine, DELIVERY_SKU } from "./sale.types";
+import { ResolvedSaleItem, StockLine, DELIVERY_SKU, LEGACY_DELIVERY_SKU } from "./sale.types";
 import { shouldDiscountStock } from "./sale.pricing";
 
 function addStockLine(map: Map<string, StockLine>, line: StockLine) {
@@ -276,6 +276,12 @@ async function ensureDeliveryProduct() {
   const scope = tenantScope();
   const existing = await prisma.product.findFirst({ where: { sku: DELIVERY_SKU, ...scope } });
   if (existing) return existing;
+
+  // Tenants creados antes de que los SKUs quedaran sin guiones tienen el
+  // producto como "ENVIO-FLETE2": se renombra al encontrarlo en vez de crear
+  // otro (ver scripts/normalizeSkus.ts, que no toca los SKUs internos).
+  const legacy = await prisma.product.findFirst({ where: { sku: LEGACY_DELIVERY_SKU, ...scope } });
+  if (legacy) return prisma.product.update({ where: { id: legacy.id }, data: { sku: DELIVERY_SKU } });
 
   return prisma.product.create({
     data: {

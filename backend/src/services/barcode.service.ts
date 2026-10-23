@@ -194,39 +194,55 @@ async function drawLabel(doc: PDFKit.PDFDocument, label: BarcodeLabel, x: number
   const k = h / LABEL_SIZES.mediano.h;
   const png = await renderBarcodePng(label.sku);
 
-  const nameSize = Math.max(6, Math.round(8 * k));
-  const skuSize = Math.max(6, Math.round(9 * k));
+  // El nombre es lo que mas se tiene que leer en la gondola (pedido
+  // explicito): va en negrita y bastante mas grande que el numero del codigo,
+  // hasta 2 renglones. El numero debajo de las barras queda chico -- el
+  // lector lee las barras, el numero es solo de respaldo.
+  const nameSize = Math.max(8, Math.round(13 * k));
+  const nameLineH = Math.round(nameSize * 1.15);
+  const skuSize = Math.max(5, Math.round(7 * k));
   const priceSize = Math.max(7, Math.round(10 * k));
   // Con precios de otras listas, el codigo se achica para hacerles lugar
   // (una linea por lista, hasta 2) sin salirse de la etiqueta.
   const extras = label.extraPrices.slice(0, 2);
   const extraLineH = Math.round(priceSize * 1.25);
-  const imgHeight = Math.max(14, Math.round(36 * k) - extras.length * extraLineH);
-  const imgY = y + Math.round(26 * k);
+  const nameTop = y + Math.round(5 * k);
+  const bottom = y + h - 10; // borde de la etiqueta menos un respiro
+  const priceBlockH = extras.length > 0 ? extraLineH * (1 + extras.length) : Math.round(priceSize * 1.2);
+  const skuBlockH = 2 + Math.round(skuSize * 1.4);
+  const MIN_BARCODE_H = 14;
+
+  // Las barras arrancan justo debajo del nombre: un nombre corto (1 renglon)
+  // no reserva el segundo. Un nombre largo usa 2 renglones solo si debajo
+  // todavia entran barras legibles + numero + precios (en la etiqueta chica
+  // con listas extra no entra y se corta con "...").
+  const isVariant = Boolean(label.parentName && label.variantLabel);
+  const fullName = isVariant ? `${label.parentName} ${label.variantLabel}` : label.name;
+  doc.font("Helvetica-Bold").fontSize(nameSize);
+  const wantsTwoLines = isVariant || doc.heightOfString(fullName, { width: w - 20, lineGap: 0 }) > nameLineH * 1.5;
+  doc.font("Helvetica");
+  const fitsTwoLines = nameTop + nameLineH * 2 + Math.round(3 * k) + MIN_BARCODE_H + skuBlockH + priceBlockH <= bottom;
+  const nameLines = wantsTwoLines && fitsTwoLines ? 2 : 1;
+  const imgY = nameTop + nameLineH * nameLines + Math.round(3 * k);
+  const imgHeight = Math.max(MIN_BARCODE_H, Math.min(Math.round(28 * k), bottom - imgY - skuBlockH - priceBlockH));
 
   doc.rect(x, y, w - 8, h - 8).stroke("#dddddd");
-  if (label.parentName && label.variantLabel) {
-    // Variante: nombre del padre + label en negrita (ej. "Remera" / "M / Rojo").
-    doc
-      .fontSize(nameSize)
-      .fillColor("#000")
-      .text(label.parentName, x + 6, y + 6, { width: w - 20, height: Math.round(11 * k), ellipsis: true });
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(nameSize)
-      .text(label.variantLabel, x + 6, y + 6 + Math.round(11 * k), { width: w - 20, height: Math.round(11 * k), ellipsis: true })
-      .font("Helvetica");
+  doc.font("Helvetica-Bold").fontSize(nameSize).fillColor("#000");
+  if (isVariant && nameLines === 2) {
+    // Variante: nombre del padre + label (ej. "Remera" / "M / Rojo"), un
+    // renglon cada uno. (+2 al alto: sin eso PDFKit descarta el renglon
+    // aunque entre justo.)
+    doc.text(label.parentName as string, x + 6, nameTop, { width: w - 20, height: nameLineH + 2, ellipsis: true, lineGap: 0 });
+    doc.text(label.variantLabel as string, x + 6, nameTop + nameLineH, { width: w - 20, height: nameLineH + 2, ellipsis: true, lineGap: 0 });
   } else {
-    doc
-      .fontSize(nameSize)
-      .fillColor("#000")
-      .text(label.name, x + 6, y + 6, { width: w - 20, height: Math.round(22 * k), ellipsis: true });
+    doc.text(fullName, x + 6, nameTop, { width: w - 20, height: nameLineH * nameLines + 2, ellipsis: true, lineGap: 0 });
   }
+  doc.font("Helvetica");
   doc.image(png, x + 10, imgY, { width: w - 36, height: imgHeight });
   doc
     .fontSize(skuSize)
-    .text(label.sku, x + 6, imgY + imgHeight + 4, { width: w - 20, align: "center" });
-  const priceY = imgY + imgHeight + 4 + Math.round(skuSize * 1.4);
+    .text(label.sku, x + 6, imgY + imgHeight + 2, { width: w - 20, align: "center" });
+  const priceY = imgY + imgHeight + 2 + Math.round(skuSize * 1.4);
   if (extras.length === 0) {
     doc
       .fontSize(priceSize)

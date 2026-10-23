@@ -81,14 +81,14 @@ describe("label, nombre y SKU", () => {
   });
 
   it("arma el SKU desde el SKU del padre, o null si el padre no tiene", () => {
-    expect(buildVariantSku("REM", { Talle: "M", Color: "Negro" }, talleColor)).toBe("REM-M-NEG");
+    expect(buildVariantSku("REM", { Talle: "M", Color: "Negro" }, talleColor)).toBe("REMMNEG");
     expect(buildVariantSku(null, { Talle: "M" }, talleColor)).toBeNull();
   });
 
   it("evita SKUs repetidos agregando un sufijo", () => {
-    const taken = new Set(["REM-M-NEG"]);
-    expect(uniqueSku("REM-M-NEG", taken)).toBe("REM-M-NEG-2");
-    expect(uniqueSku("REM-M-NEG", taken)).toBe("REM-M-NEG-3");
+    const taken = new Set(["REMMNEG"]);
+    expect(uniqueSku("REMMNEG", taken)).toBe("REMMNEG2");
+    expect(uniqueSku("REMMNEG", taken)).toBe("REMMNEG3");
   });
 });
 

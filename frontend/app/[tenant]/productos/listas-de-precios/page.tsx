@@ -121,10 +121,11 @@ export default function ListasDePreciosPage() {
     }
   };
 
-  const detailProducts = useMemo(() => {
-    if (!detailSearch.trim()) return products.slice(0, 40);
-    return products.filter((p) => matchesSearch(p, detailSearch)).slice(0, 40);
-  }, [products, detailSearch]);
+  const detailMatches = useMemo(
+    () => (detailSearch.trim() ? products.filter((p) => matchesSearch(p, detailSearch)) : products),
+    [products, detailSearch]
+  );
+  const detailProducts = detailMatches.slice(0, 40);
 
   const overrideFor = (productId: string) => detail?.items?.find((i) => i.productId === productId);
 
@@ -168,7 +169,12 @@ export default function ListasDePreciosPage() {
       <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8, marginLeft: indent ? 24 : 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{indent ? p.variantLabel ?? p.name : p.name}</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)' }}>Minorista: {fmtMoney(basePrice)}</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+            Minorista: {fmtMoney(basePrice)}
+            {overridePrice != null && (
+              <> · <span style={{ color: 'var(--accent)', fontWeight: 700 }}>En esta lista: {fmtMoney(num(overridePrice))}</span></>
+            )}
+          </div>
         </div>
         <input
           type="number" min="0"
@@ -359,6 +365,11 @@ export default function ListasDePreciosPage() {
                         </div>
                       );
                     })}
+                    {detailMatches.length > detailProducts.length && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', padding: 6 }}>
+                        Mostrando {detailProducts.length} de {detailMatches.length} productos. Buscá por nombre o SKU para encontrar el resto.
+                      </div>
+                    )}
                   </div>
                 </>
               )}

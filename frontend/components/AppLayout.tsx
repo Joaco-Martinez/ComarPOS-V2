@@ -25,7 +25,7 @@ interface AppLayoutProps {
 const STORAGE_KEY = 'comarpos-sidebar-collapsed';
 
 export default function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
-  const { user, loading, me } = useAuthStore();
+  const { user, loading, me, loadTenants, switchTenant } = useAuthStore();
   const { features, loaded: featuresLoaded, load: loadFeatures } = usePlanFeaturesStore();
   const router = useRouter();
   const params = useParams<{ tenant?: string }>();
@@ -82,13 +82,27 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
   // Taller Ya, para que quede claro en qué empresa estás parado. Si el slug
   // de la URL no coincide con el tenant real del usuario logueado (URL vieja
   // en favoritos, usuario cambiado, etc.), se corrige la URL sola.
+  // Contador con acceso a varios negocios: si el slug de la URL es de otro
+  // negocio al que puede entrar (link guardado, otra pestaña), se cambia a
+  // ESE negocio en vez de corregir la URL al negocio activo.
   useEffect(() => {
     if (loading || !user || !user.tenantSlug) return;
-    if (params?.tenant && params.tenant !== user.tenantSlug) {
-      const rest = pathname.split('/').slice(2).join('/');
-      router.replace(`/${user.tenantSlug}${rest ? `/${rest}` : ''}`);
+    if (!params?.tenant || params.tenant === user.tenantSlug) return;
+    const rest = pathname.split('/').slice(2).join('/');
+    const fixUrl = () => router.replace(`/${user.tenantSlug}${rest ? `/${rest}` : ''}`);
+    if (user.role !== 'CONTADOR') {
+      fixUrl();
+      return;
     }
-  }, [user, loading, params, pathname, router]);
+    let cancelled = false;
+    loadTenants().then((tenants) => {
+      if (cancelled) return;
+      const target = tenants.find((t) => t.slug === params.tenant);
+      if (!target) return fixUrl();
+      switchTenant(target.tenantId, rest ? `/${rest}` : undefined).catch(fixUrl);
+    });
+    return () => { cancelled = true; };
+  }, [user, loading, params, pathname, router, loadTenants, switchTenant]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -128,7 +142,11 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
       <div
         id="main-content"
         className="flex-1 flex flex-col"
-        style={{ minHeight: '100vh', width: '100%', transition: 'margin-left 0.2s ease, width 0.2s ease' }}
+        // minWidth 0: como flex item, sin esto el ancho minimo es el del
+        // contenido mas ancho (tabla, carrito del POS...) y en pantallas de
+        // 1024/1366px (PCs viejas) la columna se estiraba por encima del
+        // ancho de la ventana y lo de la derecha quedaba cortado sin scroll.
+        style={{ minHeight: '100vh', width: '100%', minWidth: 0, transition: 'margin-left 0.2s ease, width 0.2s ease' }}
       >
         <style>{`
           @media (min-width: 768px) {
@@ -178,7 +196,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
         {/* Page content */}
         <main
           className="animate-fade-opacity"
-          style={{ flex: 1, padding: `${headerHeight + 22}px 20px 22px`, maxWidth: 1440, width: '100%', margin: '0 auto' }}
+          style={{ flex: 1, padding: `${headerHeight + 22}px 20px 22px`, maxWidth: 1440, width: '100%', minWidth: 0, margin: '0 auto' }}
         >
           {moduleBlocked ? (
             <div

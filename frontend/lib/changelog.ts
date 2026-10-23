@@ -14,6 +14,41 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2.7',
+    date: '2026-10-23',
+    title: 'Contador en varios negocios, sacar stock y etiquetas',
+    sections: [
+      {
+        title: 'Nuevo',
+        items: [
+          'Usuario Contador: en Usuarios podés crearle una cuenta a tu contador. Solo ve el reporte Contador y las facturas, no vende y no ocupa un usuario de tu plan.',
+          'Un mismo contador puede trabajar para varios negocios con una sola cuenta: si ya usa ComarPOS, en Usuarios → Contador poné solo su email. Cambia de negocio desde el menú y, al volver a entrar, arranca en el último que usó.',
+          'Cada negocio puede desactivar o quitarle el acceso al contador cuando quiera, sin afectar su cuenta ni sus otros negocios.',
+          'Sacar stock: en Stock → Movimiento elegí "Egreso (sacar stock)" para registrar roturas, vencimientos o consumo interno, con motivo obligatorio.',
+          'Códigos de barra: filtro por proveedor para imprimir de una las etiquetas de lo que te llegó.',
+          'Agente de impresión para PCs con Windows 7 u 8 (link en Configuración → PrintBox).',
+        ],
+      },
+      {
+        title: 'Mejoras',
+        items: [
+          'Etiquetas: el nombre del producto ahora se ve grande y en negrita; el número del código queda chico debajo de las barras.',
+          'Los SKU quedan solo con letras y números (sin guiones ni puntos), porque algunos lectores de códigos leían mal esos caracteres. Se actualizaron los ya cargados y las etiquetas viejas se siguen escaneando bien.',
+          'Compras: además de los productos del proveedor elegido podés agregar cualquier otro producto, el IVA se toma del producto y si pegás "0003-00012345" se separa solo en punto de venta y número.',
+          'Listas de precios: se ve el precio de cada producto en la lista y se avisa cuando hay más productos que los mostrados.',
+          'Reporte Contador: con multi-facturación muestra el dueño de cada comprobante, y para un dueño Monotributo no calcula liquidación de IVA.',
+        ],
+      },
+      {
+        title: 'Correcciones',
+        items: [
+          'POS: si elegías el cliente o la lista de precios después de cargar los productos, se cobraba el precio Minorista. Ahora se recalcula el carrito.',
+          'En pantallas chicas (1024 o 1366 px, típicas de PCs viejas) la parte derecha quedaba cortada, por ejemplo el carrito del POS.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.6',
     date: '2026-10-20',
     title: 'Variantes de producto',

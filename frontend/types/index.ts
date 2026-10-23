@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
+export type Role = 'ADMIN' | 'EMPLEADO' | 'CLIENTE' | 'CONTADOR';
 export type TenantSubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED';
 export type ProductType = 'SIMPLE' | 'COMPUESTO';
 export type SaleUnit = 'UNIT' | 'KG';
@@ -61,6 +61,19 @@ export interface User {
   defaultBusinessLocationId?: string | null;
   defaultBusinessLocation?: { id: string; name: string } | null;
   restrictToDefaultLocation?: boolean;
+  // Contador con cuenta en otro negocio y acceso a este (GET /users): aca
+  // solo se activa/desactiva o se quita su acceso.
+  external?: boolean;
+}
+
+// Negocio al que puede entrar la cuenta (GET /auth/tenants) -- un contador
+// puede tener varios (ver backend services/tenantAccess.service.ts).
+export interface TenantOption {
+  tenantId: string;
+  slug: string;
+  name: string;
+  role: Role;
+  isHome: boolean;
 }
 
 export interface ProductCategory {
@@ -311,6 +324,9 @@ export interface CartItem {
   quantity: number;
   quantityKg?: number;
   manualPrice?: number;
+  // manualPrice vino de la lista de precios elegida (no lo tipeo el
+  // usuario): se recalcula si cambia la lista o el cliente.
+  fromPriceList?: boolean;
   priceType: 'price' | 'wholesalePrice';
 }
 

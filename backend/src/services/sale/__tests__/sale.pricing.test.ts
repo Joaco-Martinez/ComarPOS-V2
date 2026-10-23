@@ -41,6 +41,8 @@ describe("round2", () => {
 
 describe("isDeliverySaleItem", () => {
   it("reconoce el SKU de envio sin importar mayusculas/acentos", () => {
+    expect(isDeliverySaleItem(item({ productSku: "ENVIOFLETE2" }))).toBe(true);
+    // Snapshot de ventas viejas, de antes de que los SKUs quedaran sin guiones.
     expect(isDeliverySaleItem(item({ productSku: "ENVIO-FLETE2" }))).toBe(true);
     expect(isDeliverySaleItem(item({ productSku: "envio-flete2" }))).toBe(true);
   });
@@ -61,7 +63,7 @@ describe("shouldDiscountStock", () => {
   });
 
   it("el item de envio no descuenta stock aunque no sea isService", () => {
-    expect(shouldDiscountStock(item({ productSku: "ENVIO-FLETE2", isService: false }))).toBe(false);
+    expect(shouldDiscountStock(item({ productSku: "ENVIOFLETE2", isService: false }))).toBe(false);
   });
 
   it("un producto marcado sin stock (unlimitedStock) no descuenta stock", () => {

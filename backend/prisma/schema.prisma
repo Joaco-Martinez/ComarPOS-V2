@@ -186,6 +186,7 @@ model Tenant {
   rooms             Room[]
   reservations      Reservation[]
   convertedFromLead SalesLead?
+  userAccesses      UserTenantAccess[]
 }
 
 // === Platform admin (super-admin de SaaS, fuera de cualquier tenant) ===
@@ -340,6 +341,10 @@ model User {
   // seteado. Apagado por defecto: no cambia nada para nadie hasta que un
   // admin lo prenda a mano para un usuario puntual.
   restrictToDefaultLocation  Boolean                   @default(false)
+  // Ultimo negocio en el que estuvo (contador con acceso a varios, ver
+  // UserTenantAccess): el login lo vuelve a dejar ahi si sigue teniendo
+  // acceso. Null = su negocio de base (tenantId).
+  lastActiveTenantId         String?
   accountMovements           AccountMovement[]
   client                     Client?
   remitos                    Remito[]
@@ -360,6 +365,8 @@ model User {
   reservations               Reservation[]
   orders                     Order[]
   orderTransferVerifications Order[]                   @relation("OrderTransferVerifiedBy")
+  tenantAccesses             UserTenantAccess[]        @relation("UserTenantAccessUser")
+  tenantAccessesGranted      UserTenantAccess[]        @relation("UserTenantAccessInvitedBy")
 
   @@unique([email])
   @@index([role])
@@ -2657,4 +2664,29 @@ enum ReservationStatus {
   CHECKED_OUT
   CANCELADA
   NO_SHOW
+}
+
+// Acceso de un usuario a un negocio que NO es el suyo (User.tenantId). Hoy
+// solo para el contador: una misma cuenta (un solo email/password) entra a
+// varios negocios que usan ComarPOS y cambia entre ellos sin cerrar sesion
+// (POST /auth/switch-tenant). El negocio "de base" sigue siendo
+// User.tenantId; esta tabla solo suma los demas. El rol con el que entra a
+// cada negocio sale de aca, no de User.role. Desactivar (isActive=false)
+// corta el acceso en menos de un minuto (ver ACCESS_CACHE_MS en
+// middleware/auth.ts), sin tocar la cuenta.
+model UserTenantAccess {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation("UserTenantAccessUser", fields: [userId], references: [id], onDelete: Cascade)
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role        Role     @default(CONTADOR)
+  isActive    Boolean  @default(true)
+  invitedById String?
+  invitedBy   User?    @relation("UserTenantAccessInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
 }

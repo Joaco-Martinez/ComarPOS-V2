@@ -270,3 +270,71 @@ export async function addStockKg(
 
   return prisma.product.findFirst({ where: { id: productId }, include: stockInclude });
 }
+
+/**
+ * Egreso manual de stock (rotura, vencimiento, consumo interno, robo...).
+ * Antes no habia forma de bajar stock salvo vendiendo o con un conteo
+ * completo. Queda como StockMovement ADJUSTMENT con `fromLocationId` (misma
+ * convencion que la cancelacion de una compra en purchase.service.ts) y el
+ * motivo es obligatorio para que el movimiento sea auditable. Sirve para
+ * productos por unidad y por KG (`quantity` se interpreta segun saleUnit).
+ */
+export async function removeStock(
+  productId: string,
+  businessLocationId: string,
+  quantity: number,
+  userId: string,
+  reason: string
+) {
+  if (!userId) throw new Error("Falta userId en la operación de egreso");
+  if (!businessLocationId) throw new Error("Falta la ubicación de origen");
+  if (!reason || !reason.trim()) throw new Error("Indicá el motivo del egreso");
+
+  const qty = Number(quantity);
+  if (!Number.isFinite(qty) || qty <= 0) throw new Error("Cantidad inválida");
+
+  const product = await requireProduct(productId);
+  if (product.type === ProductType.COMPUESTO) {
+    throw new Error("No se saca stock directo a productos compuestos. Sacá stock de sus componentes");
+  }
+
+  const isKg = product.saleUnit === SaleUnit.KG;
+  if (!isKg && !Number.isInteger(qty)) throw new Error("La cantidad tiene que ser un número entero");
+
+  await requireLocation(businessLocationId, "origen");
+
+  await prisma.$transaction(async (tx) => {
+    // Decremento condicional (no lee-y-escribe) para no dejar stock negativo
+    // si dos operaciones corren a la vez.
+    const updated = await tx.productStock.updateMany({
+      where: isKg
+        ? { productId, businessLocationId, quantityKg: { gte: qty } }
+        : { productId, businessLocationId, quantity: { gte: qty } },
+      data: isKg ? { quantityKg: { decrement: qty } } : { quantity: { decrement: qty } },
+    });
+
+    if (updated.count === 0) {
+      const row = await tx.productStock.findUnique({
+        where: { productId_businessLocationId: { productId, businessLocationId } },
+      });
+      const available = isKg ? row?.quantityKg ?? 0 : row?.quantity ?? 0;
+      throw new Error(`No hay stock suficiente en esa ubicación (disponible: ${available}${isKg ? " kg" : ""})`);
+    }
+
+    await tx.stockMovement.create({
+      data: {
+        productId,
+        userId,
+        type: MovementType.ADJUSTMENT,
+        fromLocationId: businessLocationId,
+        ...(isKg ? { quantityKg: qty } : { quantity: qty }),
+        reason: reason.trim(),
+        tenantId: currentTenantId(),
+      },
+    });
+  }, { timeout: 15000, maxWait: 15000 });
+
+  await alertService.checkProductStock(productId);
+
+  return prisma.product.findFirst({ where: { id: productId }, include: stockInclude });
+}

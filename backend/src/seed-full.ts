@@ -126,33 +126,33 @@ async function main() {
   console.log("\n📦 Creando productos...");
   const prodDefs = [
     // Bebidas
-    { name: "Coca-Cola 1.5L",        sku: "COC-1500", cat: "Bebidas",     price: 1850,  wp: 1450,  cp: 1650, pp: 1100, sl: 48, sd: 120, ms: 24 },
-    { name: "Sprite 1.5L",           sku: "SPR-1500", cat: "Bebidas",     price: 1750,  wp: 1380,  cp: 1570, pp: 1050, sl: 36, sd: 80,  ms: 18 },
-    { name: "Agua Mineral 500ml",     sku: "AGU-500",  cat: "Bebidas",     price: 780,   wp: 600,   cp: 700,  pp: 440,  sl: 72, sd: 200, ms: 36 },
-    { name: "Jugo Cepita Naranja 1L", sku: "CEP-NAR",  cat: "Bebidas",     price: 1350,  wp: 1060,  cp: 1200, pp: 790,  sl: 30, sd: 60,  ms: 12 },
-    { name: "Cerveza Quilmes 1L",     sku: "QUI-1000", cat: "Bebidas",     price: 2100,  wp: 1650,  cp: 1900, pp: 1200, sl: 24, sd: 48,  ms: 12 },
-    { name: "Fanta Naranja 500ml",    sku: "FAN-500",  cat: "Bebidas",     price: 900,   wp: 700,   cp: 810,  pp: 530,  sl: 48, sd: 96,  ms: 24 },
+    { name: "Coca-Cola 1.5L",        sku: "COC1500", cat: "Bebidas",     price: 1850,  wp: 1450,  cp: 1650, pp: 1100, sl: 48, sd: 120, ms: 24 },
+    { name: "Sprite 1.5L",           sku: "SPR1500", cat: "Bebidas",     price: 1750,  wp: 1380,  cp: 1570, pp: 1050, sl: 36, sd: 80,  ms: 18 },
+    { name: "Agua Mineral 500ml",     sku: "AGU500",  cat: "Bebidas",     price: 780,   wp: 600,   cp: 700,  pp: 440,  sl: 72, sd: 200, ms: 36 },
+    { name: "Jugo Cepita Naranja 1L", sku: "CEPNAR",  cat: "Bebidas",     price: 1350,  wp: 1060,  cp: 1200, pp: 790,  sl: 30, sd: 60,  ms: 12 },
+    { name: "Cerveza Quilmes 1L",     sku: "QUI1000", cat: "Bebidas",     price: 2100,  wp: 1650,  cp: 1900, pp: 1200, sl: 24, sd: 48,  ms: 12 },
+    { name: "Fanta Naranja 500ml",    sku: "FAN500",  cat: "Bebidas",     price: 900,   wp: 700,   cp: 810,  pp: 530,  sl: 48, sd: 96,  ms: 24 },
     // Snacks
-    { name: "Papas Fritas Lays 95g",  sku: "LAY-095",  cat: "Snacks",      price: 1200,  wp: 940,   cp: 1080, pp: 700,  sl: 40, sd: 80,  ms: 20 },
-    { name: "Galletas Oreo 118g",     sku: "ORE-118",  cat: "Snacks",      price: 1450,  wp: 1140,  cp: 1300, pp: 850,  sl: 30, sd: 60,  ms: 15 },
-    { name: "Maní con Sal 100g",      sku: "MAN-100",  cat: "Snacks",      price: 850,   wp: 660,   cp: 760,  pp: 490,  sl: 50, sd: 100, ms: 25 },
-    { name: "Alfajor Jorgito",        sku: "ALF-JOR",  cat: "Snacks",      price: 650,   wp: 510,   cp: 590,  pp: 380,  sl: 60, sd: 0,   ms: 30 },
-    { name: "Chocolinas 200g",        sku: "CHO-200",  cat: "Snacks",      price: 1100,  wp: 860,   cp: 990,  pp: 640,  sl: 35, sd: 70,  ms: 18 },
+    { name: "Papas Fritas Lays 95g",  sku: "LAY095",  cat: "Snacks",      price: 1200,  wp: 940,   cp: 1080, pp: 700,  sl: 40, sd: 80,  ms: 20 },
+    { name: "Galletas Oreo 118g",     sku: "ORE118",  cat: "Snacks",      price: 1450,  wp: 1140,  cp: 1300, pp: 850,  sl: 30, sd: 60,  ms: 15 },
+    { name: "Maní con Sal 100g",      sku: "MAN100",  cat: "Snacks",      price: 850,   wp: 660,   cp: 760,  pp: 490,  sl: 50, sd: 100, ms: 25 },
+    { name: "Alfajor Jorgito",        sku: "ALFJOR",  cat: "Snacks",      price: 650,   wp: 510,   cp: 590,  pp: 380,  sl: 60, sd: 0,   ms: 30 },
+    { name: "Chocolinas 200g",        sku: "CHO200",  cat: "Snacks",      price: 1100,  wp: 860,   cp: 990,  pp: 640,  sl: 35, sd: 70,  ms: 18 },
     // Lácteos
-    { name: "Leche Entera SanCor 1L", sku: "SAN-1000", cat: "Lácteos",    price: 1400,  wp: 1100,  cp: 1260, pp: 820,  sl: 40, sd: 80,  ms: 20 },
-    { name: "Yogur Ser Natural 190g", sku: "SER-190",  cat: "Lácteos",    price: 780,   wp: 610,   cp: 700,  pp: 450,  sl: 28, sd: 0,   ms: 14 },
-    { name: "Queso Cremoso La Serenísima 200g", sku: "SER-QCR", cat: "Lácteos", price: 2800, wp: 2200, cp: 2520, pp: 1650, sl: 15, sd: 30, ms: 8 },
-    { name: "Manteca La Serenísima 200g", sku: "SER-MAN", cat: "Lácteos", price: 2400,  wp: 1880,  cp: 2160, pp: 1400, sl: 20, sd: 40,  ms: 10 },
+    { name: "Leche Entera SanCor 1L", sku: "SAN1000", cat: "Lácteos",    price: 1400,  wp: 1100,  cp: 1260, pp: 820,  sl: 40, sd: 80,  ms: 20 },
+    { name: "Yogur Ser Natural 190g", sku: "SER190",  cat: "Lácteos",    price: 780,   wp: 610,   cp: 700,  pp: 450,  sl: 28, sd: 0,   ms: 14 },
+    { name: "Queso Cremoso La Serenísima 200g", sku: "SERQCR", cat: "Lácteos", price: 2800, wp: 2200, cp: 2520, pp: 1650, sl: 15, sd: 30, ms: 8 },
+    { name: "Manteca La Serenísima 200g", sku: "SERMAN", cat: "Lácteos", price: 2400,  wp: 1880,  cp: 2160, pp: 1400, sl: 20, sd: 40,  ms: 10 },
     // Panificados
-    { name: "Pan de Molde Bimbo 500g", sku: "BIM-500", cat: "Panificados", price: 1650,  wp: 1300,  cp: 1490, pp: 960,  sl: 22, sd: 0,   ms: 11 },
-    { name: "Galletitas Surtidas 250g", sku: "GAL-250", cat: "Panificados", price: 1050, wp: 820,   cp: 945,  pp: 610,  sl: 30, sd: 60,  ms: 15 },
+    { name: "Pan de Molde Bimbo 500g", sku: "BIM500", cat: "Panificados", price: 1650,  wp: 1300,  cp: 1490, pp: 960,  sl: 22, sd: 0,   ms: 11 },
+    { name: "Galletitas Surtidas 250g", sku: "GAL250", cat: "Panificados", price: 1050, wp: 820,   cp: 945,  pp: 610,  sl: 30, sd: 60,  ms: 15 },
     // Limpieza
-    { name: "Detergente Magistral 1L", sku: "MAG-1000", cat: "Limpieza",   price: 1800,  wp: 1410,  cp: 1620, pp: 1050, sl: 25, sd: 50,  ms: 12 },
-    { name: "Lavandina Ayudín 1L",    sku: "AYU-1000", cat: "Limpieza",   price: 1100,  wp: 860,   cp: 990,  pp: 640,  sl: 30, sd: 60,  ms: 15 },
-    { name: "Jabón líquido Dove 220ml", sku: "DOV-220", cat: "Limpieza",   price: 2200,  wp: 1730,  cp: 1980, pp: 1290, sl: 20, sd: 40,  ms: 10 },
+    { name: "Detergente Magistral 1L", sku: "MAG1000", cat: "Limpieza",   price: 1800,  wp: 1410,  cp: 1620, pp: 1050, sl: 25, sd: 50,  ms: 12 },
+    { name: "Lavandina Ayudín 1L",    sku: "AYU1000", cat: "Limpieza",   price: 1100,  wp: 860,   cp: 990,  pp: 640,  sl: 30, sd: 60,  ms: 15 },
+    { name: "Jabón líquido Dove 220ml", sku: "DOV220", cat: "Limpieza",   price: 2200,  wp: 1730,  cp: 1980, pp: 1290, sl: 20, sd: 40,  ms: 10 },
     // Ferretería
-    { name: "Tornillos 6x50mm (x50)", sku: "TOR-050",  cat: "Ferretería", price: 1500,  wp: 1170,  cp: 1350, pp: 870,  sl: 18, sd: 50,  ms: 9 },
-    { name: "Pegamento Bostik 17g",   sku: "BOS-017",  cat: "Ferretería", price: 750,   wp: 590,   cp: 680,  pp: 440,  sl: 25, sd: 30,  ms: 12 },
+    { name: "Tornillos 6x50mm (x50)", sku: "TOR050",  cat: "Ferretería", price: 1500,  wp: 1170,  cp: 1350, pp: 870,  sl: 18, sd: 50,  ms: 9 },
+    { name: "Pegamento Bostik 17g",   sku: "BOS017",  cat: "Ferretería", price: 750,   wp: 590,   cp: 680,  pp: 440,  sl: 25, sd: 30,  ms: 12 },
   ];
 
   const products: Record<string, string> = {}; // sku → id
@@ -287,25 +287,25 @@ async function main() {
   console.log("\n🛒 Creando compras...");
   const compraDefs = [
     { daysBack: 85, supplier: prov1.id, provName: "Distribuidora Norte S.A.", amount: 185000, items: [
-      { sku: "COC-1500", qty: 48, price: 1100 }, { sku: "SPR-1500", qty: 24, price: 1050 },
-      { sku: "AGU-500",  qty: 96, price: 440 },  { sku: "CEP-NAR",  qty: 24, price: 790 },
+      { sku: "COC1500", qty: 48, price: 1100 }, { sku: "SPR1500", qty: 24, price: 1050 },
+      { sku: "AGU500",  qty: 96, price: 440 },  { sku: "CEPNAR",  qty: 24, price: 790 },
     ]},
     { daysBack: 60, supplier: prov2.id, provName: "Mayorista del Oeste", amount: 220000, items: [
-      { sku: "LAY-095",  qty: 60, price: 700 },  { sku: "ORE-118",  qty: 48, price: 850 },
-      { sku: "ALF-JOR",  qty: 96, price: 380 },  { sku: "CHO-200",  qty: 36, price: 640 },
-      { sku: "MAN-100",  qty: 48, price: 490 },
+      { sku: "LAY095",  qty: 60, price: 700 },  { sku: "ORE118",  qty: 48, price: 850 },
+      { sku: "ALFJOR",  qty: 96, price: 380 },  { sku: "CHO200",  qty: 36, price: 640 },
+      { sku: "MAN100",  qty: 48, price: 490 },
     ]},
     { daysBack: 40, supplier: prov1.id, provName: "Distribuidora Norte S.A.", amount: 160000, items: [
-      { sku: "SAN-1000", qty: 48, price: 820 },  { sku: "SER-190",  qty: 36, price: 450 },
-      { sku: "SER-QCR",  qty: 24, price: 1650 }, { sku: "SER-MAN",  qty: 24, price: 1400 },
+      { sku: "SAN1000", qty: 48, price: 820 },  { sku: "SER190",  qty: 36, price: 450 },
+      { sku: "SERQCR",  qty: 24, price: 1650 }, { sku: "SERMAN",  qty: 24, price: 1400 },
     ]},
     { daysBack: 20, supplier: prov2.id, provName: "Mayorista del Oeste", amount: 130000, items: [
-      { sku: "MAG-1000", qty: 30, price: 1050 }, { sku: "AYU-1000", qty: 36, price: 640 },
-      { sku: "DOV-220",  qty: 24, price: 1290 }, { sku: "BIM-500",  qty: 24, price: 960 },
+      { sku: "MAG1000", qty: 30, price: 1050 }, { sku: "AYU1000", qty: 36, price: 640 },
+      { sku: "DOV220",  qty: 24, price: 1290 }, { sku: "BIM500",  qty: 24, price: 960 },
     ]},
     { daysBack: 5, supplier: prov1.id, provName: "Distribuidora Norte S.A.", amount: 95000, items: [
-      { sku: "COC-1500", qty: 36, price: 1100 }, { sku: "QUI-1000", qty: 24, price: 1200 },
-      { sku: "FAN-500",  qty: 48, price: 530 },  { sku: "AGU-500",  qty: 72, price: 440 },
+      { sku: "COC1500", qty: 36, price: 1100 }, { sku: "QUI1000", qty: 24, price: 1200 },
+      { sku: "FAN500",  qty: 48, price: 530 },  { sku: "AGU500",  qty: 72, price: 440 },
     ]},
   ];
 

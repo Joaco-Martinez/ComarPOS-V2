@@ -3,7 +3,7 @@ import { SaleStatus, PaymentMethod, ReturnItemDirection, CategoryFinance, Financ
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { updateStatus } from "./sale/sale.lifecycle";
-import { round2, resolveSaleItems, saleItemToResolved, normalizeText } from "./sale/sale.pricing";
+import { round2, resolveSaleItems, saleItemToResolved, isDeliverySku } from "./sale/sale.pricing";
 import {
   buildStockLines,
   requireStockLocationId,
@@ -13,11 +13,10 @@ import {
   queueStockAlerts,
 } from "./sale/sale.stock";
 import { accountService } from "./account.service";
-import { DELIVERY_SKU } from "./sale/sale.types";
 import type { ClientMini, ResolvedSaleItem } from "./sale/sale.types";
 
 function isDeliveryLine(saleItem: any) {
-  return normalizeText(saleItem.product?.sku ?? saleItem.productSkuSnapshot) === DELIVERY_SKU;
+  return isDeliverySku(saleItem.product?.sku ?? saleItem.productSkuSnapshot);
 }
 
 const RETURN_INCLUDE = {

@@ -8,7 +8,7 @@ import api from '@/lib/api';
 import VariantQuantityModal, { type VariantQuantityLine } from '@/components/products/VariantQuantityModal';
 import { matchesSearch } from '@/lib/variants';
 import toast from 'react-hot-toast';
-import { fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
+import { fmtDate, fmtMoney, normalizeArray, num, skuKey } from '@/lib/helpers';
 import { todayInputAR } from '@/lib/dateAR';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import { ClipboardList, Truck, Package, Plus, X, Eye, CheckCircle, Trash2, RefreshCcw, Search, ScanBarcode, AlertTriangle, Download, ChevronDown, ChevronUp } from 'lucide-react';
@@ -246,7 +246,7 @@ export default function OrdenesCompraPage() {
 
     // El SKU de una variante la elige directo (no al padre).
     const leaves = supplierProducts.flatMap((p: any) => (p.hasVariants ? p.variants ?? [] : [p]));
-    const product = leaves.find((p: any) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
+    const product = leaves.find((p: any) => p.sku && skuKey(p.sku) === skuKey(sku));
 
     if (!product) {
       scannerHandledRef.current = false;

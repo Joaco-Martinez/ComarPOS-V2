@@ -55,6 +55,13 @@ api.interceptors.response.use(
     // empleados/admin) - un 401 ahí NUNCA debe mandar a /login, que es la
     // pantalla de acceso interna del sistema.
     const isStorefront = typeof window !== 'undefined' && window.location.pathname.startsWith('/tienda/');
+    // Contador al que le sacaron el acceso al negocio en el que estaba: en
+    // vez de mandarlo al login, se lo vuelve a su negocio de base.
+    if (error.response?.status === 401 && error.response?.data?.code === 'TENANT_ACCESS_REVOKED' && typeof window !== 'undefined') {
+      void returnToHomeTenant();
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !isMeCheck && !isStorefront && typeof window !== 'undefined') {
       const isPlatform = window.location.pathname.startsWith('/platform-admin');
       const loginPath = isPlatform ? '/platform-admin/login' : '/login';
@@ -76,5 +83,22 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+let returningHome = false;
+async function returnToHomeTenant() {
+  if (returningHome) return;
+  returningHome = true;
+  try {
+    const { data } = await api.get('/auth/tenants');
+    const home = (data.content ?? data ?? []).find((t: { isHome: boolean }) => t.isHome);
+    if (!home) throw new Error('sin negocio de base');
+    const { data: switched } = await api.post('/auth/switch-tenant', { tenantId: home.tenantId });
+    const user = switched.content ?? switched;
+    window.alert('Ya no tenés acceso a ese negocio. Volvés a tu negocio.');
+    window.location.href = `/${user.tenantSlug}${user.role === 'CONTADOR' ? '/contador' : '/dashboard'}`;
+  } catch {
+    window.location.href = '/login';
+  }
+}
 
 export default api;

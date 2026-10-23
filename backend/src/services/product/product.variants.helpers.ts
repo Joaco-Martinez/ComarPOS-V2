@@ -166,7 +166,7 @@ export function abbreviateValue(value: string) {
   return normalized.length <= 4 ? normalized : normalized.slice(0, 3);
 }
 
-/** "<SKU padre>-<valores abreviados>", ej. REM-M-ROJ. null si el padre no tiene SKU. */
+/** "<SKU padre><valores abreviados>", ej. REMMROJ. null si el padre no tiene SKU. */
 export function buildVariantSku(
   parentSku: string | null | undefined,
   attributes: VariantAttributes,
@@ -179,13 +179,15 @@ export function buildVariantSku(
     .map((o) => attributes[o.name])
     .filter((v) => v !== undefined && v !== null && String(v).trim() !== "")
     .map((v) => abbreviateValue(String(v)))
-    .join("-");
+    .join("");
 
-  return suffix ? `${base}-${suffix}` : base;
+  // Sin separadores: el SKU queda solo con letras y numeros (ver
+  // normalizeSku en product.helpers.ts).
+  return suffix ? `${base}${suffix}` : base;
 }
 
 /**
- * Si el SKU candidato ya esta tomado, le agrega -2, -3... hasta encontrar
+ * Si el SKU candidato ya esta tomado, le agrega 2, 3... hasta encontrar
  * uno libre. `taken` se actualiza con el elegido (para generar varios en
  * la misma operacion sin chocar entre si).
  */
@@ -194,7 +196,7 @@ export function uniqueSku(candidate: string, taken: Set<string>) {
   let n = 2;
 
   while (taken.has(sku.toUpperCase())) {
-    sku = `${candidate}-${n}`;
+    sku = `${candidate}${n}`;
     n += 1;
   }
 
