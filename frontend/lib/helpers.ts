@@ -12,6 +12,19 @@ export const CLIENT_IVA_CONDITIONS = [
   { label: 'IVA No Responsable',        value: 'IVA NO RESPONSABLE' },
 ] as const;
 
+// Clave para comparar SKUs: solo letras y numeros, sin importar mayusculas
+// ni acentos. Los SKUs se guardan asi (ver normalizeSku en el backend), pero
+// una etiqueta impresa antes del cambio puede traer guiones ("ABC-123") y
+// tiene que seguir encontrando el producto al escanearla.
+export const skuKey = (v?: string | null): string =>
+  String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+
+// Lo que se puede tipear/escanear en un SKU: solo letras y numeros (mismo
+// criterio que normalizeSku en el backend), asi lo que se ve en el campo es
+// lo que se guarda.
+export const cleanSku = (v: string): string =>
+  v.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]/g, '');
+
 export const fmtMoney = (n: number | unknown) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
     .format(Number.isFinite(Number(n)) ? Number(n) : 0);

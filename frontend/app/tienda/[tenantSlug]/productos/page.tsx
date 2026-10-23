@@ -2,6 +2,8 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
+import { skuKey } from '@/lib/helpers';
+
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
@@ -61,7 +63,7 @@ export default function TiendaProductosPage() {
   const handleAdd = (p: StoreProduct) => {
     if (p.hasVariants) {
       // Si se buscó/escaneó el SKU exacto de una variante, se agrega directo.
-      const exact = p.variants?.find((v) => v.sku && v.sku.toLowerCase() === search.trim().toLowerCase());
+      const exact = p.variants?.find((v) => v.sku && skuKey(v.sku) === skuKey(search));
       if (exact?.canSell) { handleAddVariant(p, exact); return; }
       setChoosing(p);
       return;

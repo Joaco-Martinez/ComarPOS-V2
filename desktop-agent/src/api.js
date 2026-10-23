@@ -1,5 +1,10 @@
 const { signRequest, nowTimestamp } = require('./hmac');
 
+// El build para Windows 7 corre sobre Electron 22 (Node 16), que no trae
+// `fetch` global en el proceso principal -- ahi se usa node-fetch. En el
+// build normal (Electron 33, Node 20) se usa el fetch nativo.
+const fetch = globalThis.fetch || require('node-fetch');
+
 // Mismo contrato que backend/src/controllers/printbox.controller.ts /
 // backend/src/routes/printbox.routes.ts -- este agente es, a ojos del
 // backend, un PrintboxDevice mas (kind DESKTOP_AGENT), asi que reusa

@@ -6,6 +6,7 @@ import { currentTenantId } from "../context/tenantContext";
 import { startOfDayAR, endOfDayAR } from "../utils/dateAR";
 import { planLimitsService } from "./planLimits.service";
 import { AppError } from "../utils/asyncHandler";
+import { invalidateTenantAccess } from "./tenantAccess.service";
 
 type ClientCategory = "Price" | "Cliente" | "Mayorista";
 
@@ -196,6 +197,93 @@ const userSelect = {
   defaultBusinessLocation: { select: { id: true, name: true } },
 };
 
+// Contador con cuenta en otro negocio y acceso a este (UserTenantAccess):
+// se lista junto con los usuarios propios, con `external: true`. Este
+// negocio solo puede activar/desactivar o quitar ese acceso -- la cuenta
+// (email, contraseña, nombre) es del negocio donde se creo.
+function externalAccessToUser(access: {
+  isActive: boolean;
+  role: Role;
+  createdAt: Date;
+  updatedAt: Date;
+  user: { id: string; email: string; name: string };
+}) {
+  return {
+    id: access.user.id,
+    email: access.user.email,
+    name: access.user.name,
+    role: access.role,
+    isActive: access.isActive,
+    createdAt: access.createdAt,
+    updatedAt: access.updatedAt,
+    client: null,
+    defaultBusinessLocationId: null,
+    restrictToDefaultLocation: false,
+    defaultBusinessLocation: null,
+    external: true,
+  };
+}
+
+async function findExternalAccess(userId: string) {
+  const tenantId = currentTenantId();
+  if (!tenantId) return null;
+  return prisma.userTenantAccess.findUnique({
+    where: { userId_tenantId: { userId, tenantId } },
+    include: { user: { select: { id: true, email: true, name: true } } },
+  });
+}
+
+/**
+ * Un contador cuya cuenta es de ESTE negocio pero que ademas tiene acceso a
+ * otros: borrarlo o desactivarlo aca no puede llevarse puestos los demas
+ * negocios (la cuenta es una sola). En vez de tocar la cuenta, se la pasa
+ * a otro de sus negocios (el acceso mas viejo pasa a ser su negocio de
+ * base) y en este queda solo un acceso -- desactivado si se lo desactivo,
+ * o nada si se lo borro. Devuelve null si no tiene otros negocios (sigue
+ * el camino normal).
+ */
+async function detachMultiTenantContador(
+  user: { id: string; role: Role; tenantId: string | null },
+  mode: "delete" | "deactivate"
+) {
+  if (user.role !== Role.CONTADOR || !user.tenantId) return null;
+
+  const next = await prisma.userTenantAccess.findFirst({
+    where: { userId: user.id, isActive: true, tenantId: { not: user.tenantId }, tenant: { isActive: true } },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!next) return null;
+
+  const oldTenantId = user.tenantId;
+  const [, , , remaining] = await prisma.$transaction([
+    prisma.userTenantAccess.delete({ where: { id: next.id } }),
+    prisma.user.update({
+      where: { id: user.id },
+      data: {
+        tenantId: next.tenantId,
+        role: next.role,
+        // La sucursal de base era de este negocio, no aplica en el nuevo.
+        defaultBusinessLocationId: null,
+        restrictToDefaultLocation: false,
+        lastActiveTenantId: null,
+      },
+    }),
+    mode === "deactivate"
+      ? prisma.userTenantAccess.create({
+          data: { userId: user.id, tenantId: oldTenantId, role: user.role, isActive: false },
+        })
+      : prisma.userTenantAccess.deleteMany({ where: { userId: user.id, tenantId: oldTenantId } }),
+    prisma.userTenantAccess.findUnique({
+      where: { userId_tenantId: { userId: user.id, tenantId: oldTenantId } },
+      include: { user: { select: { id: true, email: true, name: true } } },
+    }),
+  ]);
+
+  invalidateTenantAccess(user.id, oldTenantId);
+  invalidateTenantAccess(user.id, next.tenantId);
+  return remaining ? externalAccessToUser(remaining) : { id: user.id, external: true };
+}
+
 /** Valida que la sucursal exista y pertenezca al tenant actual. Tira si no. */
 async function requireLocationOrNull(businessLocationId: string | null | undefined) {
   if (businessLocationId === undefined) return undefined;
@@ -212,11 +300,23 @@ async function requireLocationOrNull(businessLocationId: string | null | undefin
 
 export const userService = {
   async getAll() {
-    return prisma.user.findMany({
-      where: { role: { not: Role.CLIENTE }, ...tenantScope() },
-      orderBy: { createdAt: "desc" },
-      select: userSelect,
-    });
+    const tenantId = currentTenantId();
+    const [own, accesses] = await Promise.all([
+      prisma.user.findMany({
+        where: { role: { not: Role.CLIENTE }, ...tenantScope() },
+        orderBy: { createdAt: "desc" },
+        select: userSelect,
+      }),
+      tenantId
+        ? prisma.userTenantAccess.findMany({
+            where: { tenantId },
+            orderBy: { createdAt: "desc" },
+            include: { user: { select: { id: true, email: true, name: true } } },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    return [...own, ...accesses.map(externalAccessToUser)];
   },
 
   async getById(id: string) {
@@ -462,23 +562,43 @@ export const userService = {
     category?: ClientCategory;
     creditLimit?: number | null;
     isAccountEnabled?: boolean;
-  }) {
+  }, invitedById?: string | null) {
     const email = cleanEmail(data.email);
     const password = String(data.password || "");
     const role = normalizeRole(String(data.role || ""));
     const name = String(data.name || "").trim();
 
     if (!email) throw new Error("El email es obligatorio");
-    if (!name) throw new Error("El nombre es obligatorio");
-    if (!password || password.length < 6) {
-      throw new Error("La contraseña debe tener al menos 6 caracteres");
-    }
 
     // email es unico globalmente (migracion user_email_globally_unique), no
     // por tenant - mismo motivo que en auth.service.ts register().
     const existing = await prisma.user.findUnique({ where: { email } });
 
+    // Contador que ya tiene cuenta en otro negocio: en vez de rechazar el
+    // email, se le da acceso a este negocio con su misma cuenta (entra con
+    // su contraseña de siempre y cambia de negocio desde el menu). No hace
+    // falta nombre ni contraseña: la cuenta es suya.
+    if (existing && role === Role.CONTADOR && existing.role === Role.CONTADOR && existing.tenantId !== currentTenantId()) {
+      const tenantId = currentTenantId();
+      if (!tenantId) throw new Error("Ya existe un usuario con ese email");
+
+      const access = await prisma.userTenantAccess.upsert({
+        where: { userId_tenantId: { userId: existing.id, tenantId } },
+        update: { isActive: true, role: Role.CONTADOR },
+        create: { userId: existing.id, tenantId, role: Role.CONTADOR, invitedById: invitedById ?? null },
+        include: { user: { select: { id: true, email: true, name: true } } },
+      });
+      invalidateTenantAccess(existing.id, tenantId);
+
+      return { ...externalAccessToUser(access), accessGranted: true };
+    }
+
     if (existing) throw new Error("Ya existe un usuario con ese email");
+
+    if (!name) throw new Error("El nombre es obligatorio");
+    if (!password || password.length < 6) {
+      throw new Error("La contraseña debe tener al menos 6 caracteres");
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -596,7 +716,42 @@ export const userService = {
       select: { id: true, defaultBusinessLocationId: true, role: true },
     });
 
-    if (!existing) throw new Error("Usuario no encontrado");
+    if (!existing) {
+      // Contador de otro negocio: aca solo se activa/desactiva su acceso.
+      const access = await findExternalAccess(id);
+      if (!access) throw new Error("Usuario no encontrado");
+
+      // Se toleran los mismos valores que ya tiene (el form de edicion manda
+      // todo junto); cualquier cambio real a la cuenta se rechaza.
+      const touchesAccount =
+        cleanData.password !== undefined ||
+        (cleanData.email !== undefined && cleanData.email !== access.user.email) ||
+        (cleanData.name !== undefined && cleanData.name !== access.user.name) ||
+        (cleanData.role !== undefined && cleanData.role !== access.role) ||
+        Boolean(data.defaultBusinessLocationId) ||
+        data.restrictToDefaultLocation === true;
+      if (touchesAccount) {
+        throw new Error("Este contador tiene su cuenta en otro negocio: acá solo podés activar o desactivar su acceso");
+      }
+
+      const updated = await prisma.userTenantAccess.update({
+        where: { id: access.id },
+        data: { ...(data.isActive !== undefined ? { isActive: data.isActive } : {}) },
+        include: { user: { select: { id: true, email: true, name: true } } },
+      });
+      invalidateTenantAccess(id, updated.tenantId);
+      return externalAccessToUser(updated);
+    }
+
+    // Desactivar a un contador que tambien trabaja para otros negocios: se le
+    // corta solo este negocio (ver detachMultiTenantContador).
+    if (cleanData.isActive === false && Object.keys(cleanData).length === 1) {
+      const full = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true, tenantId: true, isActive: true } });
+      if (full && full.isActive) {
+        const detached = await detachMultiTenantContador(full, "deactivate");
+        if (detached) return detached;
+      }
+    }
 
     // Pasar un contador a ADMIN/EMPLEADO si ocupa lugar del plan.
     const countsForPlan = (r: Role) => r === Role.ADMIN || r === Role.EMPLEADO;
@@ -633,7 +788,20 @@ export const userService = {
       include: { client: true },
     });
 
-    if (!user) throw new Error("Usuario no encontrado");
+    if (!user) {
+      // Contador de otro negocio: se le quita el acceso a este, la cuenta
+      // sigue existiendo (es del negocio donde se creo).
+      const access = await findExternalAccess(id);
+      if (!access) throw new Error("Usuario no encontrado");
+      await prisma.userTenantAccess.delete({ where: { id: access.id } });
+      invalidateTenantAccess(id, access.tenantId);
+      return { id, external: true };
+    }
+
+    // Contador que tambien trabaja para otros negocios: se le quita este
+    // negocio, la cuenta sigue (ver detachMultiTenantContador).
+    const detached = await detachMultiTenantContador(user, "delete");
+    if (detached) return detached;
 
     if (user.role === Role.ADMIN) {
       const adminCount = await prisma.user.count({

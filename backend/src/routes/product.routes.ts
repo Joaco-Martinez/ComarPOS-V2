@@ -26,6 +26,14 @@ router.post(
   productController.addStockKg
 );
 
+// Egreso manual (rotura, vencimiento, consumo interno...) - UNIT y KG
+router.post(
+  "/:id/remove-stock",
+  authMiddleware,
+  requireRole("ADMIN"),
+  productController.removeStock
+);
+
 // Umbral de alerta de stock bajo, por ubicación
 router.put(
   "/:id/stock-min/:businessLocationId",

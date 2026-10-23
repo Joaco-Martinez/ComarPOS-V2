@@ -6,7 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { Product, Sale, SalePayment } from '@/types';
-import { clientName, fmtDate, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
+import { clientName, fmtDate, fmtMoney, normalizeArray, num, productPrice, skuKey } from '@/lib/helpers';
 import { todayInputAR, firstDayOfMonthAR } from '@/lib/dateAR';
 import VariantPicker from '@/components/products/VariantPicker';
 import { groupByParent } from '@/lib/variants';
@@ -386,7 +386,7 @@ export default function VentasPage() {
     // Las variantes se agrupan por producto; un SKU exacto de variante la
     // ofrece sola para agregarla directo.
     if (!q) return groupByParent(products).slice(0, 30);
-    const exact = products.filter((p) => p.sku && p.sku.trim().toLowerCase() === q);
+    const exact = products.filter((p) => p.sku && skuKey(p.sku) === skuKey(q));
     if (exact.length) return exact;
     return groupByParent(products.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q))).slice(0, 30);
   }, [products, productSearch]);

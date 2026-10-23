@@ -119,7 +119,10 @@ export function proxy(req: NextRequest) {
 
   const role = getRole(req);
   const isLogged = Boolean(role);
-  const isStaff = role === 'ADMIN' || role === 'EMPLEADO';
+  // CONTADOR tambien entra al panel (solo ve Contador/Facturacion/Ayuda, ver
+  // navForRole en lib/navConfig.ts) -- sin esto el proxy lo devolvia a
+  // /login apenas se logueaba.
+  const isStaff = role === 'ADMIN' || role === 'EMPLEADO' || role === 'CONTADOR';
   // /app es el entry point de la PWA (ver manifest.webmanifest): tiene que
   // tratarse igual que /login (público, sin redirect server-side) para que
   // la URL nunca cambie a /login en el momento de instalar el ícono - ver

@@ -6,7 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { BusinessLocation, Client, PriceList, Product, Sale } from '@/types';
-import { clientName, fmtDate, fmtMoney, normalizeArray, num } from '@/lib/helpers';
+import { clientName, fmtDate, fmtMoney, normalizeArray, num, skuKey } from '@/lib/helpers';
 import { FileText, Plus, Trash2, Search, Download, RefreshCcw, X } from 'lucide-react';
 import VariantPicker from '@/components/products/VariantPicker';
 import { groupByParent } from '@/lib/variants';
@@ -131,7 +131,7 @@ export default function CotizacionesPage() {
     const q = search.trim().toLowerCase();
     // Si el SKU coincide exacto con una variante, se ofrece esa sola (no el
     // grupo) para agregarla directo.
-    const exact = products.filter((p) => p.sku && p.sku.trim().toLowerCase() === q);
+    const exact = products.filter((p) => p.sku && skuKey(p.sku) === skuKey(q));
     if (exact.length) return exact;
     return groupByParent(products.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)))
       .slice(0, 15);

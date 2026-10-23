@@ -90,7 +90,7 @@ export const userController = {
         isAccountEnabled: toBoolean(req.body.isAccountEnabled),
         isActive: toBoolean(req.body.isActive),
         restrictToDefaultLocation: toBoolean(req.body.restrictToDefaultLocation),
-      });
+      }, (req as any).user?.id);
       logAudit(req, "CREATE", "User", newUser.id, { email: newUser.email, role: newUser.role });
       res.status(201).json(safeJson(newUser));
     } catch (err) {

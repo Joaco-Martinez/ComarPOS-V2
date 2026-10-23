@@ -136,7 +136,7 @@ export default function ComprasPage() {
       setVariantQueue((q) => [...q, { parent: p, rowIndex: i }]);
       return;
     }
-    setItems((prev) => { const n = [...prev]; n[i] = { ...n[i], productId, unitCost: p ? String(p.purchasePrice ?? 0) : '' }; return n; });
+    setItems((prev) => { const n = [...prev]; n[i] = { ...n[i], productId, unitCost: p ? String(p.purchasePrice ?? 0) : '', ivaRate: p ? String(p.ivaRate ?? 21) : n[i].ivaRate }; return n; });
   };
 
   const selectSupplier = (supplierId: string) => {
@@ -155,6 +155,25 @@ export default function ComprasPage() {
     () => (form.supplierId ? products.filter((p) => p.supplierId === form.supplierId) : products),
     [products, form.supplierId]
   );
+  // El resto del catalogo sigue disponible en el selector de cada fila (en
+  // un grupo aparte): si el producto no tiene proveedor cargado, o es la
+  // primera vez que se le compra a este, antes no habia forma de agregarlo
+  // a la factura y un proveedor sin productos asignados dejaba la lista vacia.
+  const otherProducts = useMemo(
+    () => (form.supplierId ? products.filter((p) => p.supplierId !== form.supplierId) : []),
+    [products, form.supplierId]
+  );
+
+  // "0003-00012456" pegado en el numero: se separa en punto de venta y numero.
+  const setInvoiceNumber = (raw: string) => {
+    const m = raw.trim().match(/^(\d{1,5})\s*-\s*(\d{1,8})$/);
+    if (m) {
+      setForm((p) => ({ ...p, invoiceNumber: m[2] }));
+      setFiscalForm((p) => ({ ...p, invoicePointOfSale: String(Number(m[1])) }));
+      return;
+    }
+    setForm((p) => ({ ...p, invoiceNumber: raw }));
+  };
 
   const togglePicked = (productId: string) => setPickedIds((prev) => {
     const next = new Set(prev);
@@ -375,7 +394,7 @@ export default function ComprasPage() {
               <div className="form-row">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Número de comprobante</label>
-                  <input value={form.invoiceNumber} onChange={(e) => setForm((p) => ({ ...p, invoiceNumber: e.target.value }))} placeholder="00000001" />
+                  <input value={form.invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="00000001 o 0003-00000001" />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">CUIT del proveedor</label>
@@ -434,7 +453,7 @@ export default function ComprasPage() {
               )}
 
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>
-                Productos {form.supplierId ? '(solo los de este proveedor)' : ''}
+                Productos {form.supplierId ? '(primero los de este proveedor)' : ''}
               </div>
               <div className="line-item-scroll">
                 {items.map((item, idx) => {
@@ -446,7 +465,18 @@ export default function ComprasPage() {
                         <select value={item.productId} onChange={(e) => selectItemProduct(idx, e.target.value)}>
                           <option value="">Seleccionar...</option>
                           {prod?.parentId && <option value={prod.id}>{prod.name}</option>}
-                          {supplierProducts.map((p) => <option key={p.id} value={p.id}>{p.hasVariants ? `${p.name} (elegir variantes…)` : p.name}</option>)}
+                          {form.supplierId ? (
+                            <>
+                              <optgroup label="De este proveedor">
+                                {supplierProducts.map((p) => <option key={p.id} value={p.id}>{p.hasVariants ? `${p.name} (elegir variantes…)` : p.name}</option>)}
+                              </optgroup>
+                              <optgroup label="Otros productos">
+                                {otherProducts.map((p) => <option key={p.id} value={p.id}>{p.hasVariants ? `${p.name} (elegir variantes…)` : p.name}</option>)}
+                              </optgroup>
+                            </>
+                          ) : (
+                            supplierProducts.map((p) => <option key={p.id} value={p.id}>{p.hasVariants ? `${p.name} (elegir variantes…)` : p.name}</option>)
+                          )}
                         </select>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
@@ -455,7 +485,7 @@ export default function ComprasPage() {
                           onChange={(e) => updateItem(idx, prod?.saleUnit === 'KG' ? 'quantityKg' : 'quantity', e.target.value)} />
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Costo unitario</label>
+                        <label className="form-label" title="Lo que figura en la factura por unidad, con IVA incluido">Costo unit. (IVA incl.)</label>
                         <input type="number" min="0" step="any" value={item.unitCost} onChange={(e) => updateItem(idx, 'unitCost', e.target.value)} />
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>

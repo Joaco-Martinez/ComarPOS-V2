@@ -22,7 +22,7 @@ const SCROLL_KEY = 'comarpos-sidebar-scroll';
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const params = useParams<{ tenant?: string }>();
-  const { user, logout } = useAuthStore();
+  const { user, logout, tenants, loadTenants, switchTenant } = useAuthStore();
   const { features } = usePlanFeaturesStore();
   const navRef = useRef<HTMLElement>(null);
   const tenantSlug = params?.tenant || user?.tenantSlug || '';
@@ -31,6 +31,13 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(STORAGE_KEY) === 'true';
   });
+
+  // Contador con acceso a varios negocios: el recuadro con el nombre del
+  // negocio pasa a ser un selector para cambiar de uno a otro.
+  useEffect(() => {
+    if (user?.role === 'CONTADOR') loadTenants();
+  }, [user?.role, loadTenants]);
+  const canSwitchTenant = user?.role === 'CONTADOR' && tenants.length > 1;
 
   useEffect(() => {
     if (navRef.current) {
@@ -134,7 +141,24 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           )}
         </div>
 
-        {!collapsed && (user?.tenantName || tenantSlug) && (
+        {!collapsed && canSwitchTenant && (
+          <select
+            value={user?.tenantId ?? ''}
+            onChange={(e) => {
+              if (e.target.value && e.target.value !== user?.tenantId) {
+                switchTenant(e.target.value).catch(() => {});
+              }
+            }}
+            title="Cambiar de negocio"
+            style={{ marginTop: 10, width: '100%', fontSize: 11, fontWeight: 700, padding: '5px 8px' }}
+          >
+            {tenants.map((t) => (
+              <option key={t.tenantId} value={t.tenantId}>{t.name}</option>
+            ))}
+          </select>
+        )}
+
+        {!collapsed && !canSwitchTenant && (user?.tenantName || tenantSlug) && (
           <div
             title={user?.tenantName ?? tenantSlug}
             style={{

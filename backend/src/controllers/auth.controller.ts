@@ -49,7 +49,8 @@ export const authController = {
         userId,
         req.body.currentPassword,
         req.body.newPassword,
-        res
+        res,
+        (req as any).user?.tenantId
       );
 
       res.json({
@@ -61,10 +62,31 @@ export const authController = {
     }
   },
 
+  async listTenants(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenants = await authService.listTenants((req as any).user?.id);
+      res.json({ ok: true, content: tenants });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async switchTenant(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = await authService.switchTenant((req as any).user?.id, String(req.body?.tenantId ?? ""), res);
+      res.json({ ok: true, content: user });
+    } catch (err) {
+      if (err instanceof Error && /acceso|Falta el negocio/.test(err.message)) {
+        return res.status(403).json({ message: err.message });
+      }
+      next(err);
+    }
+  },
+
   async updateQuickAccess(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = (req as any).user?.id;
-      const result = await authService.updateQuickAccessConfig(userId, req.body.config);
+      const result = await authService.updateQuickAccessConfig(userId, req.body.config, (req as any).user?.tenantId);
 
       res.json({
         ok: true,

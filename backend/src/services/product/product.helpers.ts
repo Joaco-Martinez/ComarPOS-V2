@@ -10,14 +10,19 @@ import fs from "fs";
 import alertService from "../alert.service";
 import { tenantScope } from "../../utils/tenantScope";
 
+// Solo letras y numeros (sin guiones, puntos, espacios ni acentos): hay
+// lectores de codigo de barras que leen mal esos caracteres (ej. el "-" sale
+// como "'" con el teclado configurado distinto) y el SKU escaneado no
+// coincide. Se aplica al guardar y al buscar, asi que escanear una etiqueta
+// vieja "ABC-123" igual encuentra el producto que ahora es "ABC123".
 function normalizeSku(raw: string): string {
-  return raw
-    .trim()
-    .replace(/['"]/g, "")
-    .replace(/\s+/g, "");
+  return String(raw ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "");
 }
 
-// Genera un SKU secuencial (PRD-000001, PRD-000002, ...) cuando el alta no
+// Genera un SKU secuencial (PRD000001, PRD000002, ...) cuando el alta no
 // trae uno propio. Se basa en la cantidad de productos del tenant en vez de
 // un contador dedicado (no hay un modelo para eso todavia) - por las dudas
 // de que el numero derivado del conteo ya este tomado (producto borrado y
@@ -28,7 +33,7 @@ async function generateSku(): Promise<string> {
   let seq = count + 1;
 
   while (true) {
-    const candidate = `PRD-${String(seq).padStart(6, "0")}`;
+    const candidate = `PRD${String(seq).padStart(6, "0")}`;
     const exists = await prisma.product.findFirst({
       where: { sku: candidate, ...tenantScope() },
       select: { id: true },

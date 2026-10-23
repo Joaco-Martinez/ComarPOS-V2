@@ -11,6 +11,10 @@ router.post("/logout", authController.logout);
 router.get("/me", authController.me);
 router.post("/change-password", authMiddleware, authController.changePassword);
 router.patch("/me/quick-access", authMiddleware, authController.updateQuickAccess);
+// Contador con acceso a varios negocios: listar y cambiar de negocio sin
+// cerrar sesion (ver services/tenantAccess.service.ts).
+router.get("/tenants", authMiddleware, authController.listTenants);
+router.post("/switch-tenant", authMiddleware, authController.switchTenant);
 
 router.delete(
   "/:id",

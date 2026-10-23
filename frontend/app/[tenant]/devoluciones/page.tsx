@@ -19,7 +19,7 @@ const REFUND_METHODS: PaymentMethod[] = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA',
 // checkbox, el backend nunca detecta la devolución como "total" (necesita
 // que TODO lo pendiente este en el pedido, ver return.service.ts#isFullReturn)
 // y la venta queda para siempre en COMPLETED en vez de cancelarse.
-const DELIVERY_SKU = 'ENVIO-FLETE2';
+const DELIVERY_SKU = 'ENVIOFLETE2';
 const isDeliveryItem = (item: Sale['items'][number]) => item.product?.sku === DELIVERY_SKU;
 
 // Tolerancia para tratar una diferencia como "$0" (redondeos de coma flotante).

@@ -8,7 +8,7 @@ import ConfirmModal, { type ConfirmState } from '@/components/ConfirmModal';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { BusinessLocation } from '@/types';
-import { fmtDate, normalizeArray, num } from '@/lib/helpers';
+import { fmtDate, normalizeArray, num, skuKey } from '@/lib/helpers';
 import { ClipboardCheck, BarChart2, Play, CheckCircle, XCircle, ArrowLeft, RefreshCcw, ScanBarcode, X } from 'lucide-react';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 
@@ -42,9 +42,9 @@ export default function ConteoStockPage() {
 
 
   const handleScannedSku = (rawSku: string) => {
-    const sku = rawSku.trim().toLowerCase();
+    const sku = skuKey(rawSku);
     const items: any[] = selected?.items ?? [];
-    const found = items.find((it) => it.product?.sku && String(it.product.sku).trim().toLowerCase() === sku);
+    const found = items.find((it) => it.product?.sku && skuKey(String(it.product.sku)) === sku);
     if (!found) {
       toast.error(`No encontré ningún producto con SKU: ${rawSku}`);
       return;

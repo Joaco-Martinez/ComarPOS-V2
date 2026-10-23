@@ -8,7 +8,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { BusinessLocation, Product, ProductCategory, StockMovement } from '@/types';
-import { categoryName, fmtDate, fmtKg, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
+import { categoryName, fmtDate, fmtKg, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation, skuKey } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import { BarChart2, Search, ArrowRightLeft, X, AlertTriangle, RefreshCcw, History, ScanBarcode, Package, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
 import { matchesSearch, sortedVariants } from '@/lib/variants';
@@ -18,7 +18,7 @@ const MOVEMENT_LABELS: Record<string, string> = {
   SALE: 'Venta', SALE_CANCEL: 'Cancelación venta',
 };
 
-type MoveForm = { type: 'TRANSFER' | 'INGRESS'; fromLocationId: string; toLocationId: string; quantity: string; reason: string };
+type MoveForm = { type: 'TRANSFER' | 'INGRESS' | 'EGRESS'; fromLocationId: string; toLocationId: string; quantity: string; reason: string };
 // forAllVariants: el mínimo se aplica a todas las variantes del padre en esa
 // sucursal (PUT /products/:id/stock-min-all/:businessLocationId).
 type MinModal = { product: Product; businessLocationId: string; businessLocationName: string; minQuantity: string; minQuantityKg: string; forAllVariants?: boolean } | null;
@@ -125,8 +125,8 @@ export default function StockPage() {
   };
 
   const handleScannedSku = (rawSku: string) => {
-    const sku = rawSku.trim().toLowerCase();
-    const found = leaves.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
+    const sku = skuKey(rawSku);
+    const found = leaves.find((p) => p.sku && skuKey(p.sku) === sku);
     if (!found) {
       toast.error(`No encontré ningún producto con SKU: ${rawSku}`);
       return;
@@ -137,6 +137,10 @@ export default function StockPage() {
 
   const submitMovement = async () => {
     if (!moveModal) return;
+    if (moveForm.type === 'EGRESS' && !moveForm.reason.trim()) {
+      toast.error('Indicá el motivo (rotura, vencimiento, consumo interno...)');
+      return;
+    }
     if (moveForm.type === 'TRANSFER' && moveForm.fromLocationId === moveForm.toLocationId) {
       toast.error('El origen y el destino tienen que ser distintos');
       return;
@@ -155,6 +159,12 @@ export default function StockPage() {
             productId: moveModal.id, fromLocationId: moveForm.fromLocationId, toLocationId: moveForm.toLocationId, quantity: Number(moveForm.quantity), reason,
           });
         }
+      } else if (moveForm.type === 'EGRESS') {
+        // Un solo endpoint para UNIT y KG: la cantidad se interpreta segun
+        // la unidad de venta del producto (ver product.stock.ts#removeStock).
+        await api.post(`/products/${moveModal.id}/remove-stock`, {
+          businessLocationId: moveForm.fromLocationId, quantity: Number(moveForm.quantity), reason: moveForm.reason.trim(),
+        });
       } else {
         if (isKg) {
           await api.post(`/products/${moveModal.id}/add-stock-kg`, { businessLocationId: moveForm.toLocationId, quantityKg: Number(moveForm.quantity), reason });
@@ -497,12 +507,24 @@ export default function StockPage() {
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Tipo</label>
-                <select value={moveForm.type} onChange={(e) => setMoveForm((p) => ({ ...p, type: e.target.value as 'TRANSFER' | 'INGRESS' }))}>
+                <select value={moveForm.type} onChange={(e) => setMoveForm((p) => ({ ...p, type: e.target.value as MoveForm['type'] }))}>
                   <option value="TRANSFER">Transferencia</option>
                   <option value="INGRESS">Ingreso</option>
+                  <option value="EGRESS">Egreso (sacar stock)</option>
                 </select>
               </div>
-              {moveForm.type === 'TRANSFER' ? (
+              {moveForm.type === 'EGRESS' ? (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Desde</label>
+                  <select value={moveForm.fromLocationId} onChange={(e) => setMoveForm((p) => ({ ...p, fromLocationId: e.target.value }))}>
+                    {locations.map((l) => {
+                      const row = moveModal.stock?.find((st) => st.businessLocationId === l.id);
+                      const qty = moveModal.saleUnit === 'KG' ? fmtKg(num(row?.quantityKg)) : num(row?.quantity);
+                      return <option key={l.id} value={l.id}>{l.name} (stock {qty})</option>;
+                    })}
+                  </select>
+                </div>
+              ) : moveForm.type === 'TRANSFER' ? (
                 <div className="form-row">
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Desde</label>
@@ -531,12 +553,12 @@ export default function StockPage() {
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Motivo</label>
-                <input value={moveForm.reason} onChange={(e) => setMoveForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Opcional" />
+                <input value={moveForm.reason} onChange={(e) => setMoveForm((p) => ({ ...p, reason: e.target.value }))} placeholder={moveForm.type === 'EGRESS' ? 'Obligatorio: rotura, vencimiento, consumo interno...' : 'Opcional'} />
               </div>
             </div>
             <div className="modal-footer">
               <button onClick={() => setMoveModal(null)} className="btn btn-secondary btn-sm">Cancelar</button>
-              <button onClick={submitMovement} disabled={saving || !moveForm.quantity} className="btn btn-primary btn-sm">
+              <button onClick={submitMovement} disabled={saving || !moveForm.quantity || (moveForm.type === 'EGRESS' && !moveForm.reason.trim())} className="btn btn-primary btn-sm">
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Registrar'}
               </button>
             </div>

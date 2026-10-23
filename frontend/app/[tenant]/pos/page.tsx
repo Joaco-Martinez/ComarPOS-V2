@@ -9,7 +9,7 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { usePlanFeaturesStore } from '@/store/planFeatures';
 import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, PriceList, Product, ProductCategory, SalePayment } from '@/types';
-import { categoryName, clientName, fmtKg, fmtMoney, normalizeArray, num, productPrice } from '@/lib/helpers';
+import { categoryName, clientName, fmtKg, fmtMoney, normalizeArray, num, productPrice, skuKey } from '@/lib/helpers';
 import VariantPicker from '@/components/products/VariantPicker';
 import { groupByParent, stockAt } from '@/lib/variants';
 import {
@@ -23,7 +23,7 @@ const SKU_SCANNER_ELEMENT_ID = 'comarpos-pos-sku-scanner';
 // Producto especial "Costo de envío" (ver backend GET /sales/delivery-product)
 // que representa un monto de envío cargado a mano, opcional - no hay calculo
 // automatico por distancia.
-const DELIVERY_SKU = 'ENVIO-FLETE2';
+const DELIVERY_SKU = 'ENVIOFLETE2';
 
 type QuickPriceType = 'price' | 'wholesalePrice';
 
@@ -198,6 +198,35 @@ export default function PosPage() {
       .catch(() => setPriceOverrides({}));
   }, [priceListId, priceLists]);
 
+  // El precio de la lista se fija al agregar al carrito (addToCart). Si la
+  // lista o el cliente se eligen DESPUES de cargar los productos (lo
+  // habitual: escanear todo y al final elegir el cliente), hay que
+  // re-precificar lo que ya esta en el carrito -- si no, se cobraba
+  // Minorista (o el precio de la lista anterior). Solo toca los items cuyo
+  // precio vino de una lista o no tienen precio manual; un precio tipeado a
+  // mano (o el del envio) se respeta.
+  useEffect(() => {
+    setCart((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        if (item.product.sku === DELIVERY_SKU) return item;
+        if (item.manualPrice !== undefined && !item.fromPriceList) return item;
+        const o = priceOverrides[item.product.id];
+        const override = item.product.saleUnit === 'KG' ? o?.pricePerKg ?? undefined : o?.price;
+        if (override === undefined || override === null) {
+          if (!item.fromPriceList) return item;
+          changed = true;
+          const { manualPrice: _mp, fromPriceList: _fp, ...rest } = item;
+          return rest;
+        }
+        if (item.fromPriceList && item.manualPrice === override) return item;
+        changed = true;
+        return { ...item, manualPrice: override, fromPriceList: true };
+      });
+      return changed ? next : prev;
+    });
+  }, [priceOverrides]);
+
   const resolvedPrice = (product: Product) => {
     const override = priceOverrides[product.id];
     if (product.saleUnit === 'KG') {
@@ -233,7 +262,7 @@ export default function PosPage() {
 
   // SKU de un padre (si lo tiene): abre el selector de variantes.
   const findParentBySku = (sku: string) =>
-    groupByParent(products).find((g) => g.hasVariants && g.sku && g.sku.trim().toLowerCase() === sku.toLowerCase());
+    groupByParent(products).find((g) => g.hasVariants && g.sku && skuKey(g.sku) === skuKey(sku));
 
   // Reset pagination whenever the visible set changes, so "Ver más" always starts from the top.
   useEffect(() => {
@@ -345,7 +374,7 @@ export default function PosPage() {
         next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
         return next;
       }
-      return [...prev, { product, quantity: 1, priceType, ...(override !== undefined ? { manualPrice: override } : {}) }];
+      return [...prev, { product, quantity: 1, priceType, ...(override !== undefined ? { manualPrice: override, fromPriceList: true } : {}) }];
     });
     return true;
   };
@@ -368,7 +397,7 @@ export default function PosPage() {
         next[idx] = { ...next[idx], quantityKg: num(next[idx].quantityKg) + qty };
         return next;
       }
-      return [...prev, { product: kgModal.product, quantity: 1, quantityKg: qty, priceType: kgModal.priceType, ...(override !== undefined ? { manualPrice: override } : {}) }];
+      return [...prev, { product: kgModal.product, quantity: 1, quantityKg: qty, priceType: kgModal.priceType, ...(override !== undefined ? { manualPrice: override, fromPriceList: true } : {}) }];
     });
     setKgModal(null);
   };
@@ -419,7 +448,7 @@ export default function PosPage() {
   const addProductBySku = (rawSku: string) => {
     const sku = rawSku.trim();
     if (!sku) return false;
-    const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
+    const product = products.find((p) => p.sku && skuKey(p.sku) === skuKey(sku));
     if (!product) {
       const parent = findParentBySku(sku);
       if (!parent) return false;
@@ -501,7 +530,7 @@ export default function PosPage() {
     if (!sku || scannerHandledRef.current) return;
     scannerHandledRef.current = true;
 
-    const product = products.find((p) => p.sku && p.sku.trim().toLowerCase() === sku.toLowerCase());
+    const product = products.find((p) => p.sku && skuKey(p.sku) === skuKey(sku));
 
     if (!product && findParentBySku(sku)) {
       setVariantPicker(findParentBySku(sku) ?? null);

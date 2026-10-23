@@ -129,5 +129,8 @@ export type GetSalesParams = {
   to?: string;
 };
 
-export const DELIVERY_SKU = "ENVIO-FLETE2";
+export const DELIVERY_SKU = "ENVIOFLETE2";
+// SKU con el que se creo el producto de envio antes de que los SKUs quedaran
+// solo con letras y numeros (ver ensureDeliveryProduct en sale.stock.ts).
+export const LEGACY_DELIVERY_SKU = "ENVIO-FLETE2";
 export const DEFAULT_QUOTATION_HOURS = Number(process.env.DEFAULT_QUOTATION_HOURS ?? 36);

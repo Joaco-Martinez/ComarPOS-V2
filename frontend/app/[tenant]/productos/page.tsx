@@ -10,7 +10,7 @@ import ImageCropModal, { PRODUCT_IMAGE_SIZE } from '@/components/ImageCropModal'
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { Product, ProductCategory, Supplier, BusinessLocation, PriceList } from '@/types';
-import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation } from '@/lib/helpers';
+import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation, skuKey, cleanSku } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
 import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, Camera, AlertTriangle, ScanBarcode, Barcode, Download, FileSpreadsheet, ChevronRight, ChevronDown, Layers } from 'lucide-react';
@@ -76,6 +76,7 @@ export default function ProductosPage() {
   const [barcodeQty, setBarcodeQty] = useState<Record<string, string>>({});
   const [barcodeSize, setBarcodeSize] = useState<Record<string, BarcodeSize>>({});
   const [barcodeSearch, setBarcodeSearch] = useState('');
+  const [barcodeSupplier, setBarcodeSupplier] = useState('');
   const [barcodeDownloading, setBarcodeDownloading] = useState<'pdf' | 'excel' | null>(null);
   // Listas de precios extra para imprimir en la etiqueta debajo del precio
   // principal (ej. "Efectivo"). La default (Minorista) ya es el precio.
@@ -188,9 +189,9 @@ export default function ProductosPage() {
 
 
   const handleScannedSku = (rawSku: string) => {
-    const sku = rawSku.trim().toLowerCase();
+    const sku = skuKey(rawSku);
     const all = products.flatMap((p) => [p, ...(p.variants ?? [])]);
-    const found = all.find((p) => p.sku && p.sku.trim().toLowerCase() === sku);
+    const found = all.find((p) => p.sku && skuKey(p.sku) === sku);
     if (!found) {
       toast.error(`No encontré ningún producto con SKU: ${rawSku}`);
       return;
@@ -200,7 +201,7 @@ export default function ProductosPage() {
   };
 
   const handleFormSkuScanned = (rawSku: string) => {
-    setForm((prev) => ({ ...prev, sku: rawSku.trim() }));
+    setForm((prev) => ({ ...prev, sku: cleanSku(rawSku) }));
     setFormScannerOpen(false);
   };
 
@@ -410,17 +411,20 @@ export default function ProductosPage() {
   const barcodeProducts = useMemo(
     () => products
       .flatMap((p) => (p.hasVariants
-        ? sortedVariants(p).map((v) => ({ ...v, parent: { id: p.id, name: p.name, sku: p.sku, imageUrl: p.imageUrl, variantOptions: p.variantOptions, hasVariants: true } }))
+        ? sortedVariants(p).map((v) => ({ ...v, supplierId: v.supplierId ?? p.supplierId, parent: { id: p.id, name: p.name, sku: p.sku, imageUrl: p.imageUrl, variantOptions: p.variantOptions, hasVariants: true } }))
         : [p]))
       .filter((p) => p.sku && p.sku.trim() && p.isActive !== false),
     [products]
   );
 
   const barcodeFiltered = useMemo(() => {
-    if (!barcodeSearch.trim()) return barcodeProducts;
+    const bySupplier = barcodeSupplier
+      ? barcodeProducts.filter((p) => (barcodeSupplier === 'none' ? !p.supplierId : p.supplierId === barcodeSupplier))
+      : barcodeProducts;
+    if (!barcodeSearch.trim()) return bySupplier;
     const q = barcodeSearch.toLowerCase();
-    return barcodeProducts.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || Boolean(p.parent?.name.toLowerCase().includes(q)));
-  }, [barcodeProducts, barcodeSearch]);
+    return bySupplier.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || Boolean(p.parent?.name.toLowerCase().includes(q)));
+  }, [barcodeProducts, barcodeSearch, barcodeSupplier]);
 
   const openBarcodeModal = () => {
     const selected: Record<string, boolean> = {};
@@ -431,6 +435,7 @@ export default function ProductosPage() {
     setBarcodeQty(qty);
     setBarcodeSize(size);
     setBarcodeSearch('');
+    setBarcodeSupplier('');
     setBarcodeModal(true);
     api.get('/price-lists')
       .then(({ data }) => setBarcodePriceLists(normalizeArray<PriceList>(data).filter((pl) => !pl.isDefault)))
@@ -467,10 +472,16 @@ export default function ProductosPage() {
     setBarcodeSize(next);
   };
 
-  const barcodeSelectedIds = useMemo(
-    () => Object.entries(barcodeSelected).filter(([, v]) => v).map(([id]) => id),
-    [barcodeSelected]
-  );
+  // Con un proveedor elegido solo cuentan los productos de ese proveedor,
+  // aunque otros hayan quedado tildados (al abrir se tildan todos).
+  const barcodeSelectedIds = useMemo(() => {
+    const ids = Object.entries(barcodeSelected).filter(([, v]) => v).map(([id]) => id);
+    if (!barcodeSupplier) return ids;
+    const allowed = new Set(barcodeProducts
+      .filter((p) => (barcodeSupplier === 'none' ? !p.supplierId : p.supplierId === barcodeSupplier))
+      .map((p) => p.id));
+    return ids.filter((id) => allowed.has(id));
+  }, [barcodeSelected, barcodeSupplier, barcodeProducts]);
 
   const downloadBarcodes = async (type: 'pdf' | 'excel') => {
     if (barcodeSelectedIds.length === 0) {
@@ -745,10 +756,10 @@ export default function ProductosPage() {
                   <div style={{ position: 'relative' }}>
                     <input
                       value={form.sku}
-                      onChange={f('sku')}
+                      onChange={(e) => setForm((prev) => ({ ...prev, sku: cleanSku(e.target.value) }))}
                       placeholder={
                         withVariants
-                          ? 'Ej: REM — arma el SKU de cada variante (REM-M-ROJO)'
+                          ? 'Ej: REM — arma el SKU de cada variante (REMMROJ)'
                           : modal === 'create' ? 'Se genera automáticamente si lo dejás vacío' : 'Código de producto'
                       }
                       style={{ paddingRight: 38 }}
@@ -1119,11 +1130,27 @@ export default function ProductosPage() {
               <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>
                 Elegí los productos, el tamaño de etiqueta y cuántas querés imprimir de cada uno. Solo se listan los productos activos con SKU cargado.
               </p>
-              <input
-                value={barcodeSearch}
-                onChange={(e) => setBarcodeSearch(e.target.value)}
-                placeholder="Buscar por nombre o SKU..."
-              />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input
+                  value={barcodeSearch}
+                  onChange={(e) => setBarcodeSearch(e.target.value)}
+                  placeholder="Buscar por nombre o SKU..."
+                  style={{ flex: '1 1 200px' }}
+                />
+                {/* Filtro por proveedor: al llegar mercaderia de un proveedor
+                    se imprimen las etiquetas de lo suyo sin buscar uno por uno.
+                    "Seleccionar todos" y "Cantidad = stock" actuan sobre lo filtrado. */}
+                <select
+                  value={barcodeSupplier}
+                  onChange={(e) => setBarcodeSupplier(e.target.value)}
+                  style={{ flex: '0 1 220px' }}
+                  title="Filtrar por proveedor"
+                >
+                  <option value="">Todos los proveedores</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  <option value="none">Sin proveedor</option>
+                </select>
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                   <input

@@ -65,6 +65,22 @@ Genera `dist-installer/ComarPOS-Agent-Setup.exe`. Copiar ese archivo a
 descargable desde el panel (`[tenant]/configuracion/printbox`, botón
 "Descargar agente para Windows").
 
+### Windows 7 / 8
+
+Electron 23+ ya no corre en Windows 7/8, así que hay un build aparte:
+
+```bash
+npm run dist:win7
+```
+
+Empaqueta el mismo código con Electron 22.3.27 (`-c.electronVersion`, no
+cambia la dependencia instalada) en 32 bits, que corre en Windows 7 de 32 y
+de 64 bits. Genera `dist-installer/ComarPOS-Agent-Setup-Win7.exe`; copiarlo a
+`frontend/public/downloads/` (link "¿PC con Windows 7 u 8?" en la misma
+pantalla). Electron 22 trae Node 16, sin `fetch` global en el proceso
+principal: `src/api.js` usa `node-fetch` en ese caso, así que cualquier API
+nueva que se use en `src/` tiene que existir en Node 16 / Electron 22.
+
 **El instalador no está firmado** (falta un certificado de code-signing) —
 Windows SmartScreen puede mostrar una advertencia la primera vez que alguien
 lo ejecuta ("Windows protegió su PC"). Es esperable en un instalador sin

@@ -365,6 +365,31 @@ export const productController = {
     }
   },
 
+  async removeStock(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { businessLocationId, quantity, reason } = req.body;
+
+      const userId = (req as any).user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "No autorizado" });
+      }
+
+      const updated = await productService.removeStock(
+        getParamAsString(id, "id"),
+        businessLocationId,
+        Number(quantity),
+        userId,
+        reason
+      );
+
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async setStockMin(req: Request, res: Response, next: NextFunction) {
     try {
       const { id, businessLocationId } = req.params;

@@ -28,8 +28,15 @@ function normalizeText(value?: string | null) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+// Compara sin separadores: las ventas viejas guardaron el snapshot del SKU
+// del envio como "ENVIO-FLETE2", antes de que los SKUs quedaran solo con
+// letras y numeros.
+export function isDeliverySku(value?: string | null) {
+  return normalizeText(value).replace(/[^A-Z0-9]/g, "") === DELIVERY_SKU;
+}
+
 function isDeliverySaleItem(item: ResolvedSaleItem) {
-  return normalizeText(item.productSku) === DELIVERY_SKU;
+  return isDeliverySku(item.productSku);
 }
 
 function shouldDiscountStock(item: ResolvedSaleItem) {
@@ -106,7 +113,7 @@ function normalizeSaleItemPriceType(
   }
 
   // El envío siempre usa precio manual porque viene calculado por distancia.
-  if (normalizeText(product.sku) === DELIVERY_SKU && hasManualPrice) {
+  if (isDeliverySku(product.sku) && hasManualPrice) {
     return SaleItemPriceType.MANUAL;
   }
 
@@ -288,7 +295,7 @@ async function resolveSaleItems(
       throw new Error(`Elegí una variante de ${product.name}`);
     }
 
-    const isDeliveryProduct = normalizeText(product.sku) === DELIVERY_SKU;
+    const isDeliveryProduct = isDeliverySku(product.sku);
 
     const { quantity, quantityKg, qtyUsedForTotal } = isDeliveryProduct
       ? {

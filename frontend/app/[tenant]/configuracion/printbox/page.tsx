@@ -11,6 +11,10 @@ import { formatDateTimeAR } from '@/lib/dateAR';
 import { Printer, Plus, X, Edit2, Trash2, RefreshCcw, Clock, Wifi, Monitor, Download, Copy, Check } from 'lucide-react';
 
 const AGENT_DOWNLOAD_URL = '/downloads/ComarPOS-Agent-Setup.exe';
+// Build aparte sobre Electron 22 (el ultimo que corre en Windows 7/8), en
+// 32 bits para que ande tanto en Windows 7 de 32 como de 64 bits. Ver
+// `npm run dist:win7` en desktop-agent/package.json.
+const AGENT_WIN7_DOWNLOAD_URL = '/downloads/ComarPOS-Agent-Setup-Win7.exe';
 
 const statusLabel: Record<string, string> = {
   PENDING_PAIRING: 'Pendiente de emparejar',
@@ -233,6 +237,9 @@ export default function PrintboxPage() {
                     </div>
                     <a href={AGENT_DOWNLOAD_URL} className="btn btn-primary btn-sm" style={{ width: '100%', gap: 6 }}>
                       <Download size={13} /> Descargar agente para Windows
+                    </a>
+                    <a href={AGENT_WIN7_DOWNLOAD_URL} style={{ display: 'block', fontSize: 11, color: 'var(--text3)', marginTop: 6, textDecoration: 'underline' }}>
+                      ¿PC con Windows 7 u 8? Descargá esta versión
                     </a>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>
                       <Clock size={11} /> Código válido por {msToClock(msLeft)}

@@ -10,7 +10,7 @@
  */
 import { getAll, getBySku, getById, getMovements } from "./product/product.read";
 import { create, updateImage, update, updateComponents, deleteProduct } from "./product/product.write";
-import { transferStock, transferStockKg, addStockKg, addStock, setStockMin } from "./product/product.stock";
+import { transferStock, transferStockKg, addStockKg, addStock, removeStock, setStockMin } from "./product/product.stock";
 import {
   syncVariants,
   convertToVariants,
@@ -30,6 +30,7 @@ export const productService = {
   transferStock,
   transferStockKg,
   addStockKg,
+  removeStock,
   addStock,
   setStockMin,
   getMovements,

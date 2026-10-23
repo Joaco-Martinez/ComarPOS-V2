@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
@@ -31,12 +31,19 @@ function readOpenSections(): Set<string> {
 export default function BottomNav() {
   const pathname = usePathname();
   const params = useParams<{ tenant?: string }>();
-  const { user, logout, updateQuickAccessConfig } = useAuthStore();
+  const { user, logout, updateQuickAccessConfig, tenants, loadTenants, switchTenant } = useAuthStore();
   const { features } = usePlanFeaturesStore();
   const tenantSlug = params?.tenant || user?.tenantSlug || '';
   const [moreOpen, setMoreOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [openSections, setOpenSections] = useState<Set<string>>(readOpenSections);
+
+  // Contador con varios negocios: selector arriba de todo en "Todas las
+  // secciones" (mismo criterio que el Sidebar de escritorio).
+  useEffect(() => {
+    if (user?.role === 'CONTADOR') loadTenants();
+  }, [user?.role, loadTenants]);
+  const canSwitchTenant = user?.role === 'CONTADOR' && tenants.length > 1;
 
   const toggleSection = (key: string) => {
     setOpenSections((prev) => {
@@ -147,6 +154,24 @@ export default function BottomNav() {
               />
             ) : (
               <>
+                {canSwitchTenant && (
+                  <div style={{ marginBottom: 12, padding: '0 4px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', marginBottom: 4 }}>Negocio</div>
+                    <select
+                      value={user?.tenantId ?? ''}
+                      onChange={(e) => {
+                        if (e.target.value && e.target.value !== user?.tenantId) {
+                          switchTenant(e.target.value).catch(() => {});
+                        }
+                      }}
+                      style={{ width: '100%' }}
+                    >
+                      {tenants.map((t) => (
+                        <option key={t.tenantId} value={t.tenantId}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {effective.folders.map((folder) => {
                   const isOpen = openSections.has(folder.id);
                   return (
