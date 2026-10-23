@@ -60,6 +60,7 @@ type ArcaConfigWithPoints = {
     isDefault: boolean;
     enabled?: boolean;
   }[];
+  
 };
 
 const toArray = (x: any) => {
