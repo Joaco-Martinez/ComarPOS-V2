@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
-import { NAV, ADMIN_NAV, groupNavItems, type NavItem } from '@/lib/navConfig';
+import { navForRole, groupNavItems, type NavItem } from '@/lib/navConfig';
 import { buildEffectiveNav, effectiveNavToConfig } from '@/lib/quickAccess';
 import { Grid2x2, LogOut, X, ChevronDown, Pencil, Lock } from 'lucide-react';
 import QuickAccessEditor from './QuickAccessEditor';
@@ -52,7 +52,7 @@ export default function BottomNav() {
     });
   };
 
-  const allItems = [...NAV, ...(user?.role === 'ADMIN' ? ADMIN_NAV : [])];
+  const allItems = navForRole(user?.role);
   const effective = buildEffectiveNav(allItems, user?.quickAccessConfig);
   const tabs = effective.tabs;
   const restItems = effective.loose;
