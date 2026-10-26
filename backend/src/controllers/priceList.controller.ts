@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { priceListService } from "../services/priceList.service";
+import { priceListPdfService } from "../services/priceListPdf.service";
 import { getParamAsString } from "../utils/params";
 
 function normalizeBoolean(value: any): boolean | undefined {
@@ -38,6 +39,32 @@ export const priceListController = {
       }
 
       res.json(list);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async pdf(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await priceListPdfService.exportPdf({
+        priceListId: getParamAsString(req.params.id, "id"),
+        categoryId: typeof req.query.categoryId === "string" && req.query.categoryId ? req.query.categoryId : undefined,
+        withImages: req.query.withImages !== "false",
+      });
+
+      if (!result) {
+        return res.status(404).json({ message: "Lista de precios no encontrada" });
+      }
+
+      const slug = result.listName
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="lista-de-precios-${slug || "productos"}.pdf"`);
+      res.send(result.buffer);
     } catch (err) {
       next(err);
     }

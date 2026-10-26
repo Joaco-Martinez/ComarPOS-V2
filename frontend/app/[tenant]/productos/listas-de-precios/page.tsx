@@ -5,9 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { PriceList, Product } from '@/types';
+import type { PriceList, Product, ProductCategory } from '@/types';
 import { fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { Plus, Edit2, Trash2, X, Search, Lock, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Search, Lock, ChevronDown, ChevronRight, FileDown } from 'lucide-react';
 import { matchesSearch, sortedVariants } from '@/lib/variants';
 
 export default function ListasDePreciosPage() {
@@ -31,17 +31,26 @@ export default function ListasDePreciosPage() {
   const [applyingBulk, setApplyingBulk] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
+  // Descarga de la lista completa en PDF (con la foto de cada producto).
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [pdfList, setPdfList] = useState<PriceList | null>(null);
+  const [pdfCategoryId, setPdfCategoryId] = useState('');
+  const [pdfWithImages, setPdfWithImages] = useState(true);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+
   const load = async () => {
     setLoading(true);
     try {
-      const [lr, pr] = await Promise.all([
+      const [lr, pr, cr] = await Promise.all([
         api.get('/price-lists').catch(() => null),
         // grouped: padres con sus variantes adentro (el override es por
         // variante; el padre ofrece "mismo precio para todas").
         api.get('/products', { params: { isActive: true, limit: 500, grouped: true } }).catch(() => null),
+        api.get('/categories').catch(() => null),
       ]);
       if (lr) setLists(normalizeArray<PriceList>(lr.data));
       if (pr) setProducts(normalizeArray<Product>(pr.data));
+      if (cr) setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
     } finally {
       setLoading(false);
     }
@@ -74,6 +83,34 @@ export default function ListasDePreciosPage() {
       toast.error(err?.response?.data?.message ?? 'No se pudo aplicar el ajuste');
     } finally {
       setApplyingBulk(false);
+    }
+  };
+
+  const openPdf = (list: PriceList) => {
+    setPdfList(list);
+    setPdfCategoryId('');
+    setPdfWithImages(true);
+  };
+
+  const downloadPdf = async () => {
+    if (!pdfList) return;
+    setPdfDownloading(true);
+    try {
+      const res = await api.get(`/price-lists/${pdfList.id}/pdf`, {
+        params: { categoryId: pdfCategoryId || undefined, withImages: pdfWithImages ? undefined : false },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lista-de-precios-${pdfList.name}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setPdfList(null);
+    } catch {
+      toast.error('No se pudo generar el PDF');
+    } finally {
+      setPdfDownloading(false);
     }
   };
 
@@ -212,12 +249,15 @@ export default function ListasDePreciosPage() {
                   <span style={{ fontWeight: 800, fontSize: 14 }}>{list.name}</span>
                   {list.isDefault && <span className="badge badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Lock size={9} /> Principal</span>}
                 </div>
-                {!list.isDefault && (
-                  <div style={{ display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => openEdit(list)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
-                    <button onClick={() => removeList(list)} className="btn btn-ghost btn-xs"><Trash2 size={12} /></button>
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => openPdf(list)} className="btn btn-ghost btn-xs" title="Descargar PDF con fotos"><FileDown size={12} /></button>
+                  {!list.isDefault && (
+                    <>
+                      <button onClick={() => openEdit(list)} className="btn btn-ghost btn-xs"><Edit2 size={12} /></button>
+                      <button onClick={() => removeList(list)} className="btn btn-ghost btn-xs"><Trash2 size={12} /></button>
+                    </>
+                  )}
+                </div>
               </div>
               {list.description && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>{list.description}</div>}
               <div style={{ fontSize: 12, color: 'var(--text3)' }}>
@@ -288,7 +328,10 @@ export default function ListasDePreciosPage() {
           <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <span style={{ fontWeight: 800, fontSize: 15 }}>{detail.name}</span>
-              <button onClick={() => setDetail(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button onClick={() => openPdf(detail)} className="btn btn-secondary btn-xs" style={{ gap: 4 }}><FileDown size={12} /> PDF</button>
+                <button onClick={() => setDetail(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+              </div>
             </div>
             <div className="modal-body">
               {detail.isDefault ? (
@@ -373,6 +416,42 @@ export default function ListasDePreciosPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Descargar PDF */}
+      {pdfList && (
+        <div className="modal-overlay" onClick={() => !pdfDownloading && setPdfList(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800, fontSize: 15 }}>Descargar &quot;{pdfList.name}&quot; en PDF</span>
+              <button onClick={() => setPdfList(null)} disabled={pdfDownloading} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Categoría</label>
+                <select value={pdfCategoryId} onChange={(e) => setPdfCategoryId(e.target.value)}>
+                  <option value="">Todas las categorías</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <input type="checkbox" checked={pdfWithImages} onChange={(e) => setPdfWithImages(e.target.checked)} />
+                Incluir fotos de los productos
+              </label>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                Incluye todos los productos activos agrupados por categoría.
+                {!pdfList.isDefault && ' Los productos sin precio propio en esta lista salen con el precio de Minorista.'}
+                {pdfWithImages && ' Con fotos puede tardar unos segundos si tenés muchos productos.'}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setPdfList(null)} disabled={pdfDownloading} className="btn btn-secondary btn-sm">Cancelar</button>
+              <button onClick={downloadPdf} disabled={pdfDownloading} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+                {pdfDownloading ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><FileDown size={13} /> Descargar</>}
+              </button>
             </div>
           </div>
         </div>
