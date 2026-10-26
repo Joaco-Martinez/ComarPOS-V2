@@ -50,6 +50,7 @@ export const priceListController = {
         priceListId: getParamAsString(req.params.id, "id"),
         categoryId: typeof req.query.categoryId === "string" && req.query.categoryId ? req.query.categoryId : undefined,
         withImages: req.query.withImages !== "false",
+        withStock: req.query.withStock !== "false",
       });
 
       if (!result) {

@@ -4,7 +4,8 @@
  * Una fila por producto vendible (las variantes van una por una, con su
  * foto o la del padre), agrupadas por categoria. El precio sale de la lista
  * elegida; si el producto no tiene precio propio en esa lista se usa el de
- * Minorista (mismo criterio que el POS).
+ * Minorista (mismo criterio que el POS). Opcionalmente muestra el stock
+ * (suma de todas las ubicaciones) de cada producto.
  */
 import PDFDocument from "pdfkit";
 import prisma from "../prisma";
@@ -19,6 +20,9 @@ type PdfRow = {
   price: number;
   isKg: boolean;
   imageUrl: string | null;
+  // Suma de todas las ubicaciones; null = no lleva stock (servicio) y
+  // "unlimited" = se vende sin importar el stock.
+  stock: number | "unlimited" | null;
 };
 
 const SIN_CATEGORIA = "Sin categoría";
@@ -31,6 +35,14 @@ function formatMoneyAR(value: number) {
     currency: "ARS",
     minimumFractionDigits: 2,
   }).format(value);
+}
+
+function stockLabel(row: PdfRow): string | null {
+  if (row.stock === null) return null;
+  if (row.stock === "unlimited") return "Stock: sin límite";
+  if (row.stock <= 0) return "Sin stock";
+  const qty = new Intl.NumberFormat("es-AR", { maximumFractionDigits: row.isKg ? 3 : 0 }).format(row.stock);
+  return `Stock: ${qty}${row.isKg ? " kg" : ""}`;
 }
 
 function formatDateAR(date: Date) {
@@ -110,6 +122,7 @@ async function getRows(priceListId: string, categoryId?: string): Promise<{ list
     orderBy: { name: "asc" },
     select: {
       id: true, name: true, sku: true, price: true, pricePerKg: true, saleUnit: true, imageUrl: true,
+      isService: true, unlimitedStock: true, stock: { select: { quantity: true, quantityKg: true } },
       category: { select: { name: true } },
       parent: { select: { imageUrl: true, category: { select: { name: true } } } },
     },
@@ -138,6 +151,11 @@ async function getRows(priceListId: string, categoryId?: string): Promise<{ list
       price: price ?? 0,
       isKg,
       imageUrl: p.imageUrl || p.parent?.imageUrl || null,
+      stock: p.isService
+        ? null
+        : p.unlimitedStock
+          ? ("unlimited" as const)
+          : p.stock.reduce((acc, s) => acc + (isKg ? s.quantityKg : s.quantity), 0),
     };
   });
 
@@ -157,11 +175,13 @@ async function exportPdf(params: {
   priceListId: string;
   categoryId?: string;
   withImages?: boolean;
+  withStock?: boolean;
 }): Promise<{ buffer: Buffer; listName: string } | null> {
   const data = await getRows(params.priceListId, params.categoryId);
   if (!data) return null;
   const { listName, rows } = data;
   const withImages = params.withImages !== false;
+  const withStock = params.withStock !== false;
 
   const tenantId = currentTenantId();
   const tenant = tenantId
@@ -238,14 +258,21 @@ async function exportPdf(params: {
   const drawCell = (row: PdfRow, x: number, rowY: number, shaded: boolean) => {
     if (shaded) doc.rect(x, rowY, cellW, rowH - 4).fill("#F4F6F9");
     const priceText = `${formatMoneyAR(row.price)}${row.isKg ? " /kg" : ""}`;
+    const stockText = withStock ? stockLabel(row) : null;
+    const stockColor = stockText === "Sin stock" ? "#C0392B" : "#2E7D32";
 
     if (!withImages) {
       const priceW = 130;
+      const stockW = withStock ? 90 : 0;
       doc.font("Helvetica-Bold").fontSize(10).fillColor("#111111")
-        .text(row.name, x + 8, rowY + 7, { width: cellW - priceW - 100, height: 13, ellipsis: true, lineGap: 0 });
+        .text(row.name, x + 8, rowY + 7, { width: cellW - priceW - stockW - 100, height: 13, ellipsis: true, lineGap: 0 });
       if (row.sku) {
         doc.font("Helvetica").fontSize(8).fillColor("#777777")
-          .text(row.sku, x + cellW - priceW - 88, rowY + 8, { width: 80, lineBreak: false, ellipsis: true });
+          .text(row.sku, x + cellW - priceW - stockW - 88, rowY + 8, { width: 80, lineBreak: false, ellipsis: true });
+      }
+      if (stockText) {
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(stockColor)
+          .text(stockText, x + cellW - priceW - stockW - 4, rowY + 8, { width: stockW, align: "right", lineBreak: false, ellipsis: true });
       }
       doc.font("Helvetica-Bold").fontSize(11).fillColor("#111111")
         .text(priceText, x + cellW - priceW - 8, rowY + 6, { width: priceW, align: "right", lineBreak: false });
@@ -286,8 +313,22 @@ async function exportPdf(params: {
         .text(`SKU: ${row.sku}`, textX, ty, { width: textW, lineBreak: false, ellipsis: true });
       ty += skuH;
     }
-    doc.font("Helvetica-Bold").fontSize(13).fillColor("#1E3A5F")
-      .text(priceText, textX, ty + 2, { width: textW, lineBreak: false });
+    // Con precio y stock largos en el mismo renglon, el precio se achica
+    // para no pisarse con el stock.
+    let priceSize = 13;
+    if (stockText) {
+      doc.font("Helvetica-Bold").fontSize(8.5);
+      const stockW = doc.widthOfString(stockText);
+      doc.fontSize(priceSize);
+      while (priceSize > 9 && doc.widthOfString(priceText) + stockW + 8 > textW) doc.fontSize(--priceSize);
+    }
+    doc.font("Helvetica-Bold").fontSize(priceSize).fillColor("#1E3A5F")
+      .text(priceText, textX, ty + 2 + (13 - priceSize) / 2, { width: textW, lineBreak: false });
+    if (stockText) {
+      // A la derecha del precio, en el mismo renglon.
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(stockColor)
+        .text(stockText, textX, ty + 5, { width: textW, align: "right", lineBreak: false });
+    }
   };
 
   let currentCategory: string | null = null;

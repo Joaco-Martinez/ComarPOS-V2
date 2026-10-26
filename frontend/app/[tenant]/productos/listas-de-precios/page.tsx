@@ -36,6 +36,7 @@ export default function ListasDePreciosPage() {
   const [pdfList, setPdfList] = useState<PriceList | null>(null);
   const [pdfCategoryId, setPdfCategoryId] = useState('');
   const [pdfWithImages, setPdfWithImages] = useState(true);
+  const [pdfWithStock, setPdfWithStock] = useState(true);
   const [pdfDownloading, setPdfDownloading] = useState(false);
 
   const load = async () => {
@@ -90,6 +91,7 @@ export default function ListasDePreciosPage() {
     setPdfList(list);
     setPdfCategoryId('');
     setPdfWithImages(true);
+    setPdfWithStock(true);
   };
 
   const downloadPdf = async () => {
@@ -97,7 +99,7 @@ export default function ListasDePreciosPage() {
     setPdfDownloading(true);
     try {
       const res = await api.get(`/price-lists/${pdfList.id}/pdf`, {
-        params: { categoryId: pdfCategoryId || undefined, withImages: pdfWithImages ? undefined : false },
+        params: { categoryId: pdfCategoryId || undefined, withImages: pdfWithImages ? undefined : false, withStock: pdfWithStock ? undefined : false },
         responseType: 'blob',
       });
       const url = URL.createObjectURL(res.data);
@@ -441,9 +443,14 @@ export default function ListasDePreciosPage() {
                 <input type="checkbox" checked={pdfWithImages} onChange={(e) => setPdfWithImages(e.target.checked)} />
                 Incluir fotos de los productos
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <input type="checkbox" checked={pdfWithStock} onChange={(e) => setPdfWithStock(e.target.checked)} />
+                Incluir stock (cantidad disponible)
+              </label>
               <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                 Incluye todos los productos activos agrupados por categoría.
                 {!pdfList.isDefault && ' Los productos sin precio propio en esta lista salen con el precio de Minorista.'}
+                {pdfWithStock && ' El stock es la suma de todas las ubicaciones; destildalo si vas a mandarle la lista a un cliente.'}
                 {pdfWithImages && ' Con fotos puede tardar unos segundos si tenés muchos productos.'}
               </div>
             </div>
