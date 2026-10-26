@@ -56,6 +56,10 @@ const options: swaggerJSDoc.Options = {
 const swaggerSpec = swaggerJSDoc(options);
 
 export function swaggerDocs(app: Express) {
+  // En produccion no se publica el mapa completo de la API, salvo que se
+  // habilite a proposito con SWAGGER_ENABLED=true.
+  if (process.env.NODE_ENV === "production" && process.env.SWAGGER_ENABLED !== "true") return;
+
   app.use("/api", serve, setup(swaggerSpec));
   console.log("📖 Swagger docs disponible en http://localhost:4000/api");
 }

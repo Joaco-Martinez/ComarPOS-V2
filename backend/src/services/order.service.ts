@@ -350,6 +350,22 @@ export const orderService = {
     // final por una notificacion tardía/duplicada.
     if (order.status === OrderStatus.CONVERTED || order.status === OrderStatus.CANCELLED) return;
 
+    // El monto aprobado tiene que cubrir lo que se cobro en la preferencia
+    // (suma de los subtotales de los items, ver createOrder). Si no coincide
+    // no se confirma el pedido: queda pendiente para revisarlo a mano.
+    if (payment.status === "approved") {
+      const items = await prisma.orderItem.findMany({ where: { orderId: order.id }, select: { subtotal: true } });
+      const expected = items.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
+      const paid = Number(payment.transaction_amount ?? 0);
+      if (paid + 1 < expected) {
+        console.warn(
+          `⚠️ Webhook MP: pago ${payment.id} aprobado por ${paid} pero el pedido ${order.id} espera ${expected}, no se confirma`
+        );
+        await prisma.order.update({ where: { id: order.id }, data: { mpPaymentId: String(payment.id) } });
+        return;
+      }
+    }
+
     if (payment.status === "approved") {
       await prisma.order.update({
         where: { id: order.id },

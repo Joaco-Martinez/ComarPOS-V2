@@ -2,6 +2,9 @@ import prisma from "../prisma";
 import { SaleUnit } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import { pickFields } from "../utils/pickFields";
+
+const SUPPLIER_FIELDS = ["name", "cuit", "contactName", "phone", "email", "address", "notes"] as const;
 import { priceListService } from "./priceList.service";
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -28,7 +31,7 @@ export const supplierService = {
     notes?: string;
   }) {
     return prisma.supplier.create({
-      data: { ...data, tenantId: currentTenantId() },
+      data: { ...pickFields(data, SUPPLIER_FIELDS), tenantId: currentTenantId() },
     });
   },
 
@@ -44,7 +47,7 @@ export const supplierService = {
   }) {
     const existing = await prisma.supplier.findFirst({ where: { id, ...tenantScope() } });
     if (!existing) throw new Error("Proveedor no encontrado.");
-    return prisma.supplier.update({ where: { id }, data });
+    return prisma.supplier.update({ where: { id }, data: pickFields(data, [...SUPPLIER_FIELDS, "isActive"]) });
   },
 
   async remove(id: string) {

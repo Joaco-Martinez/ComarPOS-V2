@@ -93,6 +93,80 @@ function touchLastSeen(userId: string) {
   prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } }).catch(() => {});
 }
 
+// El JWT vive 30 dias: sin esto un usuario desactivado (o al que le bajaron
+// el rol) seguia entrando con su token viejo hasta que venciera. Se re-lee
+// isActive/role de la DB en cada request, cacheado en memoria un rato corto
+// para no pegarle a la DB en cada llamada. user.service.ts invalida la
+// entrada al editar/borrar un usuario (en este proceso; el TTL cubre el resto).
+const USER_STATE_TTL_MS = 30 * 1000;
+type UserState = { isActive: boolean; role: string };
+const userStateCache = new Map<string, { state: UserState | null; at: number }>();
+
+async function loadUserState(userId?: string): Promise<UserState | null> {
+  if (!userId) return null;
+
+  const cached = userStateCache.get(userId);
+  if (cached && Date.now() - cached.at < USER_STATE_TTL_MS) return cached.state;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isActive: true, role: true },
+  });
+  const state = user ? { isActive: user.isActive !== false, role: user.role } : null;
+
+  userStateCache.set(userId, { state, at: Date.now() });
+  return state;
+}
+
+export function invalidateUserState(userId?: string) {
+  if (!userId) {
+    userStateCache.clear();
+    return;
+  }
+  userStateCache.delete(userId);
+}
+
+// Un CLIENTE (cuenta creada por el registro publico de la tienda online) solo
+// puede usar su sesion en el portal de compra -- sin esto, cualquiera que se
+// registrara tenia acceso a ventas, finanzas, clientes, etc. del negocio,
+// porque esas rutas solo piden authMiddleware y no un rol.
+const CLIENTE_ALLOWED_PREFIXES = ["/auth/", "/catalog/", "/tienda/"];
+
+function isClienteAllowedPath(fullPath: string) {
+  return CLIENTE_ALLOWED_PREFIXES.some((prefix) => fullPath.startsWith(prefix));
+}
+
+async function authenticate(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  decoded: JwtPayload,
+  optional: boolean
+) {
+  const state = await loadUserState(decoded.userId);
+
+  if (!state || !state.isActive) {
+    if (optional) {
+      (req as any).user = undefined;
+      return next();
+    }
+    return res.status(401).json({ code: "SESSION_INVALID", message: "Sesión inválida, volvé a iniciar sesión" });
+  }
+
+  // Tokens de negocio propio: manda el rol actual de la DB, no el del token.
+  // Los de negocio ajeno (ext) toman el rol del acceso vigente en
+  // runWithAuthenticatedTenant.
+  const role = decoded.ext ? decoded.role : state.role;
+
+  if (role === "CLIENTE" && !isClienteAllowedPath(req.originalUrl.split("?")[0])) {
+    return res.status(403).json({ message: "No autorizado" });
+  }
+
+  (req as any).user = { id: decoded.userId, role, tenantId: decoded.tenantId };
+  touchLastSeen(decoded.userId);
+  return runWithAuthenticatedTenant(req, res, next, decoded);
+}
+
 // Exportado para storefrontTenant.ts: la tienda online necesita identificar
 // a un CLIENTE logueado (para autocompletar datos en el checkout) SIN dejar
 // que el tenantId de su JWT pise el tenant de la tienda que esta navegando
@@ -121,9 +195,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
   try {
     const decoded = jwt.verify(token, JWT_SECRET as string) as unknown as JwtPayload;
 
-    (req as any).user = { id: decoded.userId, role: decoded.role, tenantId: decoded.tenantId };
-    touchLastSeen(decoded.userId);
-    runWithAuthenticatedTenant(req, res, next, decoded).catch(next);
+    authenticate(req, res, next, decoded, false).catch(next);
   } catch (_err) {
     return res.status(401).json({ message: "Token inválido" });
   }
@@ -139,9 +211,7 @@ export function optionalAuthMiddleware(req: Request, res: Response, next: NextFu
   try {
     const decoded = jwt.verify(token, JWT_SECRET as string) as unknown as JwtPayload;
 
-    (req as any).user = { id: decoded.userId, role: decoded.role, tenantId: decoded.tenantId };
-    touchLastSeen(decoded.userId);
-    runWithAuthenticatedTenant(req, res, next, decoded).catch(next);
+    authenticate(req, res, next, decoded, true).catch(next);
   } catch (_err) {
     // En rutas públicas no bloqueamos por token vencido/incorrecto.
     // Simplemente se responde como visitante y el frontend puede pedir login al checkout.

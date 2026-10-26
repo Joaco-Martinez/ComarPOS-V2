@@ -19,6 +19,20 @@ const nextConfig: NextConfig = {
     // nombre estable, así que si cambia el archivo hay que cambiarle el
     // nombre (o aceptar hasta 1 año de cache stale en algún cliente).
     return [
+      // Headers de seguridad para todo el sitio. Sin CSP de scripts a
+      // proposito (GA/Ads/Vercel inyectan scripts propios); solo
+      // frame-ancestors para que nadie pueda embeber el panel en un iframe
+      // (clickjacking). La app de Capacitor carga la URL directo en el
+      // WebView, no en un iframe, asi que no le afecta.
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
       {
         source: '/brand/:path*',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],

@@ -1,15 +1,16 @@
 import { Router } from "express";
 import { clientController } from "../controllers/client.controller";
 import { authMiddleware, requireRole } from "../middleware/auth";
+import { publicFormRateLimiter } from "../middleware/rateLimit";
 
 const router = Router();
 
 // Registro público desde /tienda
-router.post("/tienda/register", clientController.registerFromStore);
+router.post("/tienda/register", publicFormRateLimiter, clientController.registerFromStore);
 
 // Reset público de contraseña desde /tienda
-router.post("/tienda/forgot-password", clientController.forgotPassword);
-router.post("/tienda/reset-password", clientController.resetPassword);
+router.post("/tienda/forgot-password", publicFormRateLimiter, clientController.forgotPassword);
+router.post("/tienda/reset-password", publicFormRateLimiter, clientController.resetPassword);
 
 // Rutas internas ERP
 router.post("/", authMiddleware, requireRole("ADMIN"), clientController.create);

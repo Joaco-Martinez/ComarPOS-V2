@@ -7,7 +7,9 @@ import {
   SaleStatus, FinanceType, CategoryFinance, PurchaseStatus,
   MovementType, BusinessLocationType, CashSessionStatus,
 } from "@prisma/client";
+import "dotenv/config";
 import bcrypt from "bcryptjs";
+import { assertLocalDatabase } from "./utils/assertLocalDatabase";
 import {
   buildCombinations,
   buildVariantLabel,
@@ -42,6 +44,10 @@ function randFrom<T>(arr: T[]): T {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  // Crea usuarios con contraseñas conocidas (admin123/empleado123): nunca
+  // contra una base remota.
+  assertLocalDatabase("seed-full");
+
   console.log("🌱 Seed completo iniciando...\n");
 
   const slug = process.env.DEFAULT_TENANT_SLUG ?? "grupo-vj";

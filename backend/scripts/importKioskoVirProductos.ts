@@ -1,11 +1,11 @@
 /**
  * Import puntual del catalogo de "Kiosko Vir" (tenant real, alta 2026-09-03,
- * cuenta rubengera83@gmail.com) desde el excel exportado de su POS anterior.
+ * cuenta ADMIN del negocio) desde el excel exportado de su POS anterior.
  * Reusa categoryService.create() y product.write.ts#create() (no reimplementa
  * la logica de negocio) para que valga la misma validacion que el alta manual.
  *
  * Uso:
- *   npx ts-node scripts/importKioskoVirProductos.ts            -> dry-run (no escribe nada)
+ *   npx ts-node scripts/importKioskoVirProductos.ts --adminEmail=<email>            -> dry-run (no escribe nada)
  *   npx ts-node scripts/importKioskoVirProductos.ts --commit    -> escribe de verdad
  *   npx ts-node scripts/importKioskoVirProductos.ts --commit --limit=20  -> prueba acotada
  */
@@ -17,7 +17,10 @@ import { categoryService } from "../src/services/category.service";
 
 const TENANT_SLUG = "kiosko-vir";
 const EXCEL_PATH = "C:\\Users\\Joaco\\Downloads\\Productos.xlsx";
-const ADMIN_EMAIL = "rubengera83@gmail.com";
+// Email del ADMIN del negocio: por argumento, no en el codigo (repo publico).
+const adminEmailArg = process.argv.find((a) => a.startsWith("--adminEmail="));
+const ADMIN_EMAIL = adminEmailArg ? adminEmailArg.split("=")[1].trim().toLowerCase() : "";
+if (!ADMIN_EMAIL) throw new Error("Falta --adminEmail=<email del ADMIN del negocio>");
 
 const COMMIT = process.argv.includes("--commit");
 const limitArg = process.argv.find((a) => a.startsWith("--limit="));

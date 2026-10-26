@@ -2,6 +2,9 @@ import prisma from "../prisma";
 import { GoalMetric } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import { pickFields } from "../utils/pickFields";
+
+const SALES_GOAL_FIELDS = ["title", "description", "metric", "targetAmount", "periodStart", "periodEnd"] as const;
 
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -30,7 +33,7 @@ export const salesGoalService = {
     if (data.periodStart >= data.periodEnd) throw new Error("periodStart debe ser anterior a periodEnd.");
     if (data.targetAmount <= 0) throw new Error("El objetivo debe ser mayor a 0.");
     return prisma.salesGoal.create({
-      data: { ...data, tenantId: currentTenantId() },
+      data: { ...pickFields(data, SALES_GOAL_FIELDS), tenantId: currentTenantId() },
     });
   },
 
@@ -45,7 +48,7 @@ export const salesGoalService = {
   }) {
     const existing = await prisma.salesGoal.findFirst({ where: { id, ...tenantScope() } });
     if (!existing) throw new Error("Meta no encontrada.");
-    return prisma.salesGoal.update({ where: { id }, data });
+    return prisma.salesGoal.update({ where: { id }, data: pickFields(data, [...SALES_GOAL_FIELDS, "isActive"]) });
   },
 
   async remove(id: string) {
