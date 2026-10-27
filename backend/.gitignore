@@ -20,3 +20,6 @@ coverage/
 
 # Backups locales de DB (ver npm run backup)
 backups/
+
+# Scripts puntuales con datos reales de clientes (no viajan al repo)
+scripts/regenerar-factura-619.ts

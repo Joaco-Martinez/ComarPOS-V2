@@ -143,6 +143,12 @@ export const mercadoPagoClient = {
   verifyWebhookSignature(req: Request): boolean {
     const secret = process.env.MP_WEBHOOK_SECRET;
     if (!secret) {
+      // En produccion no se acepta nada sin firma: cualquiera podria mandar
+      // un webhook armado a mano.
+      if (process.env.NODE_ENV === "production") {
+        console.error("🚨 MP_WEBHOOK_SECRET no configurado en produccion: webhook de Mercado Pago rechazado");
+        return false;
+      }
       console.warn(
         "⚠️ MP_WEBHOOK_SECRET no configurado: webhook de Mercado Pago aceptado sin validar firma"
       );

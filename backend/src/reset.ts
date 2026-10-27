@@ -1,5 +1,7 @@
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { execSync } from "node:child_process";
+import { assertLocalDatabase } from "./utils/assertLocalDatabase";
 
 const prisma = new PrismaClient();
 
@@ -10,14 +12,8 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🧨 RESET DB: arrancando...");
 
-  // 1) Verificación mínima para evitar accidentes
-  const dbUrl = process.env.DATABASE_URL || "";
-  if (!dbUrl) throw new Error("Falta DATABASE_URL");
-
-  // Tip: si querés bloquear producción, descomentá:
-  // if (dbUrl.includes("railway") || dbUrl.includes("render") || dbUrl.includes("prod")) {
-  //   throw new Error("Bloqueado: parece una base de producción.");
-  // }
+  // 1) Solo contra una base local (ver utils/assertLocalDatabase.ts)
+  assertLocalDatabase("reset");
 
   console.log("🗑️  Borrando schema public...");
   await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS public CASCADE;`);

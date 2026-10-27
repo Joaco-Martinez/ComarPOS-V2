@@ -2,6 +2,14 @@ import prisma from "../prisma";
 import { DiscountType, PromotionType, CategoryClient } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import { pickFields } from "../utils/pickFields";
+
+const PROMOTION_FIELDS = ["name", "description", "type", "discountValue", "discountType", "startsAt", "endsAt", "minAmount", "categoryIds", "productIds", "clientCategory"] as const;
+// El tipo de promocion no se cambia una vez creada (no estaba en el update).
+const PROMOTION_UPDATE_FIELDS = [...PROMOTION_FIELDS.filter((f) => f !== "type"), "isActive"] as (
+  | Exclude<(typeof PROMOTION_FIELDS)[number], "type">
+  | "isActive"
+)[];
 
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -63,7 +71,7 @@ export const promotionService = {
     if (data.discountValue <= 0) throw new Error("El descuento debe ser mayor a 0.");
     await assertNoLooseVariants(data.productIds);
     return prisma.promotion.create({
-      data: { ...data, tenantId: currentTenantId() },
+      data: { ...pickFields(data, PROMOTION_FIELDS), tenantId: currentTenantId() },
     });
   },
 
@@ -83,7 +91,7 @@ export const promotionService = {
     const existing = await prisma.promotion.findFirst({ where: { id, ...tenantScope() } });
     if (!existing) throw new Error("Promoción no encontrada.");
     await assertNoLooseVariants(data.productIds);
-    return prisma.promotion.update({ where: { id }, data });
+    return prisma.promotion.update({ where: { id }, data: pickFields(data, PROMOTION_UPDATE_FIELDS) });
   },
 
   async deactivate(id: string) {

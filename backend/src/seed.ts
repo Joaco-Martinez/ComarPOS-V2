@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import "dotenv/config";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -10,19 +11,31 @@ const prisma = new PrismaClient();
 // /platform-admin. Sin este seed no hay forma de entrar a /platform-admin
 // la primera vez (la tabla queda vacia y el login rechaza cualquier
 // credencial).
+//
+// Las credenciales salen de variables de entorno (nunca del codigo: el repo
+// es publico y una contraseña commiteada queda para siempre en el historial).
 async function seedPlatformAdmin() {
-  const passwordHash = await bcrypt.hash("Joaco1907", 10);
+  const email = String(process.env.PLATFORM_ADMIN_EMAIL || "").trim().toLowerCase();
+  const password = String(process.env.PLATFORM_ADMIN_PASSWORD || "");
+  const name = String(process.env.PLATFORM_ADMIN_NAME || "Admin").trim();
+
+  if (!email) throw new Error("Falta PLATFORM_ADMIN_EMAIL");
+  if (password.length < 12) {
+    throw new Error("PLATFORM_ADMIN_PASSWORD es obligatoria y debe tener al menos 12 caracteres");
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
 
   const platformAdmin = await prisma.platformAdmin.upsert({
-    where: { email: "joaco.martinez1480@gmail.com" },
+    where: { email },
     update: {
-      name: "Joaco",
+      name,
       passwordHash,
     },
     create: {
-      email: "joaco.martinez1480@gmail.com",
+      email,
       passwordHash,
-      name: "Joaco",
+      name,
     },
   });
 

@@ -18,7 +18,9 @@ import {
   resolveStockLocationId,
   validateStockAvailability,
   discountStockLines,
+  notifyStockFallback,
   queueStockAlerts,
+  type StockFallbackUse,
 } from "./sale.stock";
 import { calculatePaymentState, createAccountDebtMovement } from "./sale.payment";
 import { addHours, resolveQuotationHours, queueSalePdfGeneration } from "./sale.query";
@@ -205,6 +207,7 @@ export async function create(data: CreateSaleInput) {
   const stockLines = buildStockLines(itemsWithProfit);
 
   const pendingAlerts: string[] = [];
+  let stockFallbacks: StockFallbackUse[] = [];
 
   const saleStatus = data.status ?? SaleStatus.PENDING;
 
@@ -312,7 +315,7 @@ export async function create(data: CreateSaleInput) {
         },
       });
 
-      await discountStockLines(
+      stockFallbacks = await discountStockLines(
         tx,
         stockLines,
         data.userId,
@@ -339,6 +342,7 @@ export async function create(data: CreateSaleInput) {
   );
 
   queueStockAlerts(pendingAlerts);
+  notifyStockFallback(result.id, stockFallbacks);
   queueSalePdfGeneration(result.id);
 
   // Una venta puede crearse ya como COMPLETED (venta directa desde el POS,
@@ -373,5 +377,8 @@ export async function create(data: CreateSaleInput) {
     sale: result,
     invoice: null,
     pdfQueued: true,
+    // Lo que se desconto de ubicaciones de respaldo (Configuracion > Stock),
+    // para que el POS avise en el momento. Vacio si alcanzo con la de la venta.
+    stockFallbacks,
   };
 }

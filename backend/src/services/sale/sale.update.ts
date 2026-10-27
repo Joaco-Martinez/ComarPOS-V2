@@ -21,7 +21,9 @@ import {
   validateStockAvailability,
   discountStockLines,
   restoreStockLines,
+  notifyStockFallback,
   queueStockAlerts,
+  type StockFallbackUse,
 } from "./sale.stock";
 import { calculatePaymentState } from "./sale.payment";
 import { buildSaleInclude, queueSalePdfGeneration } from "./sale.query";
@@ -209,6 +211,7 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
   const oldStockLines = buildStockLines(sale.items.map(saleItemToResolved));
   const newStockLines = buildStockLines(itemsWithProfit);
   const pendingAlerts: string[] = [];
+  let stockFallbacks: StockFallbackUse[] = [];
 
   const updated = await prisma.$transaction(
     async (tx) => {
@@ -350,7 +353,7 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
         include: buildSaleInclude(),
       });
 
-      await discountStockLines(
+      stockFallbacks = await discountStockLines(
         tx,
         newStockLines,
         sale.userId ?? undefined,
@@ -368,6 +371,7 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
   );
 
   queueStockAlerts(pendingAlerts);
+  notifyStockFallback(updated.id, stockFallbacks);
   queueSalePdfGeneration(updated.id);
 
   if (updated.status === SaleStatus.COMPLETED) {

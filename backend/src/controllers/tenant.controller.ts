@@ -27,4 +27,35 @@ export const tenantController = {
       next(error);
     }
   },
+
+  async getStockSettings(req: Request, res: Response, next: NextFunction) {
+    try {
+      const settings = await tenantService.getStockSettings();
+      res.json({ ok: true, settings });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async updateStockSettings(req: Request, res: Response, next: NextFunction) {
+    try {
+      const settings = await tenantService.updateStockSettings({
+        stockFallbackEnabled: req.body.stockFallbackEnabled,
+        stockFallbackLocationIds: req.body.stockFallbackLocationIds,
+      });
+      res.json({ ok: true, settings });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getStockFallbackLog(req: Request, res: Response, next: NextFunction) {
+    try {
+      const limit = Number(req.query.limit) || 100;
+      const items = await tenantService.getStockFallbackLog(limit);
+      res.json({ ok: true, items });
+    } catch (error) {
+      next(error);
+    }
+  },
 };

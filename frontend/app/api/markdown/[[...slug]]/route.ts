@@ -9,8 +9,17 @@ import { appendVaryAccept } from '@/lib/contentNegotiation';
 // para no tener que derivar markdown desde JSX en cada request.
 export async function GET(_req: Request, { params }: { params: Promise<{ slug?: string[] }> }) {
   const { slug = [] } = await params;
+  // Solo nombres simples dentro de content/ (sin "..", barras invertidas ni
+  // segmentos raros que permitan salir de la carpeta).
+  if (slug.some((seg) => !/^[a-z0-9_-]+$/i.test(seg))) {
+    return new Response('Not found', { status: 404 });
+  }
   const name = slug.length === 0 ? 'index' : slug.join('/');
-  const contentPath = path.join(process.cwd(), 'content', `${name}.md`);
+  const contentDir = path.join(process.cwd(), 'content');
+  const contentPath = path.join(contentDir, `${name}.md`);
+  if (!contentPath.startsWith(contentDir + path.sep)) {
+    return new Response('Not found', { status: 404 });
+  }
 
   let body: string;
   try {

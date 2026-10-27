@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { app } = require('electron');
+const { app, safeStorage } = require('electron');
 
 // Config local del agente -- vive en el userData de esta PC, nunca viaja al
 // backend salvo el token que ya devuelve el pairing (ver api.js). No usamos
@@ -12,19 +12,65 @@ const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 
 const DEFAULT_API_URL = 'https://api.comarpos.com';
 
-function load() {
+// El token del dispositivo (con el que el backend firma/valida cada poll de
+// impresion) se guarda cifrado con safeStorage (DPAPI en Windows, atado al
+// usuario de Windows) en vez de en texto plano en config.json. Si safeStorage
+// no esta disponible se guarda como antes, para no dejar de funcionar.
+function canEncrypt() {
   try {
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    return JSON.parse(raw);
+    return Boolean(safeStorage && safeStorage.isEncryptionAvailable());
+  } catch {
+    return false;
+  }
+}
+
+function load() {
+  let cfg;
+  try {
+    cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
   } catch {
     return {};
+  }
+
+  if (cfg.tokenEnc) {
+    const { tokenEnc, ...rest } = cfg;
+    try {
+      if (canEncrypt()) return { ...rest, token: safeStorage.decryptString(Buffer.from(tokenEnc, 'base64')) };
+    } catch {
+      // token ilegible (otro usuario de Windows / perfil migrado): queda sin vincular
+    }
+    return rest;
+  }
+
+  return cfg;
+}
+
+function persist(cfg, keepTokenEnc) {
+  const { token, ...rest } = cfg;
+  let onDisk = cfg;
+  if (token && canEncrypt()) {
+    onDisk = { ...rest, tokenEnc: safeStorage.encryptString(token).toString('base64') };
+  } else if (!token && keepTokenEnc) {
+    onDisk = { ...rest, tokenEnc: keepTokenEnc };
+  }
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(onDisk, null, 2), 'utf8');
+}
+
+function readRawTokenEnc() {
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')).tokenEnc;
+  } catch {
+    return undefined;
   }
 }
 
 function save(patch) {
   const current = load();
   const next = { ...current, ...patch };
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2), 'utf8');
+  // Si el token cifrado no se pudo leer (safeStorage no disponible todavia),
+  // no se pisa: se conserva tal cual estaba en disco.
+  const keepTokenEnc = !current.token && !('token' in patch) ? readRawTokenEnc() : undefined;
+  persist(next, keepTokenEnc);
   return next;
 }
 
@@ -48,6 +94,6 @@ module.exports = {
   clearPairing() {
     const cfg = load();
     const { deviceId, token, deviceName, ...rest } = cfg;
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(rest, null, 2), 'utf8');
+    persist(rest);
   },
 };

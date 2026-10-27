@@ -13,4 +13,10 @@ const router = Router();
 router.get("/me", authMiddleware, tenantController.getMe);
 router.patch("/me", authMiddleware, requireRole("ADMIN"), requirePlanFeature("empresa"), tenantController.updateMe);
 
+// Configuracion > Stock (stock de respaldo). El GET no se restringe por rol:
+// el POS lo necesita para saber que stock puede vender.
+router.get("/stock-settings", authMiddleware, tenantController.getStockSettings);
+router.patch("/stock-settings", authMiddleware, requireRole("ADMIN"), tenantController.updateStockSettings);
+router.get("/stock-fallback-log", authMiddleware, requireRole("ADMIN"), tenantController.getStockFallbackLog);
+
 export default router;

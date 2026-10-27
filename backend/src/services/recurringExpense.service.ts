@@ -2,6 +2,9 @@ import prisma from "../prisma";
 import { CategoryFinance } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
+import { pickFields } from "../utils/pickFields";
+
+const RECURRING_EXPENSE_FIELDS = ["name", "amount", "category", "dayOfMonth", "notes"] as const;
 
 export const recurringExpenseService = {
   async getAll() {
@@ -20,7 +23,7 @@ export const recurringExpenseService = {
   }) {
     if (data.dayOfMonth < 1 || data.dayOfMonth > 31) throw new Error("Día del mes inválido (1-31).");
     return prisma.recurringExpense.create({
-      data: { ...data, tenantId: currentTenantId() },
+      data: { ...pickFields(data, RECURRING_EXPENSE_FIELDS), tenantId: currentTenantId() },
     });
   },
 
@@ -36,7 +39,10 @@ export const recurringExpenseService = {
     if (!existing) throw new Error("Gasto recurrente no encontrado.");
     if (data.dayOfMonth && (data.dayOfMonth < 1 || data.dayOfMonth > 31))
       throw new Error("Día del mes inválido (1-31).");
-    return prisma.recurringExpense.update({ where: { id }, data });
+    return prisma.recurringExpense.update({
+      where: { id },
+      data: pickFields(data, [...RECURRING_EXPENSE_FIELDS, "isActive"]),
+    });
   },
 
   async remove(id: string) {

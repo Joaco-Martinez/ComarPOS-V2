@@ -12,6 +12,8 @@ interface Props {
   parent: Product;
   /** Sucursal de la venta: el stock mostrado es el de ahí. */
   locationId?: string | null;
+  /** Ubicaciones de stock de respaldo (Configuracion > Stock): su stock tambien cuenta como disponible. */
+  extraLocationIds?: string[];
   /** Precio a mostrar por variante (ej. con la lista de precios aplicada). */
   priceOf?: (variant: Product) => number;
   /** false: no se bloquean las variantes sin stock (ej. cotizaciones). */
@@ -27,13 +29,14 @@ const sameValue = (a: unknown, b: unknown) => String(a ?? '').toLowerCase() === 
 // Color...) que filtran una grilla con todas las variantes, su precio y el
 // stock en la sucursal. Las variantes sin stock quedan deshabilitadas salvo
 // que el producto sea "sin límite" o servicio (o requireStock=false).
-export default function VariantPicker({ parent, locationId, priceOf = listPrice, requireStock = true, title, onPick, onClose }: Props) {
+export default function VariantPicker({ parent, locationId, extraLocationIds = [], priceOf = listPrice, requireStock = true, title, onPick, onClose }: Props) {
   const options = parent.variantOptions ?? [];
   const variants = useMemo(() => sortedVariants(parent).filter((v) => v.isActive !== false), [parent]);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const isKg = parent.saleUnit === 'KG';
 
-  const hasStock = (v: Product) => !requireStock || v.isService || v.unlimitedStock || stockAt(v, locationId) > 0;
+  const stockOf = (v: Product) => extraLocationIds.reduce((acc, id) => acc + stockAt(v, id), stockAt(v, locationId));
+  const hasStock = (v: Product) => !requireStock || v.isService || v.unlimitedStock || stockOf(v) > 0;
 
   const matching = variants.filter((v) =>
     options.every((o) => !selected[o.name] || sameValue(v.variantAttributes?.[o.name], selected[o.name]))
@@ -94,7 +97,7 @@ export default function VariantPicker({ parent, locationId, priceOf = listPrice,
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
             {matching.map((v) => {
-              const stock = stockAt(v, locationId);
+              const stock = stockOf(v);
               const enabled = hasStock(v);
               const img = productImage(v);
               return (

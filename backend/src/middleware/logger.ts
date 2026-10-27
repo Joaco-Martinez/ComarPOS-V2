@@ -34,10 +34,19 @@ export function errorLogger(
     console.error("Detalles:", err);
   }
 
+  // Los errores de Prisma traen nombres de tablas/columnas y fragmentos de la
+  // query: en produccion no se le devuelven al cliente (quedan en el log de
+  // arriba). Los errores de negocio (new Error("...")) se siguen mostrando
+  // tal cual porque el frontend los usa como mensaje para el usuario.
+  const isInternalDbError =
+    process.env.NODE_ENV === "production" && typeof err?.name === "string" && err.name.startsWith("PrismaClient");
+
   res.status(statusCode).json({
     ok: false,
-    code: err.code || (statusCode >= 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR"),
-    message: err.message || "Error interno del servidor",
+    code: isInternalDbError
+      ? "INTERNAL_ERROR"
+      : err.code || (statusCode >= 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR"),
+    message: isInternalDbError ? "Error interno del servidor" : err.message || "Error interno del servidor",
     details: err.details ?? undefined,
     requestId,
   });

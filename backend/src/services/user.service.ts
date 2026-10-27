@@ -7,6 +7,7 @@ import { startOfDayAR, endOfDayAR } from "../utils/dateAR";
 import { planLimitsService } from "./planLimits.service";
 import { AppError } from "../utils/asyncHandler";
 import { invalidateTenantAccess } from "./tenantAccess.service";
+import { invalidateUserState } from "../middleware/auth";
 
 type ClientCategory = "Price" | "Cliente" | "Mayorista";
 
@@ -775,11 +776,13 @@ export const userService = {
       cleanData.restrictToDefaultLocation = data.restrictToDefaultLocation;
     }
 
-    return prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id },
       data: cleanData,
       select: userSelect,
     });
+    invalidateUserState(id);
+    return updatedUser;
   },
 
   async delete(id: string) {
@@ -817,8 +820,10 @@ export const userService = {
       }
     }
 
-    return prisma.user.delete({
+    const deleted = await prisma.user.delete({
       where: { id },
     });
+    invalidateUserState(id);
+    return deleted;
   },
 };

@@ -72,6 +72,13 @@ dotenv.config();
 
 const app = express();
 
+// Railway pone un proxy delante: sin esto req.ip es siempre la IP del proxy
+// y los rate limits (login, alta de prueba) se comparten entre TODOS los
+// usuarios -- 20 intentos fallidos de cualquiera bloqueaban el login de
+// todo el mundo. 1 = confiar solo en el primer hop (el proxy de Railway),
+// asi un X-Forwarded-For armado a mano no permite saltear el limite.
+app.set("trust proxy", 1);
+
 
 app.use((req, res, next) => {
   const url = req.url.toLowerCase();
@@ -134,8 +141,6 @@ app.use(cors({
       "http://localhost:3002",
       "http://localhost:3010",
       "http://localhost:4000",
-      "https://von-konig.vercel.app",
-      "https://www.vonkonigerp.com.ar",
       ...envOrigins,
     ];
 
