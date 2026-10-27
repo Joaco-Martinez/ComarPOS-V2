@@ -56,6 +56,11 @@ export default function PosPage() {
   // en vez de mandarse al backend.
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [stockLocationId, setStockLocationId] = useState('');
+  // Stock de respaldo (Configuracion > Stock): si esta prendido, lo que hay
+  // en esas ubicaciones tambien se puede vender -- el backend descuenta de
+  // ahi lo que falte en la sucursal elegida (ver sale.stock.ts).
+  const [stockFallback, setStockFallback] = useState<{ enabled: boolean; locationIds: string[] }>({ enabled: false, locationIds: [] });
+  const [fallbackNotice, setFallbackNotice] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientSearch, setClientSearch] = useState('');
@@ -123,7 +128,7 @@ export default function PosPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [pr, cr, clr, blr, plr] = await Promise.all([
+        const [pr, cr, clr, blr, plr, ssr] = await Promise.all([
           // sellable: simples y variantes (nunca padres); se agrupan por
           // padre para mostrar en la grilla (ver groupByParent).
           api.get('/products', { params: { isActive: true, limit: 500, sellable: true } }).catch(() => null),
@@ -131,11 +136,18 @@ export default function PosPage() {
           api.get('/clients', { params: { limit: 200 } }).catch(() => null),
           api.get('/business-locations').catch(() => null),
           api.get('/price-lists').catch(() => null),
+          api.get('/tenant/stock-settings').catch(() => null),
         ]);
         if (pr) setProducts(normalizeArray<Product>(pr.data));
         if (cr) setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
         if (clr) setClients(normalizeArray<Client>(clr.data));
         if (plr) setPriceLists(normalizeArray<PriceList>(plr.data));
+        if (ssr?.data?.settings) {
+          setStockFallback({
+            enabled: !!ssr.data.settings.stockFallbackEnabled,
+            locationIds: ssr.data.settings.stockFallbackLocationIds ?? [],
+          });
+        }
         if (!pr || !cr || !clr) {
           alert('Algunos datos no se pudieron cargar (productos, categorías o clientes). Actualizá la página para reintentar.');
         }
@@ -250,7 +262,17 @@ export default function PosPage() {
 
   // Tarjeta de un producto con variantes: stock sumado en la sucursal y el
   // precio más bajo ("desde"); tocarla abre el selector de variantes.
-  const groupStock = (p: Product) => (p.variants ?? []).reduce((acc, v) => acc + stockAt(v, stockLocationId), 0);
+  // Ubicaciones de donde puede salir el stock de esta venta: la elegida y,
+  // si hay stock de respaldo, las de respaldo activas en orden.
+  const sellableLocationIds = useMemo(() => {
+    if (!stockLocationId) return [];
+    if (!stockFallback.enabled) return [stockLocationId];
+    const active = new Set(businessLocations.map((l) => l.id));
+    return [stockLocationId, ...stockFallback.locationIds.filter((id) => id !== stockLocationId && active.has(id))];
+  }, [stockLocationId, stockFallback, businessLocations]);
+
+  const groupStock = (p: Product) =>
+    (p.variants ?? []).reduce((acc, v) => acc + sellableLocationIds.reduce((sum, id) => sum + stockAt(v, id), 0), 0);
   const groupPrices = (p: Product) => (p.variants ?? []).map((v) => resolvedPrice(v));
   const pickProduct = (p: Product) => {
     if (p.hasVariants) {
@@ -281,27 +303,39 @@ export default function PosPage() {
     ).slice(0, 8);
   }, [clients, clientSearch]);
 
-  // Stock de la fila propia del producto en la sucursal elegida.
-  const ownStock = (p: Product) => {
-    const row = p.stock?.find((s) => s.businessLocationId === stockLocationId);
-    if (!row) return 0;
-    return num(p.saleUnit === 'KG' ? row.quantityKg : row.quantity);
-  };
+  // Stock de la fila propia del producto en la sucursal elegida (+ respaldo).
+  const ownStock = (p: Product, locationIds = sellableLocationIds) =>
+    (p.stock ?? [])
+      .filter((s) => locationIds.includes(s.businessLocationId))
+      .reduce((acc, s) => acc + num(p.saleUnit === 'KG' ? s.quantityKg : s.quantity), 0);
 
   // Un COMPUESTO nunca tiene stock propio (product.stock.ts bloquea ingresos
   // y transferencias): su disponible sale de los componentes en la sucursal,
   // igual que getProductStock() del catálogo -- min(floor(stock / cantidad
   // por combo)).
-  const productStock = (p: Product) => {
-    if (p.type !== 'COMPUESTO') return ownStock(p);
+  const productStock = (p: Product, locationIds = sellableLocationIds) => {
+    if (p.type !== 'COMPUESTO') return ownStock(p, locationIds);
     const components = p.components ?? [];
     if (components.length === 0) return 0;
     return Math.max(0, Math.min(...components.map((c) => {
-      const row = c.component?.stock?.find((s) => s.businessLocationId === stockLocationId);
-      if (num(c.quantity) > 0) return Math.floor(num(row?.quantity) / num(c.quantity));
-      if (num(c.quantityKg) > 0) return Math.floor(num(row?.quantityKg) / num(c.quantityKg));
+      const rows = (c.component?.stock ?? []).filter((s) => locationIds.includes(s.businessLocationId));
+      const units = rows.reduce((acc, s) => acc + num(s.quantity), 0);
+      const kg = rows.reduce((acc, s) => acc + num(s.quantityKg), 0);
+      if (num(c.quantity) > 0) return Math.floor(units / num(c.quantity));
+      if (num(c.quantityKg) > 0) return Math.floor(kg / num(c.quantityKg));
       return 0;
     })));
+  };
+
+  // Texto de stock de la tarjeta: si parte sale del respaldo, se aclara
+  // cuanto hay en la sucursal elegida y cuanto en respaldo.
+  const stockLabel = (p: Product, stock: number) => {
+    const fmt = (n: number) => (p.saleUnit === 'KG' ? `${fmtKg(n)}kg` : String(n));
+    const primary = p.hasVariants
+      ? (p.variants ?? []).reduce((acc, v) => acc + stockAt(v, stockLocationId), 0)
+      : productStock(p, [stockLocationId]);
+    if (sellableLocationIds.length > 1 && stock > primary) return `Stock: ${fmt(primary)} +${fmt(stock - primary)} resp.`;
+    return `Stock: ${fmt(stock)}`;
   };
 
   // Lo que consume del stock real cargar `qty` de un producto: el propio
@@ -846,6 +880,14 @@ export default function PosPage() {
       // respuesta en otro lado.
       const { data } = await api.post('/sales', body);
       const newSale = data.sale;
+      const fallbacks: any[] = data.stockFallbacks ?? [];
+      if (fallbacks.length > 0) {
+        const detail = fallbacks
+          .map((f) => `${f.quantityKg > 0 ? `${fmtKg(f.quantityKg)}kg` : f.quantity} x ${f.productName} desde ${f.fromLocationName}`)
+          .join(', ');
+        setFallbackNotice(`Sin stock en ${fallbacks[0].primaryLocationName}: se descontó ${detail}`);
+        window.setTimeout(() => setFallbackNotice(''), 8000);
+      }
 
       if (status === 'COMPLETED' && wantsTicket) {
         try {
@@ -886,6 +928,18 @@ export default function PosPage() {
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <Check size={16} /> {successMsg}
+        </div>
+      )}
+
+      {fallbackNotice && (
+        <div style={{
+          position: 'fixed', top: 'calc(var(--app-header-height, 56px) + 62px)', left: '50%', transform: 'translateX(-50%)', zIndex: 200,
+          background: 'rgba(243,156,18,0.15)', border: '1px solid rgba(243,156,18,0.45)',
+          color: 'var(--warn)', borderRadius: 8, padding: '10px 22px', maxWidth: 'calc(100vw - 32px)',
+          fontSize: 13, fontWeight: 600, animation: 'fadeIn 0.3s ease',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <Warehouse size={16} /> {fallbackNotice}
         </div>
       )}
 
@@ -1049,7 +1103,7 @@ export default function PosPage() {
                           {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
                           {p.unlimitedStock
                             ? 'Sin límite'
-                            : noStock ? 'Sin stock' : `Stock: ${p.saleUnit === 'KG' ? `${fmtKg(stock)}kg` : stock}`}
+                            : noStock ? 'Sin stock' : stockLabel(p, stock)}
                         </span>
                         {categoryName(p) !== 'Sin categoría' && (
                           <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1106,7 +1160,7 @@ export default function PosPage() {
                         {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
                         {p.unlimitedStock
                           ? 'Sin límite'
-                          : noStock ? 'Sin stock' : `Stock: ${p.saleUnit === 'KG' ? `${fmtKg(stock)}kg` : stock}`}
+                          : noStock ? 'Sin stock' : stockLabel(p, stock)}
                       </span>
                       {categoryName(p) !== 'Sin categoría' && (
                         <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1771,6 +1825,7 @@ export default function PosPage() {
         <VariantPicker
           parent={variantPicker}
           locationId={stockLocationId}
+          extraLocationIds={sellableLocationIds.slice(1)}
           priceOf={resolvedPrice}
           onPick={(variant) => {
             setVariantPicker(null);

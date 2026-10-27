@@ -73,6 +73,8 @@ export const ADMIN_NAV: NavItem[] = [
     intro: 'Armá una orden de compra para pedirle mercadería a un proveedor, antes de que llegue y se convierta en una compra.' },
   { href: '/proveedores',                      icon: ProveedoresIcon,        label: 'Proveedores',         color: '#00B4DB', moduleKey: 'proveedores', group: 'Compras',
     intro: 'La ficha de cada proveedor: datos de contacto y el historial de lo que le compraste.' },
+  { href: '/configuracion/stock',               icon: StockIcon,              label: 'Config. de stock',    color: '#6474BB', moduleKey: 'stock', group: 'Catálogo y stock',
+    intro: 'Elegí qué pasa cuando una sucursal se queda sin un producto: podés seguir vendiendo y descontarlo de otro depósito, y queda registrado.' },
   { href: '/conteo-stock',                     icon: ConteoStockIcon,        label: 'Conteo de Stock',     color: '#6474BB', moduleKey: 'conteoStock', group: 'Catálogo y stock',
     intro: 'Contá el stock físico de tu local y comparalo con lo que dice el sistema, para corregir diferencias.' },
   { href: '/finanzas',                         icon: FinanzasIcon,           label: 'Finanzas',            color: '#18C15E', moduleKey: 'finanzas', group: 'Finanzas',

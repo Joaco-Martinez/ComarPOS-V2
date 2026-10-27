@@ -142,6 +142,15 @@ model Tenant {
   // cualquier empleado que entre ve el mismo progreso.
   onboardingChecklist Json?
 
+  // Stock de respaldo (Configuracion > Stock): si esta prendido y la
+  // ubicacion de la venta no alcanza, el faltante se descuenta de las
+  // ubicaciones de stockFallbackLocationIds, en ese orden de prioridad, en
+  // vez de bloquear la venta. Cada uso queda registrado (StockMovement con
+  // isStockFallback=true) y se avisa a los ADMIN con una notificacion
+  // STOCK_FALLBACK. Ver sale.stock.ts#allocateStockLines.
+  stockFallbackEnabled     Boolean  @default(false)
+  stockFallbackLocationIds String[] @default([])
+
   paymentLogs     TenantPaymentLog[]
   printboxDevices PrintboxDevice[]
   printJobs       PrintJob[]
@@ -1464,6 +1473,9 @@ model StockMovement {
   quantityKg     Float?
   reason         String?
   reference      String?
+  // true = venta descontada de una ubicacion de respaldo porque la de la
+  // venta no tenia stock (ver Tenant.stockFallbackEnabled).
+  isStockFallback Boolean          @default(false)
   createdAt      DateTime          @default(now())
   product        Product           @relation(fields: [productId], references: [id])
   user           User?             @relation(fields: [userId], references: [id])
@@ -1477,6 +1489,7 @@ model StockMovement {
   @@index([type])
   @@index([createdAt])
   @@index([tenantId])
+  @@index([isStockFallback])
 }
 
 model Purchase {
@@ -2632,6 +2645,7 @@ enum NotificationType {
   SYSTEM
   ONBOARDING_PENDING
   PRINTER_NOT_CONFIGURED
+  STOCK_FALLBACK
 }
 
 enum RepairOrderStatus {

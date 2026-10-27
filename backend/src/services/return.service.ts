@@ -10,7 +10,9 @@ import {
   validateStockAvailability,
   discountStockLines,
   restoreStockLines,
+  notifyStockFallback,
   queueStockAlerts,
+  type StockFallbackUse,
 } from "./sale/sale.stock";
 import { accountService } from "./account.service";
 import type { ClientMini, ResolvedSaleItem } from "./sale/sale.types";
@@ -340,6 +342,7 @@ async function processPartialReturn(
     throw new Error("El cliente debe pagar la diferencia, no se le puede acreditar");
   }
 
+  let stockFallbacks: StockFallbackUse[] = [];
   const result = await prisma.$transaction(
     async (tx) => {
       if (returnedStockLines.length > 0) {
@@ -347,7 +350,7 @@ async function processPartialReturn(
       }
       if (exchangeStockLines.length > 0) {
         await validateStockAvailability(tx, exchangeStockLines, stockLocationId);
-        await discountStockLines(tx, exchangeStockLines, userId, sale.id, stockLocationId, []);
+        stockFallbacks = await discountStockLines(tx, exchangeStockLines, userId, sale.id, stockLocationId, []);
       }
 
       // Reversion proporcional de deuda de cta cte de ESTA venta, si tenia.
@@ -438,6 +441,7 @@ async function processPartialReturn(
   );
 
   queueStockAlerts([...returnedStockLines, ...exchangeStockLines].map((l) => l.productId));
+  notifyStockFallback(sale.id, stockFallbacks);
 
   // Liquidacion de la diferencia (fuera de la transaccion de stock/venta,
   // mismo criterio que ya usaba processReturn con el Finance del reembolso).

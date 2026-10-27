@@ -14,6 +14,22 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2.8',
+    date: '2026-10-27',
+    title: 'Stock de respaldo',
+    sections: [
+      {
+        title: 'Nuevo',
+        items: [
+          'Stock de respaldo: en Catálogo y stock → Config. de stock podés elegir uno o más depósitos/sucursales de respaldo. Si la sucursal desde la que vendés se queda sin un producto, la venta sigue y lo que falta se descuenta del respaldo, en el orden que elijas.',
+          'Cada vez que se usa el respaldo queda registrado (producto, cantidad, de dónde salió, vendedor) en Config. de stock, y les llega un aviso a los administradores en la campanita.',
+          'En el POS la tarjeta del producto muestra cuánto hay en la sucursal y cuánto en respaldo, y al cobrar se avisa si se descontó de otro lado.',
+          'Si se cancela o devuelve una venta que usó respaldo, el stock vuelve a la ubicación de donde salió.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.7',
     date: '2026-10-23',
     title: 'Contador en varios negocios, sacar stock y etiquetas',

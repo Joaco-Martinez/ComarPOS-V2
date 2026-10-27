@@ -10,7 +10,7 @@ import { useParams } from 'next/navigation';
 // navegador. No usa el store de notificaciones (Notification model) a
 // proposito: esto es un anuncio de producto para TODOS los usuarios, no un
 // evento de negocio individual.
-const LATEST_ID = 'contador-multinegocio-2026-10-23';
+const LATEST_ID = 'stock-respaldo-2026-10-27';
 const STORAGE_KEY = 'comarpos-whatsnew-seen';
 
 export default function WhatsNewModal() {
@@ -40,24 +40,22 @@ export default function WhatsNewModal() {
             </div>
             <div>
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Novedades</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Tu contador, sacar stock y etiquetas nuevas</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Stock de respaldo</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-xs" onClick={dismiss}><X size={14} /></button>
         </div>
 
         <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, margin: '0 0 12px' }}>
-          Ahora tu contador puede entrar a ComarPOS con su propia cuenta, y una misma cuenta le sirve para todos los negocios que atiende.
+          Si tenés más de un depósito o sucursal, ya no se te frena una venta porque el local se quedó sin un producto que sí tenés en otro lado.
         </p>
 
         <ul style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 18px', paddingLeft: 18 }}>
-          <li><strong>Usuario Contador</strong>: en Usuarios → Nuevo usuario elegí el rol Contador. Solo ve el reporte Contador y las facturas, no vende y no ocupa un usuario de tu plan.</li>
-          <li><strong>¿Tu contador ya usa ComarPOS con otro negocio?</strong> Poné solo su email: entra con su cuenta de siempre y elige tu negocio desde el menú. Le podés desactivar o quitar el acceso cuando quieras.</li>
-          <li><strong>Sacar stock</strong>: en Stock → Movimiento elegí &quot;Egreso (sacar stock)&quot; para roturas, vencimientos o consumo interno.</li>
-          <li><strong>Etiquetas</strong>: el nombre del producto se ve grande y en negrita, y podés filtrar por proveedor para imprimir lo que te llegó.</li>
-          <li><strong>SKU solo con letras y números</strong>: sacamos guiones y puntos porque algunos lectores los leían mal. Las etiquetas que ya imprimiste se siguen escaneando bien.</li>
-          <li><strong>POS</strong>: si elegís el cliente o la lista de precios al final, ahora se recalculan los precios del carrito.</li>
-          <li><strong>PCs viejas</strong>: la pantalla ya no se corta en monitores chicos, y hay un agente de impresión para Windows 7 en Configuración → PrintBox.</li>
+          <li><strong>Activalo</strong> en Catálogo y stock → Config. de stock y elegí qué depósitos o sucursales sirven de respaldo, en orden de prioridad.</li>
+          <li><strong>Vendés igual</strong>: si la sucursal no tiene stock, lo que falta se descuenta del respaldo automáticamente.</li>
+          <li><strong>Queda registrado</strong>: cada uso aparece en Config. de stock y les llega un aviso a los administradores.</li>
+          <li><strong>En el POS</strong> ves cuánto hay en la sucursal y cuánto en respaldo, y al cobrar te avisa si se usó.</li>
+          <li><strong>Cancelaciones y devoluciones</strong> devuelven el stock a la ubicación de donde salió.</li>
         </ul>
 
         <div style={{ display: 'flex', gap: 8 }}>
