@@ -14,6 +14,26 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2.9',
+    date: '2026-10-28',
+    title: 'Descuentos por medio de pago y lista de precios en PDF',
+    sections: [
+      {
+        title: 'Nuevo',
+        items: [
+          'Descuentos y recargos por medio de pago: en Ventas → Medios de pago elegí, por ejemplo, 10% de descuento pagando en efectivo o 15% de recargo con tarjeta. El POS lo aplica solo al elegir el método, se ve en el resumen y se puede quitar para una venta puntual.',
+          'Lista de precios en PDF: en Listas de precios cada lista se descarga en PDF con la foto, el precio y el stock de cada producto, agrupada por categoría. Se puede filtrar por categoría y ocultar las fotos o el stock (por ejemplo, para mandársela a un cliente).',
+        ],
+      },
+      {
+        title: 'Correcciones',
+        items: [
+          'Códigos de barra: con muchos productos tildados no se descargaba el PDF ni el Excel. Ahora funciona con cualquier cantidad.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.8',
     date: '2026-10-27',
     title: 'Stock de respaldo',

@@ -19,4 +19,9 @@ router.get("/stock-settings", authMiddleware, tenantController.getStockSettings)
 router.patch("/stock-settings", authMiddleware, requireRole("ADMIN"), tenantController.updateStockSettings);
 router.get("/stock-fallback-log", authMiddleware, requireRole("ADMIN"), tenantController.getStockFallbackLog);
 
+// Configuracion > Medios de pago (descuento/recargo automatico por metodo,
+// ej. 10% off en efectivo). El GET no se restringe por rol: lo lee el POS.
+router.get("/payment-settings", authMiddleware, tenantController.getPaymentSettings);
+router.patch("/payment-settings", authMiddleware, requireRole("ADMIN"), tenantController.updatePaymentSettings);
+
 export default router;

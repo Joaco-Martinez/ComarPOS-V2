@@ -73,6 +73,8 @@ export const ADMIN_NAV: NavItem[] = [
     intro: 'Armá una orden de compra para pedirle mercadería a un proveedor, antes de que llegue y se convierta en una compra.' },
   { href: '/proveedores',                      icon: ProveedoresIcon,        label: 'Proveedores',         color: '#00B4DB', moduleKey: 'proveedores', group: 'Compras',
     intro: 'La ficha de cada proveedor: datos de contacto y el historial de lo que le compraste.' },
+  { href: '/configuracion/medios-de-pago',      icon: FinanzasIcon,           label: 'Medios de pago',      color: '#18C15E', moduleKey: 'pos', group: 'Ventas',
+    intro: 'Configurá descuentos o recargos automáticos según cómo paga el cliente, por ejemplo 10% off pagando en efectivo.' },
   { href: '/configuracion/stock',               icon: StockIcon,              label: 'Config. de stock',    color: '#6474BB', moduleKey: 'stock', group: 'Catálogo y stock',
     intro: 'Elegí qué pasa cuando una sucursal se queda sin un producto: podés seguir vendiendo y descontarlo de otro depósito, y queda registrado.' },
   { href: '/conteo-stock',                     icon: ConteoStockIcon,        label: 'Conteo de Stock',     color: '#6474BB', moduleKey: 'conteoStock', group: 'Catálogo y stock',

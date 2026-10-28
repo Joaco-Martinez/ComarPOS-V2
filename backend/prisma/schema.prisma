@@ -151,6 +151,13 @@ model Tenant {
   stockFallbackEnabled     Boolean  @default(false)
   stockFallbackLocationIds String[] @default([])
 
+  // Descuento/recargo automatico por medio de pago (Configuracion > Medios
+  // de pago), ej. 10% off pagando en efectivo o 15% de recargo con tarjeta
+  // de credito. Lista [{ method, type: "DISCOUNT" | "SURCHARGE", percent }],
+  // null = sin ajustes. Lo aplica el POS al elegir el metodo (como descuento
+  // manual de la venta, editable) - ver tenant.service.ts#getPaymentSettings.
+  paymentMethodAdjustments Json?
+
   paymentLogs     TenantPaymentLog[]
   printboxDevices PrintboxDevice[]
   printJobs       PrintJob[]

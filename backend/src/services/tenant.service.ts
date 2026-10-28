@@ -1,3 +1,4 @@
+import { PaymentMethod, Prisma } from "@prisma/client";
 import prisma from "../prisma";
 import { currentTenantId } from "../context/tenantContext";
 import { tenantScope } from "../utils/tenantScope";
@@ -5,6 +6,33 @@ import { tenantScope } from "../utils/tenantScope";
 function cleanString(value?: string | null) {
   const text = String(value ?? "").trim();
   return text || null;
+}
+
+export type PaymentMethodAdjustment = {
+  method: PaymentMethod;
+  type: "DISCOUNT" | "SURCHARGE";
+  percent: number;
+};
+
+// Lee/valida la lista guardada en Tenant.paymentMethodAdjustments: descarta
+// lo que no tenga forma valida y deja un solo ajuste por metodo.
+function normalizePaymentAdjustments(value: unknown): PaymentMethodAdjustment[] {
+  if (!Array.isArray(value)) return [];
+  const methods = new Set<string>(Object.values(PaymentMethod));
+  const byMethod = new Map<PaymentMethod, PaymentMethodAdjustment>();
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const { method, type, percent } = raw as Record<string, unknown>;
+    const pct = Math.round(Number(percent) * 100) / 100;
+    if (typeof method !== "string" || !methods.has(method)) continue;
+    if (type !== "DISCOUNT" && type !== "SURCHARGE") continue;
+    if (!Number.isFinite(pct) || pct <= 0) continue;
+    // Un descuento de 100% o mas dejaria la venta en 0 o negativa.
+    if (type === "DISCOUNT" && pct >= 100) continue;
+    if (type === "SURCHARGE" && pct > 1000) continue;
+    byMethod.set(method as PaymentMethod, { method: method as PaymentMethod, type, percent: pct });
+  }
+  return [...byMethod.values()];
 }
 
 type TenantSelfServiceInput = {
@@ -123,6 +151,39 @@ export const tenantService = {
       data: cleanData,
       select: { stockFallbackEnabled: true, stockFallbackLocationIds: true },
     });
+  },
+
+  // Configuracion > Medios de pago: descuento/recargo automatico por metodo.
+  // El GET lo lee el POS (cualquier rol); el PATCH es solo ADMIN.
+  async getPaymentSettings() {
+    const tenantId = currentTenantId();
+    if (!tenantId) throw new Error("No hay negocio en contexto");
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { paymentMethodAdjustments: true },
+    });
+    if (!tenant) throw new Error("Negocio no encontrado");
+    return { adjustments: normalizePaymentAdjustments(tenant.paymentMethodAdjustments) };
+  },
+
+  async updatePaymentSettings(data: { adjustments?: unknown }) {
+    const tenantId = currentTenantId();
+    if (!tenantId) throw new Error("No hay negocio en contexto");
+    if (!Array.isArray(data.adjustments)) {
+      throw new Error("adjustments tiene que ser una lista");
+    }
+
+    const adjustments = normalizePaymentAdjustments(data.adjustments);
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        paymentMethodAdjustments: adjustments.length > 0
+          ? (adjustments as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
+      },
+    });
+    return { adjustments };
   },
 
   /** Ultimas ventas que descontaron de una ubicacion de respaldo. */
