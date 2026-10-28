@@ -69,6 +69,38 @@ function parseQuantitiesParam(value: any): Record<string, number> | undefined {
   }
 }
 
+function asIdList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const ids = value.filter((v): v is string => typeof v === "string" && v.trim() !== "");
+  return ids.length > 0 ? ids : undefined;
+}
+
+function asRecord<T>(value: unknown): Record<string, T> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, T>) : undefined;
+}
+
+// Parametros de las descargas de codigos de barra: por POST (body JSON, lo
+// que usa el frontend) o por GET (query string, se mantiene por
+// compatibilidad). Por GET con muchos productos la URL supera el limite de
+// headers de Node (16KB) y el pedido se corta con 431 antes de llegar aca.
+function barcodeParams(req: Request) {
+  if (req.method === "POST") {
+    const body = req.body ?? {};
+    return {
+      productIds: asIdList(body.productIds),
+      quantities: asRecord<number>(body.quantities),
+      sizes: asRecord<string>(body.sizes),
+      priceListIds: asIdList(body.priceListIds),
+    };
+  }
+  return {
+    productIds: parseIdsParam(req.query.productIds),
+    quantities: parseQuantitiesParam(req.query.quantities),
+    sizes: parseQuantitiesParam(req.query.sizes) as Record<string, string> | undefined,
+    priceListIds: parseIdsParam(req.query.priceListIds),
+  };
+}
+
 function normalizeBoolean(value: any) {
   if (value === undefined) return undefined;
   if (typeof value === "boolean") return value;
@@ -545,10 +577,7 @@ export const productController = {
 
   async barcodesPdf(req: Request, res: Response, next: NextFunction) {
     try {
-      const productIds = parseIdsParam(req.query.productIds);
-      const quantities = parseQuantitiesParam(req.query.quantities);
-      const sizes = parseQuantitiesParam(req.query.sizes) as Record<string, string> | undefined;
-      const priceListIds = parseIdsParam(req.query.priceListIds);
+      const { productIds, quantities, sizes, priceListIds } = barcodeParams(req);
 
       const buffer = await barcodeService.exportPdf({ productIds, quantities, sizes, priceListIds });
 
@@ -562,9 +591,7 @@ export const productController = {
 
   async barcodesExcel(req: Request, res: Response, next: NextFunction) {
     try {
-      const productIds = parseIdsParam(req.query.productIds);
-
-      const priceListIds = parseIdsParam(req.query.priceListIds);
+      const { productIds, priceListIds } = barcodeParams(req);
 
       const buffer = await barcodeService.exportExcel({ productIds, priceListIds });
 

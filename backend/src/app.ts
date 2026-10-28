@@ -159,6 +159,10 @@ app.use(cors({
   },
   credentials: true,
 }));
+// Codigos de barra: el pedido lleva ids/cantidades/tamanos de todos los
+// productos elegidos (pueden ser miles) - limite propio, mas alto que el
+// default de 100kb del parser global (que despues no vuelve a parsear).
+app.use("/products/barcodes", express.json({ limit: "5mb" }));
 app.use(express.json());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(requestLogger);

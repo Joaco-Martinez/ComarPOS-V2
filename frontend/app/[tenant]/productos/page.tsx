@@ -490,21 +490,30 @@ export default function ProductosPage() {
     }
     setBarcodeDownloading(type);
     try {
-      const params: Record<string, string> = { productIds: barcodeSelectedIds.join(',') };
+      // Por POST (body JSON): con todos los productos tildados la query
+      // string superaba el limite del servidor (431) y no bajaba nada. Solo
+      // viajan las cantidades/tamanos distintos del default (1 / mediano).
+      const body: {
+        productIds: string[];
+        priceListIds?: string[];
+        quantities?: Record<string, number>;
+        sizes?: Record<string, BarcodeSize>;
+      } = { productIds: barcodeSelectedIds };
       const priceListIds = barcodePriceLists.filter((pl) => barcodeListSel[pl.id]).map((pl) => pl.id);
-      if (priceListIds.length > 0) params.priceListIds = priceListIds.join(',');
+      if (priceListIds.length > 0) body.priceListIds = priceListIds;
       if (type === 'pdf') {
         const quantities: Record<string, number> = {};
         const sizes: Record<string, BarcodeSize> = {};
         barcodeSelectedIds.forEach((id) => {
-          quantities[id] = Math.max(1, num(barcodeQty[id] ?? '1') || 1);
-          sizes[id] = barcodeSize[id] ?? 'mediano';
+          const qty = Math.max(1, num(barcodeQty[id] ?? '1') || 1);
+          if (qty !== 1) quantities[id] = qty;
+          const size = barcodeSize[id] ?? 'mediano';
+          if (size !== 'mediano') sizes[id] = size;
         });
-        params.quantities = JSON.stringify(quantities);
-        params.sizes = JSON.stringify(sizes);
+        body.quantities = quantities;
+        body.sizes = sizes;
       }
-      const res = await api.get(`/products/barcodes/${type === 'pdf' ? 'pdf' : 'excel'}`, {
-        params,
+      const res = await api.post(`/products/barcodes/${type === 'pdf' ? 'pdf' : 'excel'}`, body, {
         responseType: 'blob',
       });
       const url = URL.createObjectURL(res.data);
@@ -512,9 +521,19 @@ export default function ProductosPage() {
       a.href = url;
       a.download = `codigos-de-barra.${type === 'pdf' ? 'pdf' : 'xlsx'}`;
       a.click();
-      URL.revokeObjectURL(url);
+      // Revocar al toque puede cancelar la descarga en algunos navegadores.
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Error al generar el archivo');
+      // Con responseType 'blob' el error del backend tambien llega como
+      // Blob: hay que leerlo para mostrar el mensaje real.
+      let message: string | undefined;
+      const data = err?.response?.data;
+      if (data instanceof Blob) {
+        try { message = JSON.parse(await data.text())?.message; } catch { /* no era JSON */ }
+      } else {
+        message = data?.message;
+      }
+      toast.error(message ?? 'Error al generar el archivo');
     } finally {
       setBarcodeDownloading(null);
     }
