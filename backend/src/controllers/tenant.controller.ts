@@ -49,6 +49,24 @@ export const tenantController = {
     }
   },
 
+  async getPaymentSettings(req: Request, res: Response, next: NextFunction) {
+    try {
+      const settings = await tenantService.getPaymentSettings();
+      res.json({ ok: true, settings });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async updatePaymentSettings(req: Request, res: Response, next: NextFunction) {
+    try {
+      const settings = await tenantService.updatePaymentSettings({ adjustments: req.body.adjustments });
+      res.json({ ok: true, settings });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async getStockFallbackLog(req: Request, res: Response, next: NextFunction) {
     try {
       const limit = Number(req.query.limit) || 100;

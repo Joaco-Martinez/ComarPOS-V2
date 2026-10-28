@@ -10,7 +10,7 @@ import { useParams } from 'next/navigation';
 // navegador. No usa el store de notificaciones (Notification model) a
 // proposito: esto es un anuncio de producto para TODOS los usuarios, no un
 // evento de negocio individual.
-const LATEST_ID = 'stock-respaldo-2026-10-27';
+const LATEST_ID = 'medios-de-pago-2026-10-28';
 const STORAGE_KEY = 'comarpos-whatsnew-seen';
 
 export default function WhatsNewModal() {
@@ -40,22 +40,21 @@ export default function WhatsNewModal() {
             </div>
             <div>
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Novedades</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Stock de respaldo</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Descuentos por medio de pago</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-xs" onClick={dismiss}><X size={14} /></button>
         </div>
 
         <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, margin: '0 0 12px' }}>
-          Si tenés más de un depósito o sucursal, ya no se te frena una venta porque el local se quedó sin un producto que sí tenés en otro lado.
+          Ahora podés premiar el pago en efectivo (o cobrar un recargo con tarjeta) sin que el vendedor tenga que acordarse de cargarlo a mano.
         </p>
 
         <ul style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 18px', paddingLeft: 18 }}>
-          <li><strong>Activalo</strong> en Catálogo y stock → Config. de stock y elegí qué depósitos o sucursales sirven de respaldo, en orden de prioridad.</li>
-          <li><strong>Vendés igual</strong>: si la sucursal no tiene stock, lo que falta se descuenta del respaldo automáticamente.</li>
-          <li><strong>Queda registrado</strong>: cada uso aparece en Config. de stock y les llega un aviso a los administradores.</li>
-          <li><strong>En el POS</strong> ves cuánto hay en la sucursal y cuánto en respaldo, y al cobrar te avisa si se usó.</li>
-          <li><strong>Cancelaciones y devoluciones</strong> devuelven el stock a la ubicación de donde salió.</li>
+          <li><strong>Configuralo</strong> en Ventas → Medios de pago: por ejemplo, Efectivo con 10% de descuento o Tarjeta con 15% de recargo.</li>
+          <li><strong>Se aplica solo</strong>: en el POS, al elegir el medio de pago, el descuento o recargo aparece en el resumen y en el total.</li>
+          <li><strong>Para una venta puntual</strong> el vendedor lo puede quitar con la ✕ o cargar otro descuento a mano.</li>
+          <li><strong>Lista de precios en PDF</strong>: en Listas de precios descargá cualquier lista con la foto, el precio y el stock de cada producto.</li>
         </ul>
 
         <div style={{ display: 'flex', gap: 8 }}>

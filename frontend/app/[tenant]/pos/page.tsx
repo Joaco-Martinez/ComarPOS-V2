@@ -11,6 +11,7 @@ import { usePlanFeaturesStore } from '@/store/planFeatures';
 import type { BusinessLocation, CartItem, Client, DiscountType, PaymentMethod, PriceList, Product, ProductCategory, SalePayment } from '@/types';
 import { categoryName, clientName, fmtKg, fmtMoney, normalizeArray, num, productPrice, skuKey } from '@/lib/helpers';
 import VariantPicker from '@/components/products/VariantPicker';
+import { describeAdjustment, type PaymentAdjustment } from '@/lib/paymentAdjustments';
 import { groupByParent, stockAt } from '@/lib/variants';
 import {
   AlertTriangle, Check, ChevronLeft, LayoutGrid, List, Minus, Package, Plus, RefreshCcw,
@@ -70,6 +71,11 @@ export default function PosPage() {
   const [discountValue, setDiscountValue] = useState('');
   const [discountMode, setDiscountMode] = useState<'DISCOUNT' | 'SURCHARGE'>('DISCOUNT');
   const [promoPreview, setPromoPreview] = useState<{ id: string; name: string; discount: number } | null>(null);
+  // Descuento/recargo automatico por medio de pago (Configuracion > Medios
+  // de pago). autoAdjustDismissed = metodo para el que el vendedor lo quito
+  // en esta venta (vuelve a aplicarse si cambia de metodo o en la proxima).
+  const [paymentAdjustments, setPaymentAdjustments] = useState<PaymentAdjustment[]>([]);
+  const [autoAdjustDismissed, setAutoAdjustDismissed] = useState<PaymentMethod | null>(null);
   const [paymentMode, setPaymentMode] = useState<'single' | 'multi'>('single');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
   const [payments, setPayments] = useState<SalePayment[]>([{ method: 'EFECTIVO', amount: 0 }]);
@@ -128,7 +134,7 @@ export default function PosPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [pr, cr, clr, blr, plr, ssr] = await Promise.all([
+        const [pr, cr, clr, blr, plr, ssr, psr] = await Promise.all([
           // sellable: simples y variantes (nunca padres); se agrupan por
           // padre para mostrar en la grilla (ver groupByParent).
           api.get('/products', { params: { isActive: true, limit: 500, sellable: true } }).catch(() => null),
@@ -137,11 +143,13 @@ export default function PosPage() {
           api.get('/business-locations').catch(() => null),
           api.get('/price-lists').catch(() => null),
           api.get('/tenant/stock-settings').catch(() => null),
+          api.get('/tenant/payment-settings').catch(() => null),
         ]);
         if (pr) setProducts(normalizeArray<Product>(pr.data));
         if (cr) setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
         if (clr) setClients(normalizeArray<Client>(clr.data));
         if (plr) setPriceLists(normalizeArray<PriceList>(plr.data));
+        setPaymentAdjustments(psr?.data?.settings?.adjustments ?? []);
         if (ssr?.data?.settings) {
           setStockFallback({
             enabled: !!ssr.data.settings.stockFallbackEnabled,
@@ -726,26 +734,41 @@ export default function PosPage() {
     return acc + price * qty;
   }, 0);
 
+  // El envio no entra en la base de los descuentos/recargos (igual que en
+  // el backend, ver discountBaseSubtotal en sale.create.ts).
+  const deliverySubtotal = cart
+    .filter((i) => i.product.sku === DELIVERY_SKU)
+    .reduce((acc, item) => acc + (item.manualPrice ?? productPrice(item.product, item.priceType)) * item.quantity, 0);
+  const promoBaseSubtotal = subtotal - deliverySubtotal;
+
+  // Ajuste automatico del medio de pago elegido: solo con "Un método" y si
+  // el vendedor no cargo un descuento/recargo a mano (el manual manda).
+  const autoAdjustment = useMemo(() => {
+    if (paymentMode !== 'single' || num(discountValue) || autoAdjustDismissed === paymentMethod) return null;
+    return paymentAdjustments.find((a) => a.method === paymentMethod) ?? null;
+  }, [paymentMode, paymentMethod, discountValue, autoAdjustDismissed, paymentAdjustments]);
+
   // Negativo = recargo (suma al total en vez de restar) - mismo campo que el
   // descuento, con el signo dado por discountMode. El backend no distingue
   // tipos separados: total = subtotal - discountAmount funciona para ambos.
   const discountAmount = useMemo(() => {
+    if (autoAdjustment) {
+      const amount = promoBaseSubtotal * (autoAdjustment.percent / 100);
+      return autoAdjustment.type === 'SURCHARGE' ? -amount : Math.min(amount, promoBaseSubtotal);
+    }
     const dv = num(discountValue);
     if (!dv) return 0;
-    const amount = discountType === 'PERCENTAGE' ? subtotal * (dv / 100) : dv;
+    const amount = discountType === 'PERCENTAGE' ? promoBaseSubtotal * (dv / 100) : dv;
     if (discountMode === 'SURCHARGE') return -amount;
-    return Math.min(amount, subtotal);
-  }, [subtotal, discountType, discountValue, discountMode]);
+    return Math.min(amount, promoBaseSubtotal);
+  }, [promoBaseSubtotal, discountType, discountValue, discountMode, autoAdjustment]);
 
   // Preview de la promoción automática que el backend va a aplicar al
   // confirmar (ver promotionService.applyToCart en sale.create.ts) — sin
   // esto el POS no mostraba ningún aviso y el descuento aparecía "de la
   // nada" recién en el ticket. Solo corre cuando no hay descuento manual
-  // cargado, igual que la condición del backend (son excluyentes).
-  const deliverySubtotal = cart
-    .filter((i) => i.product.sku === DELIVERY_SKU)
-    .reduce((acc, item) => acc + (item.manualPrice ?? productPrice(item.product, item.priceType)) * item.quantity, 0);
-  const promoBaseSubtotal = subtotal - deliverySubtotal;
+  // ni ajuste por medio de pago, igual que la condición del backend (son
+  // excluyentes).
   const cartProductIds = useMemo(() => cart.map((i) => i.product.id), [cart]);
   const cartCategoryIds = useMemo(
     () => [...new Set(cart.map((i) => i.product.categoryId).filter((id): id is string => !!id))],
@@ -753,7 +776,7 @@ export default function PosPage() {
   );
 
   useEffect(() => {
-    if (num(discountValue) > 0 || promoBaseSubtotal <= 0) {
+    if (num(discountValue) > 0 || autoAdjustment || promoBaseSubtotal <= 0) {
       setPromoPreview(null);
       return;
     }
@@ -777,9 +800,22 @@ export default function PosPage() {
       }
     }, 300);
     return () => { cancelled = true; window.clearTimeout(timeoutId); };
-  }, [discountValue, promoBaseSubtotal, cartProductIds, cartCategoryIds, selectedClient]);
+  }, [discountValue, autoAdjustment, promoBaseSubtotal, cartProductIds, cartCategoryIds, selectedClient]);
 
   const promoDiscount = promoPreview?.discount ?? 0;
+
+  // Boton para quitar el ajuste automatico solo para esta venta.
+  const autoAdjustmentRemove = autoAdjustment ? (
+    <button
+      type="button"
+      onClick={() => setAutoAdjustDismissed(paymentMethod)}
+      className="btn btn-ghost btn-xs"
+      style={{ padding: '0 4px', marginLeft: 4, minHeight: 0, lineHeight: 1 }}
+      title="Quitar para esta venta"
+    >
+      <X size={11} />
+    </button>
+  ) : null;
   const total = Math.max(0, subtotal - discountAmount - promoDiscount);
 
   // Modo simple (default): un solo método, se asume que cubre el total exacto
@@ -830,6 +866,7 @@ export default function PosPage() {
     setModalAmount('');
     setWantsTicket(true);
     setPromoPreview(null);
+    setAutoAdjustDismissed(null);
     searchRef.current?.focus();
   };
 
@@ -872,6 +909,11 @@ export default function PosPage() {
         ...(discountValue && {
           discountType,
           discountValue: discountMode === 'SURCHARGE' ? -num(discountValue) : num(discountValue),
+        }),
+        // Ajuste por medio de pago: viaja como descuento/recargo % de la venta.
+        ...(!discountValue && autoAdjustment && {
+          discountType: 'PERCENTAGE',
+          discountValue: autoAdjustment.type === 'SURCHARGE' ? -autoAdjustment.percent : autoAdjustment.percent,
         }),
       };
 
@@ -1467,14 +1509,19 @@ export default function PosPage() {
                   )}
                   {discountAmount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--warn)' }}>
-                      <span>Descuento</span>
+                      <span>{autoAdjustment ? describeAdjustment(autoAdjustment) : 'Descuento'}{autoAdjustmentRemove}</span>
                       <span style={{ fontFamily: 'var(--mono)' }}>−{fmtMoney(discountAmount)}</span>
                     </div>
                   )}
                   {discountAmount < 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--accent)' }}>
-                      <span>Recargo</span>
+                      <span>{autoAdjustment ? describeAdjustment(autoAdjustment) : 'Recargo'}{autoAdjustmentRemove}</span>
                       <span style={{ fontFamily: 'var(--mono)' }}>+{fmtMoney(-discountAmount)}</span>
+                    </div>
+                  )}
+                  {paymentMode === 'multi' && paymentAdjustments.length > 0 && !num(discountValue) && (
+                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                      Con varios métodos no se aplican los descuentos/recargos por medio de pago.
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, color: 'var(--text)', paddingTop: 4, borderTop: '1px solid var(--border)' }}>
@@ -1661,6 +1708,12 @@ export default function PosPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--success)', marginTop: 4 }}>
                     <span>Promo aplicada: {promoPreview.name}</span>
                     <span style={{ fontFamily: 'var(--mono)' }}>−{fmtMoney(promoPreview.discount)}</span>
+                  </div>
+                )}
+                {autoAdjustment && discountAmount !== 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: discountAmount > 0 ? 'var(--warn)' : 'var(--accent)', marginTop: 4 }}>
+                    <span>{describeAdjustment(autoAdjustment)}{autoAdjustmentRemove}</span>
+                    <span style={{ fontFamily: 'var(--mono)' }}>{discountAmount > 0 ? '−' : '+'}{fmtMoney(Math.abs(discountAmount))}</span>
                   </div>
                 )}
               </div>
