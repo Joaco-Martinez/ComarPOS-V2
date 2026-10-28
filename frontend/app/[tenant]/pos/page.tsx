@@ -16,7 +16,7 @@ import { groupByParent, stockAt } from '@/lib/variants';
 import {
   AlertTriangle, Check, ChevronLeft, LayoutGrid, List, Minus, Package, Plus, RefreshCcw,
   ScanBarcode, Search, ShoppingCart, Trash2, X, User, Percent,
-  DollarSign, CreditCard, Banknote, Smartphone, Warehouse,
+  DollarSign, CreditCard, Banknote, Smartphone, Warehouse, Settings,
 } from 'lucide-react';
 
 const PAGE_SIZE = 60;
@@ -1567,6 +1567,15 @@ export default function PosPage() {
                   </select>
                   {paymentMethod === 'CUENTA_CORRIENTE' && !selectedClient && (
                     <div style={{ fontSize: 11, color: 'var(--warn)' }}>Elegí un cliente para vender en cuenta corriente.</div>
+                  )}
+                  {/* Acceso directo a Administracion > Medios de pago. */}
+                  {user?.role === 'ADMIN' && user.tenantSlug && (
+                    <a
+                      href={`/${user.tenantSlug}/configuracion/medios-de-pago`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text3)', textDecoration: 'none' }}
+                    >
+                      <Settings size={11} /> Descuentos por medio de pago
+                    </a>
                   )}
                 </>
               ) : (

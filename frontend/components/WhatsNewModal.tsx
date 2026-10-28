@@ -51,7 +51,7 @@ export default function WhatsNewModal() {
         </p>
 
         <ul style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 18px', paddingLeft: 18 }}>
-          <li><strong>Configuralo</strong> en Ventas → Medios de pago: por ejemplo, Efectivo con 10% de descuento o Tarjeta con 15% de recargo.</li>
+          <li><strong>Configuralo</strong> en Administración → Medios de pago (o desde el POS, debajo del medio de pago): por ejemplo, Efectivo con 10% de descuento o Tarjeta con 15% de recargo.</li>
           <li><strong>Se aplica solo</strong>: en el POS, al elegir el medio de pago, el descuento o recargo aparece en el resumen y en el total.</li>
           <li><strong>Para una venta puntual</strong> el vendedor lo puede quitar con la ✕ o cargar otro descuento a mano.</li>
           <li><strong>Lista de precios en PDF</strong>: en Listas de precios descargá cualquier lista con la foto, el precio y el stock de cada producto.</li>
