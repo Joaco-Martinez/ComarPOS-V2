@@ -67,6 +67,10 @@ export const ADMIN_NAV: NavItem[] = [
     intro: 'Los datos de tu negocio (razón social, CUIT, dirección) que se imprimen en tickets, facturas y remitos.' },
   { href: '/configuracion/medios-de-pago',      icon: FinanzasIcon,           label: 'Medios de pago',      color: '#18C15E', moduleKey: 'pos', group: 'Administración',
     intro: 'Configurá descuentos o recargos automáticos según cómo paga el cliente, por ejemplo 10% off pagando en efectivo.' },
+  // Sin moduleKey a proposito: pagar el servicio nunca se gatea por plan, y
+  // AppLayout la deja abierta aunque la cuenta este pausada por falta de pago.
+  { href: '/mi-suscripcion',                   icon: FinanzasIcon,           label: 'Mi suscripción',      color: '#18C15E', group: 'Administración',
+    intro: 'Tu plan de ComarPOS: cuánto pagás, hasta cuándo está pago y cómo abonar el próximo mes (Mercado Pago o transferencia).' },
   { href: '/configuracion/printbox',           icon: PrintboxIcon,           label: 'PrintBox',            color: '#6474BB', moduleKey: 'printbox', group: 'Administración',
     intro: 'Configurá la impresora de tickets conectada a esta computadora.' },
   { href: '/compras',                          icon: ComprasIcon,            label: 'Compras',             color: '#18C15E', moduleKey: 'compras', group: 'Compras',

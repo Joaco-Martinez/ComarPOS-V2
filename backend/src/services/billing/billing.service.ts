@@ -124,6 +124,16 @@ export const billingService = {
     return { ...tenantRest, plan, transferInfo, lastTransferReport, block, monthlyPrice, reminders };
   },
 
+  /** Historial de transferencias informadas por el propio negocio (Mi suscripción). */
+  async listTransferReports(tenantId: string) {
+    return prisma.tenantTransferReport.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: "desc" },
+      take: 24,
+      select: { id: true, planId: true, amount: true, reference: true, status: true, reviewNote: true, createdAt: true, reviewedAt: true },
+    });
+  },
+
   /**
    * Pago del servicio por transferencia: el tenant transfiere a la cuenta cargada
    * en /platform-admin > Cobros y despues informa el nro de operacion desde

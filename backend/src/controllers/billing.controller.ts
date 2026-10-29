@@ -65,6 +65,17 @@ export const billingController = {
     }
   },
 
+  async transferReports(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = (req as any).user?.tenantId;
+      if (!tenantId) return res.status(400).json({ ok: false, message: "Usuario sin tenant asignado" });
+
+      res.json({ ok: true, content: await billingService.listTransferReports(tenantId) });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async reportTransfer(req: Request, res: Response, next: NextFunction) {
     try {
       const tenantId = (req as any).user?.tenantId;

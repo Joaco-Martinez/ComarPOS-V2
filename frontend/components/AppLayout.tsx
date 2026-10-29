@@ -138,6 +138,9 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
   const afterTenantPath = '/' + pathname.split('/').slice(2).join('/');
   const currentModule = moduleKeyForPath(afterTenantPath);
   const moduleBlocked = featuresLoaded && !isModuleAllowed(features, currentModule);
+  // "Mi suscripción" queda abierta aunque la cuenta este pausada: es justo
+  // donde tiene que entrar para pagar y desbloquearla.
+  const isSubscriptionPage = afterTenantPath === '/mi-suscripcion';
 
   if (loading || !user) {
     return (
@@ -213,7 +216,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
           className="animate-fade-opacity"
           style={{ flex: 1, padding: `${headerHeight + 22}px 20px 22px`, maxWidth: 1440, width: '100%', minWidth: 0, margin: '0 auto' }}
         >
-          {billingBlock ? (
+          {billingBlock && !isSubscriptionPage ? (
             <BillingBlockedScreen block={billingBlock} />
           ) : moduleBlocked ? (
             <div
@@ -243,7 +246,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
 
       <BottomNav />
       <WhatsNewModal />
-      {!billingBlock && <PaymentDueModal />}
+      {!billingBlock && !isSubscriptionPage && <PaymentDueModal />}
     </div>
   );
 }
