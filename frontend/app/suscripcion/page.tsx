@@ -18,6 +18,9 @@ type BillingStatus = {
   mpPreapprovalId?: string | null;
   mpSubscriptionAmount?: number | null;
   billingPaymentMethod?: BillingPaymentMethod;
+  // Lo que paga este negocio por mes en su plan actual (precio especial >
+  // promo congelada > precio del plan, ver backend billing.service.ts#getMonthlyPrice).
+  monthlyPrice?: number;
   planId: string;
   plan: { id: string; name: string; priceArs: number; currency: string; tagline: string };
   transferInfo?: TransferInfo;
@@ -231,6 +234,11 @@ export default function SuscripcionPage() {
 
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? null;
 
+  // Su plan actual se muestra con SU precio (especial/promo); los demas
+  // planes, con el precio de lista vigente.
+  const priceFor = (plan: { id: string; priceArs: number } | null | undefined) =>
+    plan && status && plan.id === status.planId && status.monthlyPrice ? status.monthlyPrice : plan?.priceArs ?? 0;
+
   // Transferencia disponible para quien no tiene auto-cobro de Mercado Pago
   // (los que pagan con MP ya se renuevan solos) o tiene algo pendiente de
   // pago. Con una suscripcion MP activa y al dia no se ofrece, para no
@@ -240,9 +248,7 @@ export default function SuscripcionPage() {
   const pendingTransfer = status?.lastTransferReport?.status === 'PENDING' ? status.lastTransferReport : null;
   const rejectedTransfer = status?.lastTransferReport?.status === 'REJECTED' ? status.lastTransferReport : null;
   const transferPlan = selectedPlan ?? status?.plan ?? null;
-  const transferAmount = transferPlan && status && transferPlan.id === status.planId && status.mpSubscriptionAmount
-    ? status.mpSubscriptionAmount
-    : transferPlan?.priceArs ?? 0;
+  const transferAmount = priceFor(transferPlan);
   // Medio de pago habilitado por el super-admin para este negocio
   // (Tenant.billingPaymentMethod): si es solo transferencia no se ofrece
   // Mercado Pago, y si es solo MP el backend ya manda transferInfo apagado.
@@ -315,7 +321,7 @@ export default function SuscripcionPage() {
                     {(selectedPlan ?? status?.plan)?.name.toUpperCase() ?? 'PLAN COMARPOS'}
                   </div>
                   <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>
-                    ${((selectedPlan ?? status?.plan)?.priceArs ?? 35000).toLocaleString('es-AR')}
+                    ${priceFor(selectedPlan ?? status?.plan).toLocaleString('es-AR')}
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text3)' }}> /mes</span>
                   </div>
                   <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
@@ -349,7 +355,7 @@ export default function SuscripcionPage() {
                             {isCurrent && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)', marginLeft: 6 }}>· plan actual</span>}
                           </span>
                           <span style={{ fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text2)' }}>
-                            ${p.priceArs.toLocaleString('es-AR')}/mes
+                            ${priceFor(p).toLocaleString('es-AR')}/mes
                           </span>
                         </button>
                       );

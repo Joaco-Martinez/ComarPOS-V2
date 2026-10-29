@@ -79,6 +79,11 @@ router.patch(
   platformAdminController.updateTenantPosCheckoutModal
 );
 router.patch(
+  "/tenants/:id/custom-price",
+  platformAuthMiddleware,
+  platformAdminController.updateTenantCustomPrice
+);
+router.patch(
   "/tenants/:id/billing-payment-method",
   platformAuthMiddleware,
   platformAdminController.updateTenantBillingPaymentMethod
@@ -93,6 +98,8 @@ router.patch(
 // platformSettings.service.ts) -- se edita desde /platform-admin/cobros.
 router.get("/settings/transfer-account", platformAuthMiddleware, platformAdminController.getTransferAccount);
 router.put("/settings/transfer-account", platformAuthMiddleware, platformAdminController.updateTransferAccount);
+router.get("/settings/billing-reminders", platformAuthMiddleware, platformAdminController.getBillingReminders);
+router.put("/settings/billing-reminders", platformAuthMiddleware, platformAdminController.updateBillingReminders);
 
 router.get("/mp-plans", platformAuthMiddleware, platformAdminController.listMpPlans);
 router.post("/mp-plans/sync", platformAuthMiddleware, platformAdminController.syncMpPlans);

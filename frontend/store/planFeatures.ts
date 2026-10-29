@@ -1,7 +1,7 @@
 'use client';
 import { create } from 'zustand';
 import api from '@/lib/api';
-import type { BillingPaymentMethod, PlanFeatureKey, TenantSubscriptionStatus, TransferReportStatus } from '@/types';
+import type { BillingPaymentMethod, BillingReminders, PlanFeatureKey, TenantSubscriptionStatus, TransferReportStatus } from '@/types';
 
 // Lo minimo de /billing/status que necesita el cartel de "hay que abonar"
 // (components/PaymentDueModal.tsx) -- viene en el mismo request que los
@@ -16,6 +16,7 @@ export interface SubscriptionSnapshot {
   transferEnabled: boolean;
   billingPaymentMethod: BillingPaymentMethod;
   lastTransferStatus: TransferReportStatus | null;
+  reminders: BillingReminders;
 }
 
 // Bloqueo por falta de pago / prueba vencida / suspension (mismo codigo que
@@ -75,10 +76,11 @@ export const usePlanFeaturesStore = create<PlanFeaturesState>((set) => ({
               paidUntil: status.paidUntil ?? null,
               hasMpSubscription: !!status.mpPreapprovalId,
               planName: status.plan?.name ?? null,
-              amount: status.mpSubscriptionAmount ?? status.plan?.priceArs ?? null,
+              amount: status.monthlyPrice ?? status.plan?.priceArs ?? null,
               transferEnabled: !!status.transferInfo?.enabled,
               billingPaymentMethod: status.billingPaymentMethod ?? 'ANY',
               lastTransferStatus: status.lastTransferReport?.status ?? null,
+              reminders: status.reminders ?? { payWindowDays: 7, urgentDays: 3 },
             }
           : null,
         block: status?.block ?? null,

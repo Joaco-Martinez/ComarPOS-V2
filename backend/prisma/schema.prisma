@@ -79,6 +79,12 @@ model Tenant {
   // /suscripcion solo le ofrece ese medio y el backend rechaza el otro
   // (billing.service.ts#createCheckout / #reportTransfer).
   billingPaymentMethod BillingPaymentMethod @default(ANY)
+  // Precio mensual especial para ESTE negocio, cargado a mano desde
+  // /platform-admin (ej. entro con la promo de lanzamiento y se le mantiene
+  // ese precio, o un precio arreglado aparte). Si esta, le gana a
+  // mpSubscriptionAmount y al precio del plan en todos lados -- ver
+  // billing.service.ts#getMonthlyPrice. Null = precio normal.
+  customMonthlyPrice   Float?
   // Id de uno de los PLANS en config/billing.ts ("esencial" | "profesional"
   // | "multisucursal") -- default al plan recomendado (el que era el unico
   // plan antes de tener 3), asi los tenants existentes no quedan en un

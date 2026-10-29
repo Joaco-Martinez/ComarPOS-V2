@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { TransferInfo } from '@/types';
-import { Landmark, Save, ToggleLeft, ToggleRight } from 'lucide-react';
+import type { TransferInfo, BillingReminders } from '@/types';
+import { Landmark, Save, ToggleLeft, ToggleRight, CalendarClock } from 'lucide-react';
 
 // Cuenta bancaria donde los negocios transfieren la suscripción (ver backend
 // platformSettings.service.ts). Lo que se guarda acá es lo que ven en
@@ -18,6 +18,11 @@ export default function PlatformAdminCobrosPage() {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [reminders, setReminders] = useState({ payWindowDays: '7', urgentDays: '3' });
+  const [savingReminders, setSavingReminders] = useState(false);
+
+  const applyReminders = (r: BillingReminders) =>
+    setReminders({ payWindowDays: String(r.payWindowDays), urgentDays: String(r.urgentDays) });
 
   const applyAccount = (a: TransferInfo) =>
     setForm({
@@ -32,10 +37,14 @@ export default function PlatformAdminCobrosPage() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get('/platform-admin/settings/transfer-account');
-        applyAccount(data.content ?? data);
+        const [accountRes, remindersRes] = await Promise.all([
+          api.get('/platform-admin/settings/transfer-account'),
+          api.get('/platform-admin/settings/billing-reminders'),
+        ]);
+        applyAccount(accountRes.data.content ?? accountRes.data);
+        applyReminders(remindersRes.data.content ?? remindersRes.data);
       } catch {
-        toast.error('No se pudo cargar la cuenta para transferencias');
+        toast.error('No se pudo cargar la configuración de cobros');
       } finally {
         setLoading(false);
       }
@@ -52,6 +61,22 @@ export default function PlatformAdminCobrosPage() {
       toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveReminders = async () => {
+    setSavingReminders(true);
+    try {
+      const { data } = await api.put('/platform-admin/settings/billing-reminders', {
+        payWindowDays: Number(reminders.payWindowDays),
+        urgentDays: Number(reminders.urgentDays),
+      });
+      applyReminders(data.content ?? data);
+      toast.success('Avisos de pago guardados');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al guardar');
+    } finally {
+      setSavingReminders(false);
     }
   };
 
@@ -72,7 +97,8 @@ export default function PlatformAdminCobrosPage() {
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}><div className="spinner" /></div>
       ) : (
-        <div className="card" style={{ padding: 20, maxWidth: 560 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 560 }}>
+        <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Landmark size={15} style={{ color: 'var(--text3)' }} />
@@ -105,6 +131,42 @@ export default function PlatformAdminCobrosPage() {
           <button onClick={save} disabled={saving} className="btn btn-primary" style={{ marginTop: 12, gap: 8 }}>
             {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><Save size={14} /> Guardar</>}
           </button>
+        </div>
+
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <CalendarClock size={15} style={{ color: 'var(--text3)' }} />
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Avisos de pago</span>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5, marginBottom: 16 }}>
+            Cuántos días antes del vencimiento le aparece el cartel al negocio. Pasado el vencimiento, el sistema queda bloqueado hasta que pague.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="form-group">
+              <label className="form-label">&quot;Ya podés pagar&quot; (días antes)</label>
+              <input
+                type="number"
+                min={0}
+                max={60}
+                value={reminders.payWindowDays}
+                onChange={(e) => setReminders((r) => ({ ...r, payWindowDays: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">&quot;Se pausa por falta de pago&quot; (días antes)</label>
+              <input
+                type="number"
+                min={0}
+                max={60}
+                value={reminders.urgentDays}
+                onChange={(e) => setReminders((r) => ({ ...r, urgentDays: e.target.value }))}
+              />
+            </div>
+          </div>
+          <button onClick={saveReminders} disabled={savingReminders} className="btn btn-primary" style={{ marginTop: 4, gap: 8 }}>
+            {savingReminders ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><Save size={14} /> Guardar</>}
+          </button>
+        </div>
         </div>
       )}
     </PlatformAdminLayout>

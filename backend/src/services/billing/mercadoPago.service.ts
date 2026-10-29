@@ -126,6 +126,19 @@ export const mercadoPagoClient = {
     return data;
   },
 
+  /**
+   * Cambia el monto que se cobra en una preapproval ya autorizada (proximos
+   * cobros) -- usado cuando el super-admin le pone un precio especial a un
+   * negocio que ya paga con debito automatico (ver
+   * platformTenant.service.ts#setCustomMonthlyPrice).
+   */
+  async updatePreapprovalAmount(id: string, amount: number): Promise<MpPreapproval> {
+    const { data } = await client().put(`/preapproval/${encodeURIComponent(id)}`, {
+      auto_recurring: { transaction_amount: amount, currency_id: "ARS" },
+    });
+    return data;
+  },
+
   async getPayment(id: string | number): Promise<MpPayment> {
     const { data } = await client().get(`/v1/payments/${encodeURIComponent(String(id))}`);
     return data;

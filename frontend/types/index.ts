@@ -752,6 +752,13 @@ export interface TenantTransferReport {
 // /platform-admin (ver backend enum BillingPaymentMethod).
 export type BillingPaymentMethod = 'ANY' | 'MERCADOPAGO' | 'TRANSFER';
 
+// Cuantos dias antes del vencimiento sale cada cartel de pago, editable
+// desde /platform-admin/cobros (ver backend platformSettings.service.ts).
+export interface BillingReminders {
+  payWindowDays: number;
+  urgentDays: number;
+}
+
 export interface TransferInfo {
   enabled: boolean;
   holder: string | null;
@@ -775,6 +782,9 @@ export interface Tenant {
   mpPreapprovalId?: string | null;
   mpSubscriptionAmount?: number | null;
   billingPaymentMethod?: BillingPaymentMethod;
+  // Precio mensual especial cargado a mano desde /platform-admin (ver
+  // backend billing.service.ts#getMonthlyPrice). Null = precio normal.
+  customMonthlyPrice?: number | null;
   notes?: string | null;
   createdAt: string;
   // Override de modulos por este tenant puntual, por encima del plan (ver

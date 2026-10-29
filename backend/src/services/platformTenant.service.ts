@@ -6,6 +6,7 @@ import { invalidateTenantCache } from "../middleware/tenant";
 import { endOfDayAR } from "../utils/dateAR";
 import { PLANS, DEFAULT_PLAN_ID, PlanFeatureKey, FEATURE_LABELS } from "../config/billing";
 import { authService } from "./auth.service";
+import { mercadoPagoClient } from "./billing/mercadoPago.service";
 import { trialSignupService } from "./trialSignup.service";
 import type { BusinessPresetSelection } from "./businessPreset.service";
 
@@ -41,6 +42,7 @@ export const platformTenantService = {
         mpPreapprovalId: true,
         mpSubscriptionAmount: true,
         billingPaymentMethod: true,
+        customMonthlyPrice: true,
         notes: true,
         createdAt: true,
         // Auditoria: cuentas del negocio (nombre/email/rol/ultimo login), sin
@@ -306,6 +308,52 @@ export const platformTenantService = {
    * cargar uno nuevo mas alla del primero (ver arcaConfig.core.ts) y oculta
    * los selectores de dueno en ventas/compras.
    */
+  /**
+   * Precio mensual especial del negocio (null = vuelve al precio normal, ver
+   * billing.service.ts#getMonthlyPrice). Si ya paga con debito automatico de
+   * MP, se actualiza tambien el monto de su preapproval para que los
+   * proximos cobros salgan con el precio nuevo -- si MP falla no se revierte
+   * el precio guardado, se avisa en la respuesta (mpUpdated:false) para
+   * corregirlo a mano.
+   */
+  async setCustomMonthlyPrice(id: string, rawAmount: unknown, platformAdminId?: string) {
+    const amount = rawAmount === null || rawAmount === "" || rawAmount === undefined ? null : Number(rawAmount);
+    if (amount !== null && (!Number.isFinite(amount) || amount <= 0)) {
+      throw Object.assign(new Error("El precio tiene que ser un número mayor a 0"), { status: 400 });
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new Error("Tenant no encontrado");
+
+    await prisma.$transaction([
+      prisma.tenant.update({ where: { id }, data: { customMonthlyPrice: amount } }),
+      prisma.tenantPaymentLog.create({
+        data: {
+          tenantId: id,
+          platformAdminId: platformAdminId ?? undefined,
+          previousStatus: tenant.subscriptionStatus,
+          newStatus: tenant.subscriptionStatus,
+          note: amount !== null
+            ? `Precio mensual especial: $${amount.toLocaleString("es-AR")}${tenant.customMonthlyPrice ? ` (antes $${tenant.customMonthlyPrice.toLocaleString("es-AR")})` : ""}.`
+            : "Se quitó el precio mensual especial (vuelve al precio normal).",
+        },
+      }),
+    ]);
+
+    let mpUpdated: boolean | null = null;
+    if (tenant.mpPreapprovalId && amount !== null) {
+      try {
+        await mercadoPagoClient.updatePreapprovalAmount(tenant.mpPreapprovalId, amount);
+        mpUpdated = true;
+      } catch (err) {
+        console.warn(`⚠️ No se pudo actualizar el monto de la preapproval ${tenant.mpPreapprovalId}:`, err);
+        mpUpdated = false;
+      }
+    }
+
+    return { customMonthlyPrice: amount, mpUpdated };
+  },
+
   /** Medio de pago habilitado para el negocio (ver enum BillingPaymentMethod). */
   async setBillingPaymentMethod(id: string, method: string) {
     if (!Object.values(BillingPaymentMethod).includes(method as BillingPaymentMethod)) {

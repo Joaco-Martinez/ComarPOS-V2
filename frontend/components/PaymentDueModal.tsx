@@ -8,15 +8,15 @@ import { fmtDate } from '@/lib/helpers';
 import BillingPayActions from './BillingPayActions';
 
 // Cartel de pago del servicio, en dos etapas antes del corte:
-//   - "Ya podés pagar" (PAY_WINDOW_DAYS antes del vencimiento): aviso
+//   - "Ya podés pagar" (payWindowDays antes del vencimiento): aviso
 //     tranquilo, una vez por dia.
-//   - "Se está por pausar" (URGENT_DAYS antes, o pago vencido): aviso en
+//   - "Se está por pausar" (urgentDays antes, o pago vencido): aviso en
 //     rojo, vuelve a salir en cada sesion nueva del navegador.
 // Pasado el vencimiento ya no es un cartel: el backend bloquea
 // (middleware/tenant.ts#getTenantBlock) y AppLayout muestra
 // BillingBlockedScreen en todas las pantallas.
-const PAY_WINDOW_DAYS = 7;
-const URGENT_DAYS = 3;
+// Los dias se configuran en /platform-admin/cobros (vienen en
+// subscription.reminders).
 const STORAGE_KEY = 'comarpos-payment-due-dismissed';
 
 type DueInfo = { urgent: boolean; title: string; message: string; dueDate: string | null };
@@ -52,10 +52,11 @@ function getDueInfo(sub: SubscriptionSnapshot): DueInfo | null {
   if (!dueDate) return null;
 
   const days = daysUntil(dueDate);
-  if (days < 0 || days > PAY_WINDOW_DAYS) return null;
+  const { payWindowDays, urgentDays } = sub.reminders;
+  if (days < 0 || days > payWindowDays) return null;
 
   const isTrial = sub.subscriptionStatus === 'TRIAL';
-  if (days <= URGENT_DAYS) {
+  if (days <= urgentDays) {
     return {
       urgent: true,
       title: isTrial ? `Tu prueba gratis termina ${inDays(days)}` : `Tu cuenta se pausa ${inDays(days)} por falta de pago`,

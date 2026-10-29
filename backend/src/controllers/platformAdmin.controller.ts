@@ -146,6 +146,36 @@ export const platformAdminController = {
     }
   },
 
+  async updateTenantCustomPrice(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await platformTenantService.setCustomMonthlyPrice(
+        getParamAsString(req.params.id, "id"),
+        req.body?.amount,
+        (req as any).platformAdmin?.id
+      );
+
+      res.json({ ok: true, content: result });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getBillingReminders(_req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json({ ok: true, content: await platformSettingsService.getBillingReminders() });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async updateBillingReminders(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json({ ok: true, content: await platformSettingsService.setBillingReminders(req.body ?? {}) });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async updateTenantBillingPaymentMethod(req: Request, res: Response, next: NextFunction) {
     try {
       const tenant = await platformTenantService.setBillingPaymentMethod(

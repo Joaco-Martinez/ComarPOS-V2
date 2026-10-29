@@ -38,6 +38,8 @@ export default function PlatformAdminTenantDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [reviewingTransfer, setReviewingTransfer] = useState<string | null>(null);
   const [savingPayMethod, setSavingPayMethod] = useState(false);
+  const [customPrice, setCustomPrice] = useState('');
+  const [savingCustomPrice, setSavingCustomPrice] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -50,6 +52,7 @@ export default function PlatformAdminTenantDetailPage() {
       setPaidUntil(t.paidUntil ? t.paidUntil.slice(0, 10) : '');
       setTrialEndsAt(t.trialEndsAt ? t.trialEndsAt.slice(0, 10) : '');
       setPlanId(t.planId);
+      setCustomPrice(t.customMonthlyPrice != null ? String(t.customMonthlyPrice) : '');
     } finally {
       setLoading(false);
     }
@@ -109,6 +112,30 @@ export default function PlatformAdminTenantDetailPage() {
       toast.error(err?.response?.data?.message ?? 'Error al cambiar el medio de pago');
     } finally {
       setSavingPayMethod(false);
+    }
+  };
+
+  // Precio mensual especial de este negocio (ej. entró con la promo de
+  // lanzamiento): vacío = precio normal. Si paga con débito automático de
+  // MP, el backend actualiza también el monto de los próximos cobros.
+  const saveCustomPrice = async (clear = false) => {
+    const amount = clear ? null : customPrice.trim() === '' ? null : Number(customPrice);
+    setSavingCustomPrice(true);
+    try {
+      const { data } = await api.patch(`/platform-admin/tenants/${id}/custom-price`, { amount });
+      const result = data.content ?? data;
+      setTenant((t) => (t ? { ...t, customMonthlyPrice: result.customMonthlyPrice } : t));
+      setCustomPrice(result.customMonthlyPrice != null ? String(result.customMonthlyPrice) : '');
+      if (result.mpUpdated === false) {
+        toast.error('Precio guardado, pero no se pudo actualizar el débito de Mercado Pago. Revisalo en MP.');
+      } else {
+        toast.success(result.customMonthlyPrice != null ? 'Precio especial guardado' : 'Vuelve al precio normal');
+      }
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al guardar el precio');
+    } finally {
+      setSavingCustomPrice(false);
     }
   };
 
@@ -293,6 +320,28 @@ export default function PlatformAdminTenantDetailPage() {
               <option value="MERCADOPAGO">Solo Mercado Pago</option>
               <option value="TRANSFER">Solo transferencia</option>
             </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Precio mensual especial (vacío = normal)</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="number"
+                min={1}
+                step="any"
+                value={customPrice}
+                placeholder={`Normal: $${(tenant.mpSubscriptionAmount ?? billingPlans.find((p) => p.id === tenant.planId)?.priceArs ?? 0).toLocaleString('es-AR')}`}
+                onChange={(e) => setCustomPrice(e.target.value)}
+                style={{ fontFamily: 'var(--mono)' }}
+              />
+              <button onClick={() => saveCustomPrice()} disabled={savingCustomPrice} className="btn btn-secondary btn-sm" title="Guardar precio">
+                {savingCustomPrice ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Save size={13} />}
+              </button>
+              {tenant.customMonthlyPrice != null && (
+                <button onClick={() => saveCustomPrice(true)} disabled={savingCustomPrice} className="btn btn-ghost btn-sm" title="Quitar precio especial">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Pago cubierto hasta</label>

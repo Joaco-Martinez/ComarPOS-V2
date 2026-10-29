@@ -20,6 +20,20 @@ import { planFeatureConfigService } from "../planFeatureConfig.service";
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/login$/, "").replace(/\/$/, "");
 
+/**
+ * Cuanto paga por mes ESTE negocio: precio especial cargado a mano desde
+ * /platform-admin > primer monto cobrado congelado (promo de lanzamiento de
+ * por vida) > precio efectivo del plan. Unico lugar que decide el monto, lo
+ * usan el checkout de MP, el aviso de transferencia y lo que se muestra en
+ * /suscripcion y en los carteles de pago.
+ */
+export function getMonthlyPrice(
+  tenant: { customMonthlyPrice: number | null; mpSubscriptionAmount: number | null },
+  plan: Plan
+): number {
+  return tenant.customMonthlyPrice ?? tenant.mpSubscriptionAmount ?? getEffectivePrice(plan);
+}
+
 function addOneMonth(date: Date): Date {
   const d = new Date(date);
   d.setMonth(d.getMonth() + 1);
@@ -64,6 +78,7 @@ export const billingService = {
         posCheckoutModalEnabled: true,
         multiInvoicingEnabled: true,
         billingPaymentMethod: true,
+        customMonthlyPrice: true,
       },
     });
 
@@ -103,8 +118,10 @@ export const billingService = {
     // entrar al sistema pero con todas las pantallas bloqueadas hasta que
     // pague (AppLayout -> BillingBlockedScreen), en vez de sacarlo afuera.
     const block = getTenantBlock(tenant);
+    const monthlyPrice = getMonthlyPrice(tenant, effectivePlan);
+    const reminders = await platformSettingsService.getBillingReminders();
 
-    return { ...tenantRest, plan, transferInfo, lastTransferReport, block };
+    return { ...tenantRest, plan, transferInfo, lastTransferReport, block, monthlyPrice, reminders };
   },
 
   /**
@@ -144,7 +161,9 @@ export const billingService = {
     // lo tiene; cambio de plan: precio efectivo del plan nuevo (mismo
     // criterio que createCheckout).
     const plan = await planFeatureConfigService.getEffectivePlan(planId);
-    const amount = planId === tenant.planId && tenant.mpSubscriptionAmount ? tenant.mpSubscriptionAmount : getEffectivePrice(plan);
+    // Cambio de plan: precio del plan nuevo (el especial/congelado era del
+    // plan actual, mismo criterio que createCheckout).
+    const amount = planId === tenant.planId ? getMonthlyPrice(tenant, plan) : getEffectivePrice(plan);
 
     const [report] = await prisma.$transaction([
       prisma.tenantTransferReport.create({
@@ -202,7 +221,9 @@ export const billingService = {
     if (isPlanChange) {
       tenant = await prisma.tenant.update({
         where: { id: tenantId },
-        data: { planId, mpSubscriptionAmount: null },
+        // El precio especial se pacto para el plan actual: al cambiarse de
+        // plan solo, pasa a pagar el precio normal del plan nuevo.
+        data: { planId, mpSubscriptionAmount: null, customMonthlyPrice: null },
       });
     }
 
@@ -213,7 +234,7 @@ export const billingService = {
       payerEmail,
       backUrl: `${FRONTEND_URL}/suscripcion?estado=procesando`,
       reason: `${plan.name} - suscripción mensual`,
-      amount: tenant.mpSubscriptionAmount ?? getEffectivePrice(plan),
+      amount: getMonthlyPrice(tenant, plan),
     });
 
     await prisma.tenant.update({
