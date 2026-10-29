@@ -1,7 +1,7 @@
 import prisma from "../prisma";
 import bcrypt from "bcryptjs";
 import { Response } from "express";
-import { Role, TenantSubscriptionStatus } from "@prisma/client";
+import { BillingPaymentMethod, Role, TenantSubscriptionStatus } from "@prisma/client";
 import { invalidateTenantCache } from "../middleware/tenant";
 import { endOfDayAR } from "../utils/dateAR";
 import { PLANS, DEFAULT_PLAN_ID, PlanFeatureKey, FEATURE_LABELS } from "../config/billing";
@@ -40,6 +40,7 @@ export const platformTenantService = {
         contactPhone: true,
         mpPreapprovalId: true,
         mpSubscriptionAmount: true,
+        billingPaymentMethod: true,
         notes: true,
         createdAt: true,
         // Auditoria: cuentas del negocio (nombre/email/rol/ultimo login), sin
@@ -61,6 +62,15 @@ export const platformTenantService = {
     });
     const salesMap = new Map(salesByTenant.map((s) => [s.tenantId, s]));
 
+    // Transferencias informadas sin revisar -- se marcan en el listado para
+    // que el super-admin sepa a quien tiene que confirmarle el pago.
+    const pendingTransfers = await prisma.tenantTransferReport.groupBy({
+      by: ["tenantId"],
+      where: { status: "PENDING" },
+      _count: { _all: true },
+    });
+    const pendingTransfersMap = new Map(pendingTransfers.map((p) => [p.tenantId, p._count._all]));
+
     return tenants.map((t) => {
       const sales = salesMap.get(t.id);
       return {
@@ -68,6 +78,7 @@ export const platformTenantService = {
         lastLoginAt: maxLastLogin(t.users),
         salesCount: sales?._count._all ?? 0,
         lastSaleAt: sales?._max.createdAt ?? null,
+        pendingTransferCount: pendingTransfersMap.get(t.id) ?? 0,
       };
     });
   },
@@ -79,6 +90,11 @@ export const platformTenantService = {
         paymentLogs: {
           orderBy: { createdAt: "desc" },
           include: { platformAdmin: { select: { id: true, name: true, email: true } } },
+        },
+        transferReports: {
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          include: { platformAdmin: { select: { id: true, name: true } } },
         },
         users: {
           select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true, lastLoginAt: true },
@@ -164,6 +180,83 @@ export const platformTenantService = {
   },
 
   /**
+   * Confirma o rechaza una transferencia informada por el tenant (ver
+   * billing.service.ts#reportTransfer). Confirmar = un mes mas de servicio
+   * contado desde el vencimiento vigente si todavia no paso (para no
+   * "comerle" dias a quien paga por adelantado) o desde hoy si ya vencio,
+   * pasa a ACTIVE, levanta la suspension y aplica el plan que eligio al
+   * informar. Rechazar solo deja constancia con el motivo (el tenant lo ve
+   * en /suscripcion y puede volver a informar).
+   */
+  async reviewTransferReport(
+    tenantId: string,
+    reportId: string,
+    data: { approve: boolean; note?: string },
+    platformAdminId?: string
+  ) {
+    const report = await prisma.tenantTransferReport.findFirst({ where: { id: reportId, tenantId } });
+    if (!report) throw Object.assign(new Error("Transferencia no encontrada"), { status: 404 });
+    if (report.status !== "PENDING") {
+      throw Object.assign(new Error("Esta transferencia ya fue revisada"), { status: 409 });
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new Error("Tenant no encontrado");
+
+    const reviewNote = data.note?.trim() || null;
+
+    if (!data.approve) {
+      await prisma.$transaction([
+        prisma.tenantTransferReport.update({
+          where: { id: reportId },
+          data: { status: "REJECTED", reviewNote, reviewedAt: new Date(), platformAdminId: platformAdminId ?? null },
+        }),
+        prisma.tenantPaymentLog.create({
+          data: {
+            tenantId,
+            platformAdminId: platformAdminId ?? undefined,
+            previousStatus: tenant.subscriptionStatus,
+            newStatus: tenant.subscriptionStatus,
+            note: `Transferencia rechazada (op. ${report.reference})${reviewNote ? `: ${reviewNote}` : "."}`,
+          },
+        }),
+      ]);
+      return this.getTenantById(tenantId);
+    }
+
+    const now = new Date();
+    const base = tenant.paidUntil && tenant.paidUntil > now ? tenant.paidUntil : now;
+    const next = new Date(base);
+    next.setMonth(next.getMonth() + 1);
+    const paidUntil = endOfDayAR(next);
+
+    await prisma.$transaction([
+      prisma.tenantTransferReport.update({
+        where: { id: reportId },
+        data: { status: "APPROVED", reviewNote, reviewedAt: now, platformAdminId: platformAdminId ?? null },
+      }),
+      prisma.tenant.update({
+        where: { id: tenantId },
+        data: { subscriptionStatus: "ACTIVE", paidUntil, suspendedAt: null, planId: report.planId },
+      }),
+      prisma.tenantPaymentLog.create({
+        data: {
+          tenantId,
+          platformAdminId: platformAdminId ?? undefined,
+          previousStatus: tenant.subscriptionStatus,
+          newStatus: "ACTIVE",
+          note: `Transferencia confirmada (op. ${report.reference}, $${report.amount.toLocaleString("es-AR")}).${reviewNote ? ` ${reviewNote}` : ""}`,
+          paidUntil,
+        },
+      }),
+    ]);
+
+    invalidateTenantCache(tenant.slug, tenant.id);
+
+    return this.getTenantById(tenantId);
+  },
+
+  /**
    * Prende/apaga un modulo para UN tenant puntual, sin importar su plan --
    * a diferencia de planFeatureConfigService.setFeature (que pisa el plan
    * entero), esto solo afecta a este tenant. Se guarda en
@@ -213,6 +306,19 @@ export const platformTenantService = {
    * cargar uno nuevo mas alla del primero (ver arcaConfig.core.ts) y oculta
    * los selectores de dueno en ventas/compras.
    */
+  /** Medio de pago habilitado para el negocio (ver enum BillingPaymentMethod). */
+  async setBillingPaymentMethod(id: string, method: string) {
+    if (!Object.values(BillingPaymentMethod).includes(method as BillingPaymentMethod)) {
+      throw Object.assign(new Error("Medio de pago inválido"), { status: 400 });
+    }
+
+    return prisma.tenant.update({
+      where: { id },
+      data: { billingPaymentMethod: method as BillingPaymentMethod },
+      select: { billingPaymentMethod: true },
+    });
+  },
+
   async setMultiInvoicing(id: string, enabled: boolean) {
     const tenant = await prisma.tenant.update({
       where: { id },
@@ -500,6 +606,7 @@ export const platformTenantService = {
         await tx.printboxDevice.deleteMany({ where: { tenantId: id } });
 
         await tx.tenantPaymentLog.deleteMany({ where: { tenantId: id } });
+        await tx.tenantTransferReport.deleteMany({ where: { tenantId: id } });
 
         // SalesLead.convertedTenantId es onDelete:SetNull -- no hace falta
         // tocarlo, Postgres lo deja en null solo.

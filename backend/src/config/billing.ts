@@ -209,3 +209,17 @@ export function isLaunchPriceActive(): boolean {
 export function getEffectivePrice(plan: Plan): number {
   return isLaunchPriceActive() ? plan.priceArs : plan.regularPriceArs;
 }
+
+// Cuenta bancaria para pagar el servicio por transferencia (alternativa a
+// Mercado Pago, ver billing.service.ts#reportTransfer). Se carga desde
+// /platform-admin > Cobros (PlatformSetting "transferAccount", ver
+// platformSettings.service.ts) -- si esta deshabilitada o sin CBU ni alias,
+// la opcion de transferencia no se ofrece en /suscripcion.
+export type TransferInfo = {
+  enabled: boolean;
+  holder: string | null;
+  cuit: string | null;
+  bank: string | null;
+  cbu: string | null;
+  alias: string | null;
+};

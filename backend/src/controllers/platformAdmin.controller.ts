@@ -5,6 +5,7 @@ import { mpPlanService } from "../services/billing/mpPlan.service";
 import { planFeatureConfigService } from "../services/planFeatureConfig.service";
 import { PlanFeatureKey } from "../config/billing";
 import { getParamAsString } from "../utils/params";
+import { platformSettingsService } from "../services/platformSettings.service";
 
 export const platformAdminController = {
   async login(req: Request, res: Response, next: NextFunction) {
@@ -82,6 +83,38 @@ export const platformAdminController = {
     }
   },
 
+  async getTransferAccount(_req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json({ ok: true, content: await platformSettingsService.getTransferAccount() });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async updateTransferAccount(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json({ ok: true, content: await platformSettingsService.setTransferAccount(req.body ?? {}) });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async reviewTransferReport(req: Request, res: Response, next: NextFunction) {
+    try {
+      const platformAdminId = (req as any).platformAdmin?.id;
+      const tenant = await platformTenantService.reviewTransferReport(
+        getParamAsString(req.params.id, "id"),
+        getParamAsString(req.params.reportId, "reportId"),
+        { approve: req.body?.approve === true, note: typeof req.body?.note === "string" ? req.body.note : undefined },
+        platformAdminId
+      );
+
+      res.json({ ok: true, content: tenant });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async updateTenantFeatureOverride(req: Request, res: Response, next: NextFunction) {
     try {
       const feature = req.body.feature as PlanFeatureKey;
@@ -105,6 +138,19 @@ export const platformAdminController = {
       const tenant = await platformTenantService.setPosCheckoutModal(
         getParamAsString(req.params.id, "id"),
         enabled
+      );
+
+      res.json({ ok: true, content: tenant });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async updateTenantBillingPaymentMethod(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenant = await platformTenantService.setBillingPaymentMethod(
+        getParamAsString(req.params.id, "id"),
+        String(req.body?.method ?? "")
       );
 
       res.json({ ok: true, content: tenant });

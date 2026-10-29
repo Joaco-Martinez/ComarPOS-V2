@@ -5,8 +5,8 @@ import Link from 'next/link';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { fmtDate } from '@/lib/helpers';
-import type { BillingPlan } from '@/types';
-import { CheckCircle2, CreditCard, LogOut, MessageCircle, PartyPopper, RefreshCcw, Repeat, Ban } from 'lucide-react';
+import type { BillingPaymentMethod, BillingPlan, TransferInfo, TransferReportStatus } from '@/types';
+import { CheckCircle2, CreditCard, LogOut, MessageCircle, PartyPopper, RefreshCcw, Repeat, Ban, Landmark, Copy, Clock, AlertTriangle } from 'lucide-react';
 import { waLink } from '@/components/landing/siteConfig';
 
 type BillingStatus = {
@@ -17,9 +17,44 @@ type BillingStatus = {
   suspendedAt?: string | null;
   mpPreapprovalId?: string | null;
   mpSubscriptionAmount?: number | null;
+  billingPaymentMethod?: BillingPaymentMethod;
   planId: string;
   plan: { id: string; name: string; priceArs: number; currency: string; tagline: string };
+  transferInfo?: TransferInfo;
+  lastTransferReport?: {
+    id: string;
+    status: TransferReportStatus;
+    amount: number;
+    planId: string;
+    reference: string;
+    reviewNote?: string | null;
+    createdAt: string;
+    reviewedAt?: string | null;
+  } | null;
 };
+
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* sin permiso de portapapeles: el dato igual queda a la vista */ }
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+        <div style={{ fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text)', wordBreak: 'break-all' }}>{value}</div>
+      </div>
+      <button type="button" onClick={copy} className="btn btn-ghost btn-xs" style={{ gap: 4, flexShrink: 0 }}>
+        {copied ? <CheckCircle2 size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
+        {copied ? 'Copiado' : 'Copiar'}
+      </button>
+    </div>
+  );
+}
 
 export default function SuscripcionPage() {
   const { logout, user } = useAuthStore();
@@ -36,6 +71,11 @@ export default function SuscripcionPage() {
   const [cancelling, setCancelling] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelMessage, setCancelMessage] = useState('');
+  const [payMethod, setPayMethod] = useState<'mp' | 'transfer'>('mp');
+  const [transferRef, setTransferRef] = useState('');
+  const [transferPayer, setTransferPayer] = useState('');
+  const [transferNote, setTransferNote] = useState('');
+  const [reportingTransfer, setReportingTransfer] = useState(false);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -58,7 +98,11 @@ export default function SuscripcionPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setIsReturningFromMp(new URLSearchParams(window.location.search).get('estado') === 'procesando');
+      const qs = new URLSearchParams(window.location.search);
+      setIsReturningFromMp(qs.get('estado') === 'procesando');
+      // El cartel de "hay que abonar" (PaymentDueModal) linkea con
+      // ?metodo=transferencia cuando el usuario elige pagar asi.
+      if (qs.get('metodo') === 'transferencia') setPayMethod('transfer');
     }
     load();
   }, [load]);
@@ -142,6 +186,34 @@ export default function SuscripcionPage() {
     }
   };
 
+  // Pago por transferencia: informa el nro de operacion y queda pendiente
+  // hasta que lo confirmamos contra el extracto (ver backend
+  // billing.service.ts#reportTransfer) -- no desbloquea al instante.
+  const reportTransfer = async () => {
+    if (!transferRef.trim()) {
+      setError('Ingresá el número de operación o comprobante de la transferencia.');
+      return;
+    }
+    setReportingTransfer(true);
+    setError('');
+    try {
+      const { data } = await api.post('/billing/transfer-report', {
+        planId: selectedPlanId ?? undefined,
+        reference: transferRef,
+        payerName: transferPayer,
+        note: transferNote,
+      });
+      setStatus(data.content ?? data);
+      setTransferRef('');
+      setTransferPayer('');
+      setTransferNote('');
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'No pudimos registrar la transferencia. Probá de nuevo o escribinos.');
+    } finally {
+      setReportingTransfer(false);
+    }
+  };
+
   const reasonText = () => {
     if (!status) return '';
     if (status.subscriptionStatus === 'TRIAL') {
@@ -158,6 +230,24 @@ export default function SuscripcionPage() {
   };
 
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? null;
+
+  // Transferencia disponible para quien no tiene auto-cobro de Mercado Pago
+  // (los que pagan con MP ya se renuevan solos) o tiene algo pendiente de
+  // pago. Con una suscripcion MP activa y al dia no se ofrece, para no
+  // terminar pagando el mismo mes dos veces.
+  const needsPayment = !!status && (status.subscriptionStatus !== 'ACTIVE' || isExpiredActive);
+  const canPayByTransfer = !!status?.transferInfo?.enabled && (needsPayment || !status.mpPreapprovalId);
+  const pendingTransfer = status?.lastTransferReport?.status === 'PENDING' ? status.lastTransferReport : null;
+  const rejectedTransfer = status?.lastTransferReport?.status === 'REJECTED' ? status.lastTransferReport : null;
+  const transferPlan = selectedPlan ?? status?.plan ?? null;
+  const transferAmount = transferPlan && status && transferPlan.id === status.planId && status.mpSubscriptionAmount
+    ? status.mpSubscriptionAmount
+    : transferPlan?.priceArs ?? 0;
+  // Medio de pago habilitado por el super-admin para este negocio
+  // (Tenant.billingPaymentMethod): si es solo transferencia no se ofrece
+  // Mercado Pago, y si es solo MP el backend ya manda transferInfo apagado.
+  const mpAllowed = status?.billingPaymentMethod !== 'TRANSFER';
+  const showTransfer = canPayByTransfer && (payMethod === 'transfer' || !mpAllowed);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -206,7 +296,7 @@ export default function SuscripcionPage() {
                 {isReturningFromMp
                   ? 'Mercado Pago nos avisa apenas se acredite, puede tardar unos segundos. Estamos revisando solos, no hace falta que actualices la página.'
                   : isExpiredActive
-                  ? `Diste de baja tu suscripción y el período que tenías pago venció el ${fmtDate(status!.paidUntil!)}. Reactivá para seguir usando ComarPOS.`
+                  ? `Tu período pago venció el ${fmtDate(status!.paidUntil!)} y la cuenta quedó pausada. Aboná para volver a usar ComarPOS.`
                   : status?.subscriptionStatus === 'ACTIVE'
                   ? 'Podés cambiar de plan cuando quieras — cancelamos tu suscripción actual y arrancamos la nueva en el mismo paso.'
                   : reasonText()}
@@ -268,6 +358,91 @@ export default function SuscripcionPage() {
                 </div>
               )}
 
+              {pendingTransfer && (
+                <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 8, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
+                  <Clock size={16} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 1 }} />
+                  <div style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.5 }}>
+                    Informaste una transferencia de <strong>${pendingTransfer.amount.toLocaleString('es-AR')}</strong> el {fmtDate(pendingTransfer.createdAt)} (op. {pendingTransfer.reference}). La estamos confirmando — apenas se acredite tu cuenta queda al día, no hace falta que hagas nada más.
+                  </div>
+                </div>
+              )}
+
+              {canPayByTransfer && mpAllowed && !pendingTransfer && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 14, background: 'var(--surface2)', padding: 4, borderRadius: 8 }}>
+                  {([
+                    { key: 'mp', label: 'Mercado Pago', icon: CreditCard },
+                    { key: 'transfer', label: 'Transferencia', icon: Landmark },
+                  ] as const).map(({ key, label, icon: Icon }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => { setPayMethod(key); setError(''); }}
+                      className="btn btn-sm"
+                      style={{
+                        gap: 6, justifyContent: 'center', fontWeight: 700,
+                        background: payMethod === key ? 'var(--surface)' : 'transparent',
+                        border: payMethod === key ? '1px solid var(--border2)' : '1px solid transparent',
+                        color: payMethod === key ? 'var(--text)' : 'var(--text3)',
+                      }}
+                    >
+                      <Icon size={14} /> {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {showTransfer && !pendingTransfer && (
+                <div style={{ border: '1px solid var(--border2)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
+                  {rejectedTransfer && (
+                    <div style={{ background: 'var(--danger-dim)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, padding: '8px 10px', marginBottom: 12, fontSize: 12, color: 'var(--danger)', display: 'flex', gap: 8 }}>
+                      <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                      <span>
+                        No pudimos confirmar tu transferencia (op. {rejectedTransfer.reference}){rejectedTransfer.reviewNote ? `: ${rejectedTransfer.reviewNote}` : '.'} Revisá los datos e informala de nuevo.
+                      </span>
+                    </div>
+                  )}
+                  <p style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5, marginBottom: 10 }}>
+                    Transferí <strong style={{ color: 'var(--text)' }}>${transferAmount.toLocaleString('es-AR')}</strong> ({transferPlan?.name}, 1 mes) a esta cuenta y después informanos el pago:
+                  </p>
+                  <div style={{ marginBottom: 14 }}>
+                    {status?.transferInfo?.alias && <CopyRow label="Alias" value={status.transferInfo.alias} />}
+                    {status?.transferInfo?.cbu && <CopyRow label="CBU / CVU" value={status.transferInfo.cbu} />}
+                    {status?.transferInfo?.holder && <CopyRow label="Titular" value={status.transferInfo.holder} />}
+                    {status?.transferInfo?.cuit && <CopyRow label="CUIT" value={status.transferInfo.cuit} />}
+                    {status?.transferInfo?.bank && <CopyRow label="Banco" value={status.transferInfo.bank} />}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <input
+
+                      placeholder="Nro. de operación / comprobante *"
+                      value={transferRef}
+                      maxLength={100}
+                      onChange={(e) => setTransferRef(e.target.value)}
+                    />
+                    <input
+
+                      placeholder="Titular de la cuenta que transfirió (opcional)"
+                      value={transferPayer}
+                      maxLength={120}
+                      onChange={(e) => setTransferPayer(e.target.value)}
+                    />
+                    <input
+
+                      placeholder="Comentario (opcional)"
+                      value={transferNote}
+                      maxLength={500}
+                      onChange={(e) => setTransferNote(e.target.value)}
+                    />
+                    <button onClick={reportTransfer} disabled={reportingTransfer} className="btn btn-primary" style={{ width: '100%', gap: 8 }}>
+                      {reportingTransfer ? <span className="spinner" style={{ width: 15, height: 15 }} /> : <><Landmark size={15} /> Ya transferí, informar pago</>}
+                    </button>
+                    <p style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.5 }}>
+                      Confirmamos la acreditación a mano (normalmente en el día hábil). Cuando la confirmemos, tu cuenta queda al día por un mes más.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {cancelMessage && (
                 <div style={{ background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 6, padding: '9px 12px', marginBottom: 16, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
                   {cancelMessage}
@@ -281,7 +456,7 @@ export default function SuscripcionPage() {
               )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {status?.subscriptionStatus !== 'ACTIVE' && (
+                {status?.subscriptionStatus !== 'ACTIVE' && mpAllowed && !showTransfer && (
                   <button onClick={subscribe} disabled={redirecting} className="btn btn-primary" style={{ width: '100%', gap: 8 }}>
                     {redirecting ? (
                       <span className="spinner" style={{ width: 15, height: 15 }} />
@@ -293,7 +468,7 @@ export default function SuscripcionPage() {
                   </button>
                 )}
 
-                {isChangingPlan && (
+                {isChangingPlan && mpAllowed && !showTransfer && (
                   <button onClick={subscribe} disabled={redirecting} className="btn btn-primary" style={{ width: '100%', gap: 8 }}>
                     {redirecting ? (
                       <span className="spinner" style={{ width: 15, height: 15 }} />
@@ -309,7 +484,7 @@ export default function SuscripcionPage() {
                     sin mpPreapprovalId) y no elegiste otro plan: te dejamos
                     reactivar la misma suscripción sin tener que esperar a
                     que se corte el acceso. */}
-                {!isChangingPlan && status?.subscriptionStatus === 'ACTIVE' && !status.mpPreapprovalId && (
+                {!isChangingPlan && status?.subscriptionStatus === 'ACTIVE' && !status.mpPreapprovalId && mpAllowed && !showTransfer && (
                   <button onClick={subscribe} disabled={redirecting} className="btn btn-primary" style={{ width: '100%', gap: 8 }}>
                     {redirecting ? (
                       <span className="spinner" style={{ width: 15, height: 15 }} />
@@ -324,6 +499,15 @@ export default function SuscripcionPage() {
                 <button onClick={() => load()} className="btn btn-secondary" style={{ width: '100%', gap: 8 }}>
                   <RefreshCcw size={14} /> Actualizar estado
                 </button>
+
+                {/* Ahora el negocio bloqueado entra igual al sistema (ver
+                    BillingBlockedScreen), asi que llega aca desde adentro y
+                    necesita poder volver. */}
+                {user?.tenantSlug && (
+                  <Link href={`/${user.tenantSlug}/dashboard`} className="btn btn-ghost" style={{ width: '100%', gap: 8, justifyContent: 'center' }}>
+                    Volver al sistema
+                  </Link>
+                )}
 
                 {/* mpPreapprovalId cubre PAST_DUE/SUSPENDED con una
                     suscripción de MP todavía activa (un pago que falló es

@@ -47,6 +47,13 @@ router.patch(
   platformAuthMiddleware,
   platformAdminController.updateSubscription
 );
+// Confirmar/rechazar una transferencia informada por el tenant (ver
+// platformTenant.service.ts#reviewTransferReport).
+router.post(
+  "/tenants/:id/transfer-reports/:reportId/review",
+  platformAuthMiddleware,
+  platformAdminController.reviewTransferReport
+);
 router.post("/tenants", platformAuthMiddleware, platformAdminController.createTenant);
 // Cuenta demo de 7 dias (distinta de POST /tenants, que crea gratis pero
 // ACTIVA sin trial) - ver platformTenant.service.ts#createDemoTenant. Sin
@@ -72,10 +79,20 @@ router.patch(
   platformAdminController.updateTenantPosCheckoutModal
 );
 router.patch(
+  "/tenants/:id/billing-payment-method",
+  platformAuthMiddleware,
+  platformAdminController.updateTenantBillingPaymentMethod
+);
+router.patch(
   "/tenants/:id/multi-invoicing",
   platformAuthMiddleware,
   platformAdminController.updateTenantMultiInvoicing
 );
+
+// Cuenta bancaria para cobrar el servicio por transferencia (ver
+// platformSettings.service.ts) -- se edita desde /platform-admin/cobros.
+router.get("/settings/transfer-account", platformAuthMiddleware, platformAdminController.getTransferAccount);
+router.put("/settings/transfer-account", platformAuthMiddleware, platformAdminController.updateTransferAccount);
 
 router.get("/mp-plans", platformAuthMiddleware, platformAdminController.listMpPlans);
 router.post("/mp-plans/sync", platformAuthMiddleware, platformAdminController.syncMpPlans);

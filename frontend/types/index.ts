@@ -728,6 +728,39 @@ export interface TenantPaymentLog {
   createdAt: string;
 }
 
+// Pago del servicio por transferencia informado por el tenant desde
+// /suscripcion, pendiente de que lo confirme el super-admin (ver backend
+// billing.service.ts#reportTransfer / platformTenant.service.ts#reviewTransferReport).
+export type TransferReportStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface TenantTransferReport {
+  id: string;
+  tenantId?: string;
+  planId: string;
+  amount: number;
+  reference: string;
+  payerName?: string | null;
+  note?: string | null;
+  status: TransferReportStatus;
+  reviewNote?: string | null;
+  reviewedAt?: string | null;
+  platformAdmin?: { id: string; name: string } | null;
+  createdAt: string;
+}
+
+// Con que puede pagar el servicio cada negocio, elegido desde
+// /platform-admin (ver backend enum BillingPaymentMethod).
+export type BillingPaymentMethod = 'ANY' | 'MERCADOPAGO' | 'TRANSFER';
+
+export interface TransferInfo {
+  enabled: boolean;
+  holder: string | null;
+  cuit: string | null;
+  bank: string | null;
+  cbu: string | null;
+  alias: string | null;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -741,6 +774,7 @@ export interface Tenant {
   contactPhone?: string | null;
   mpPreapprovalId?: string | null;
   mpSubscriptionAmount?: number | null;
+  billingPaymentMethod?: BillingPaymentMethod;
   notes?: string | null;
   createdAt: string;
   // Override de modulos por este tenant puntual, por encima del plan (ver
@@ -757,6 +791,8 @@ export interface Tenant {
   // backend Tenant.multiInvoicingEnabled.
   multiInvoicingEnabled?: boolean;
   paymentLogs?: TenantPaymentLog[];
+  transferReports?: TenantTransferReport[];
+  pendingTransferCount?: number;
   users?: User[];
   // Uso real (ver platformTenant.service.ts): calculados server-side, no
   // son columnas de la tabla Tenant.

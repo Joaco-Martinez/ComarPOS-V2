@@ -377,6 +377,16 @@ export default function PlatformAdminTenantsPage() {
                         {trialLabel(t) && (
                           <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{trialLabel(t)}</span>
                         )}
+                        {t.billingPaymentMethod && t.billingPaymentMethod !== 'ANY' && (
+                          <span className="badge badge-cyan" title="Medio de pago habilitado">
+                            {t.billingPaymentMethod === 'TRANSFER' ? 'Transf.' : 'MP'}
+                          </span>
+                        )}
+                        {(t.pendingTransferCount ?? 0) > 0 && (
+                          <Link href={`/platform-admin/tenants/${t.id}`} className="badge badge-amber" title="Transferencia informada, pendiente de confirmar">
+                            Transf. a confirmar
+                          </Link>
+                        )}
                       </div>
                     </td>
                     <td>

@@ -34,10 +34,11 @@ api.interceptors.request.use((config) => {
 });
 
 // Codigos que devuelve middleware/tenant.ts (getTenantBlock) cuando el
-// tenant esta bloqueado (prueba gratis vencida, suspendido por MP o a
-// mano) - se resuelven todos mandando a /suscripcion, que ademas de dejar
-// pagar via Mercado Pago explica la situacion y da un link de soporte para
-// los casos de suspension manual que no se resuelven pagando solo.
+// tenant esta bloqueado (prueba gratis vencida, falta de pago, suspendido).
+// Ya no se saca al usuario del sistema: se avisa con el evento
+// "billing-blocked" y AppLayout bloquea todas las pantallas con el cartel
+// de pago (BillingBlockedScreen). Fuera de AppLayout (sin nadie escuchando)
+// se sigue mandando a /suscripcion como antes.
 const BILLING_BLOCK_CODES = new Set(['TENANT_SUSPENDED', 'TRIAL_EXPIRED', 'SUBSCRIPTION_EXPIRED']);
 
 api.interceptors.response.use(
@@ -77,7 +78,13 @@ api.interceptors.response.use(
       typeof window !== 'undefined' &&
       !window.location.pathname.startsWith('/suscripcion')
     ) {
-      window.location.href = '/suscripcion';
+      const handled = !window.dispatchEvent(
+        new CustomEvent('billing-blocked', {
+          cancelable: true,
+          detail: { code: blockCode, message: error.response?.data?.message ?? '' },
+        })
+      );
+      if (!handled) window.location.href = '/suscripcion';
     }
 
     return Promise.reject(error);
