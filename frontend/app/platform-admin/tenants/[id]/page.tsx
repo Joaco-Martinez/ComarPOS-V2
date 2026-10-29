@@ -6,10 +6,10 @@ import { useParams, useRouter } from 'next/navigation';
 import PlatformAdminLayout from '@/components/PlatformAdminLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { Tenant, TenantSubscriptionStatus, BillingPlan, PlanFeatureKey } from '@/types';
+import type { Tenant, TenantSubscriptionStatus, BillingPlan, PlanFeatureKey, BillingPaymentMethod } from '@/types';
 import { fmtDate, daysRemaining, normalizeArray, fmtMoney } from '@/lib/helpers';
 import { FEATURE_LABELS, FEATURE_GROUPS } from '@/lib/planFeatureGroups';
-import { ArrowLeft, History, Save, Users, LogIn, Activity, SlidersHorizontal, ToggleLeft, ToggleRight, Trash2, X, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, History, Save, Landmark, Check, Users, LogIn, Activity, SlidersHorizontal, ToggleLeft, ToggleRight, Trash2, X, AlertTriangle } from 'lucide-react';
 
 const statusBadge = (s: TenantSubscriptionStatus) =>
   s === 'TRIAL' ? 'badge-blue' : s === 'ACTIVE' ? 'badge-green' : s === 'PAST_DUE' ? 'badge-amber' : 'badge-red';
@@ -36,6 +36,8 @@ export default function PlatformAdminTenantDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [reviewingTransfer, setReviewingTransfer] = useState<string | null>(null);
+  const [savingPayMethod, setSavingPayMethod] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -92,6 +94,47 @@ export default function PlatformAdminTenantDetailPage() {
       toast.error(err?.response?.data?.message ?? 'Error al guardar');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Se guarda al toque (no espera al "Guardar" de la suscripción), igual que
+  // los toggles de abajo -- es una preferencia del negocio, no un pago.
+  const changePayMethod = async (method: BillingPaymentMethod) => {
+    setSavingPayMethod(true);
+    try {
+      await api.patch(`/platform-admin/tenants/${id}/billing-payment-method`, { method });
+      setTenant((t) => (t ? { ...t, billingPaymentMethod: method } : t));
+      toast.success('Medio de pago actualizado');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al cambiar el medio de pago');
+    } finally {
+      setSavingPayMethod(false);
+    }
+  };
+
+  // Confirmar suma un mes de servicio y pasa a ACTIVE (ver backend
+  // platformTenant.service.ts#reviewTransferReport); rechazar pide un motivo
+  // que el tenant ve en /suscripcion.
+  const reviewTransfer = async (reportId: string, approve: boolean) => {
+    let reviewNote: string | undefined;
+    if (!approve) {
+      const input = window.prompt('Motivo del rechazo (lo ve el negocio):');
+      if (input === null) return;
+      reviewNote = input;
+    }
+    setReviewingTransfer(reportId);
+    try {
+      const { data } = await api.post(`/platform-admin/tenants/${id}/transfer-reports/${reportId}/review`, { approve, note: reviewNote });
+      toast.success(approve ? 'Transferencia confirmada: +1 mes de servicio' : 'Transferencia rechazada');
+      const t: Tenant = data.content ?? data;
+      setTenant(t);
+      setStatus(t.subscriptionStatus);
+      setPaidUntil(t.paidUntil ? t.paidUntil.slice(0, 10) : '');
+      setPlanId(t.planId);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Error al revisar la transferencia');
+    } finally {
+      setReviewingTransfer(null);
     }
   };
 
@@ -237,6 +280,18 @@ export default function PlatformAdminTenantDetailPage() {
               {billingPlans.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Medio de pago (se guarda al cambiar)</label>
+            <select
+              value={tenant.billingPaymentMethod ?? 'ANY'}
+              disabled={savingPayMethod}
+              onChange={(e) => changePayMethod(e.target.value as BillingPaymentMethod)}
+            >
+              <option value="ANY">Mercado Pago o transferencia</option>
+              <option value="MERCADOPAGO">Solo Mercado Pago</option>
+              <option value="TRANSFER">Solo transferencia</option>
             </select>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
@@ -391,6 +446,53 @@ export default function PlatformAdminTenantDetailPage() {
           </div>
         )}
       </div>
+
+      {tenant.transferReports && tenant.transferReports.length > 0 && (
+        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <Landmark size={15} style={{ color: 'var(--text3)' }} />
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Transferencias informadas</span>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Fecha</th><th>Plan</th><th>Monto</th><th>Nro. operación</th><th>Titular / nota</th><th>Estado</th><th></th></tr>
+              </thead>
+              <tbody>
+                {tenant.transferReports.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtDate(r.createdAt)}</td>
+                    <td style={{ fontSize: 12 }}>{billingPlans.find((p) => p.id === r.planId)?.name ?? r.planId}</td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{fmtMoney(r.amount)}</td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{r.reference}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text2)' }}>
+                      {[r.payerName, r.note].filter(Boolean).join(' · ') || '—'}
+                      {r.reviewNote && <div style={{ fontSize: 11, color: 'var(--text3)' }}>Revisión: {r.reviewNote}</div>}
+                    </td>
+                    <td>
+                      <span className={`badge ${r.status === 'PENDING' ? 'badge-amber' : r.status === 'APPROVED' ? 'badge-green' : 'badge-red'}`}>
+                        {r.status === 'PENDING' ? 'Pendiente' : r.status === 'APPROVED' ? 'Confirmada' : 'Rechazada'}
+                      </span>
+                    </td>
+                    <td>
+                      {r.status === 'PENDING' && (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button onClick={() => reviewTransfer(r.id, true)} disabled={reviewingTransfer === r.id} className="btn btn-primary btn-xs" style={{ gap: 4 }}>
+                            <Check size={12} /> Confirmar
+                          </button>
+                          <button onClick={() => reviewTransfer(r.id, false)} disabled={reviewingTransfer === r.id} className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }}>
+                            Rechazar
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>

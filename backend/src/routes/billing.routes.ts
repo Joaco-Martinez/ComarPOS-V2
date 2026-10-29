@@ -13,6 +13,9 @@ router.get("/plans", billingController.plans);
 router.get("/status", authMiddleware, billingController.status);
 router.post("/checkout", authMiddleware, billingController.checkout);
 router.post("/cancel", authMiddleware, requireRole("ADMIN"), billingController.cancel);
+// Pago por transferencia: el tenant informa el nro de operacion, lo confirma
+// el super-admin desde /platform-admin (ver billing.service.ts#reportTransfer).
+router.post("/transfer-report", authMiddleware, requireRole("ADMIN"), billingController.reportTransfer);
 
 // Publico, sin auth: lo llama Mercado Pago directo.
 router.post("/mp/webhook", billingController.webhook);

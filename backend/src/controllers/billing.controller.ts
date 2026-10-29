@@ -65,6 +65,25 @@ export const billingController = {
     }
   },
 
+  async reportTransfer(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = (req as any).user?.tenantId;
+      if (!tenantId) return res.status(400).json({ ok: false, message: "Usuario sin tenant asignado" });
+
+      const body = req.body ?? {};
+      await billingService.reportTransfer(tenantId, {
+        planId: typeof body.planId === "string" ? body.planId : undefined,
+        reference: typeof body.reference === "string" ? body.reference : undefined,
+        payerName: typeof body.payerName === "string" ? body.payerName : undefined,
+        note: typeof body.note === "string" ? body.note : undefined,
+      });
+      const status = await billingService.getStatus(tenantId);
+      res.json({ ok: true, content: status });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   // Publico, sin auth: lo llama Mercado Pago directo (ver
   // routes/billing.routes.ts, eximido de auth/suspension/CSRF). Valida la
   // firma del webhook antes de tocar nada.

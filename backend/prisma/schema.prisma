@@ -8,6 +8,15 @@ datasource db {
 }
 
 // === Multi-tenant (doc seccion 6) ===
+// Con que puede pagar el servicio cada negocio -- lo elige el super-admin
+// desde /platform-admin (ver platformTenant.service.ts#setBillingPaymentMethod).
+// ANY = las dos opciones (comportamiento por defecto).
+enum BillingPaymentMethod {
+  ANY
+  MERCADOPAGO
+  TRANSFER
+}
+
 enum TenantSubscriptionStatus {
   TRIAL
   ACTIVE
@@ -66,6 +75,10 @@ model Tenant {
   // adelante para nuevos suscriptores.
   mpPreapprovalId      String? @unique
   mpSubscriptionAmount Float?
+  // Medio de pago habilitado para este negocio (ver enum BillingPaymentMethod).
+  // /suscripcion solo le ofrece ese medio y el backend rechaza el otro
+  // (billing.service.ts#createCheckout / #reportTransfer).
+  billingPaymentMethod BillingPaymentMethod @default(ANY)
   // Id de uno de los PLANS en config/billing.ts ("esencial" | "profesional"
   // | "multisucursal") -- default al plan recomendado (el que era el unico
   // plan antes de tener 3), asi los tenants existentes no quedan en un
@@ -159,6 +172,7 @@ model Tenant {
   paymentMethodAdjustments Json?
 
   paymentLogs     TenantPaymentLog[]
+  transferReports TenantTransferReport[]
   printboxDevices PrintboxDevice[]
   printJobs       PrintJob[]
   pushTokens      PushToken[]
@@ -215,8 +229,9 @@ model PlatformAdmin {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  paymentLogs TenantPaymentLog[]
-  salesLeads  SalesLead[]
+  paymentLogs     TenantPaymentLog[]
+  salesLeads      SalesLead[]
+  transferReports TenantTransferReport[]
 }
 
 // CRM chico de prospeccion "puerta a puerta" (doc: Joaco visita locales en
@@ -303,6 +318,49 @@ model PlanFeatureConfig {
   regularPriceArs Float?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// Configuracion global de la plataforma (no de un tenant), editable desde
+// /platform-admin sin redeploy -- clave/valor JSON para no sumar una tabla
+// por cada ajuste. Hoy: "transferAccount" (cuenta bancaria para cobrar el
+// servicio por transferencia, ver platformSettings.service.ts).
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// Pago del servicio por transferencia bancaria (alternativa a Mercado Pago,
+// ver billing.service.ts#reportTransfer). El tenant informa la transferencia
+// desde /suscripcion y queda PENDING hasta que el super-admin la confirma o
+// rechaza desde /platform-admin -- confirmarla extiende paidUntil un mes
+// (ver platformTenant.service.ts#reviewTransferReport).
+enum TransferReportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model TenantTransferReport {
+  id              String               @id @default(uuid())
+  tenantId        String
+  tenant          Tenant               @relation(fields: [tenantId], references: [id])
+  planId          String
+  amount          Float
+  // Nro de operacion / comprobante que carga el tenant, para cruzarlo con
+  // el extracto bancario.
+  reference       String
+  payerName       String?
+  note            String?
+  status          TransferReportStatus @default(PENDING)
+  reviewNote      String?
+  reviewedAt      DateTime?
+  platformAdminId String?
+  platformAdmin   PlatformAdmin?       @relation(fields: [platformAdminId], references: [id])
+  createdAt       DateTime             @default(now())
+
+  @@index([tenantId])
+  @@index([status])
 }
 
 model TenantPaymentLog {

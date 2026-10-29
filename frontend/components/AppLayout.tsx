@@ -7,6 +7,8 @@ import { usePlanFeaturesStore, isModuleAllowed } from '@/store/planFeatures';
 import { moduleKeyForPath } from '@/lib/navConfig';
 import Sidebar from './Sidebar';
 import WhatsNewModal from './WhatsNewModal';
+import PaymentDueModal from './PaymentDueModal';
+import BillingBlockedScreen from './BillingBlockedScreen';
 import NotificationsBell from './NotificationsBell';
 import BottomNav from './mobile/BottomNav';
 import HelpCenter from './HelpCenter';
@@ -26,7 +28,7 @@ const STORAGE_KEY = 'comarpos-sidebar-collapsed';
 
 export default function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
   const { user, loading, me, loadTenants, switchTenant } = useAuthStore();
-  const { features, loaded: featuresLoaded, load: loadFeatures } = usePlanFeaturesStore();
+  const { features, loaded: featuresLoaded, load: loadFeatures, block: billingBlock, setBlock: setBillingBlock } = usePlanFeaturesStore();
   const router = useRouter();
   const params = useParams<{ tenant?: string }>();
   const pathname = usePathname();
@@ -103,6 +105,19 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
     });
     return () => { cancelled = true; };
   }, [user, loading, params, pathname, router, loadTenants, switchTenant]);
+
+  // Un 403 de bloqueo por pago en cualquier request (ver lib/api.ts): en vez
+  // de sacarlo del sistema, se queda adentro con todo bloqueado.
+  // preventDefault le avisa al interceptor que ya lo manejamos.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ code: string; message: string }>;
+      ce.preventDefault();
+      setBillingBlock({ code: ce.detail.code, message: ce.detail.message });
+    };
+    window.addEventListener('billing-blocked', handler);
+    return () => window.removeEventListener('billing-blocked', handler);
+  }, [setBillingBlock]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -198,7 +213,9 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
           className="animate-fade-opacity"
           style={{ flex: 1, padding: `${headerHeight + 22}px 20px 22px`, maxWidth: 1440, width: '100%', minWidth: 0, margin: '0 auto' }}
         >
-          {moduleBlocked ? (
+          {billingBlock ? (
+            <BillingBlockedScreen block={billingBlock} />
+          ) : moduleBlocked ? (
             <div
               className="card"
               style={{
@@ -226,6 +243,7 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
 
       <BottomNav />
       <WhatsNewModal />
+      {!billingBlock && <PaymentDueModal />}
     </div>
   );
 }

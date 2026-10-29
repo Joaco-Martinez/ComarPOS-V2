@@ -12,8 +12,9 @@
  * sigue gestionandose igual que hasta ahora.
  */
 import prisma from "../../prisma";
-import { invalidateTenantCache } from "../../middleware/tenant";
-import { getEffectivePrice, isLaunchPriceActive, LAUNCH_PRICE_ENDS_AT, type Plan } from "../../config/billing";
+import { invalidateTenantCache, getTenantBlock } from "../../middleware/tenant";
+import { getEffectivePrice, isLaunchPriceActive, LAUNCH_PRICE_ENDS_AT, PLANS, type Plan } from "../../config/billing";
+import { platformSettingsService } from "../platformSettings.service";
 import { mercadoPagoClient } from "./mercadoPago.service";
 import { planFeatureConfigService } from "../planFeatureConfig.service";
 
@@ -62,6 +63,7 @@ export const billingService = {
         featureOverrides: true,
         posCheckoutModalEnabled: true,
         multiInvoicingEnabled: true,
+        billingPaymentMethod: true,
       },
     });
 
@@ -79,8 +81,93 @@ export const billingService = {
       ...((tenant.featureOverrides as Partial<typeof plan.features>) ?? {}),
     };
 
+    // Ultima transferencia informada (pendiente o recien revisada) para que
+    // /suscripcion y el cartel de pago (PaymentDueModal) sepan si ya avisó
+    // que pagó y no le sigan pidiendo que abone mientras se confirma.
+    const lastTransferReport = await prisma.tenantTransferReport.findFirst({
+      where: { tenantId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, status: true, amount: true, planId: true, reference: true, reviewNote: true, createdAt: true, reviewedAt: true },
+    });
+
     const { featureOverrides, ...tenantRest } = tenant;
-    return { ...tenantRest, plan };
+    // Un negocio que solo paga con Mercado Pago no ve los datos de la
+    // cuenta bancaria (ni el cartel le ofrece transferir).
+    const transferInfo =
+      tenant.billingPaymentMethod === "MERCADOPAGO"
+        ? { enabled: false, holder: null, cuit: null, bank: null, cbu: null, alias: null }
+        : await platformSettingsService.getPublicTransferInfo();
+
+    // Mismo criterio de bloqueo que aplica el backend a cada request (ver
+    // middleware/tenant.ts#getTenantBlock): el frontend lo usa para dejarlo
+    // entrar al sistema pero con todas las pantallas bloqueadas hasta que
+    // pague (AppLayout -> BillingBlockedScreen), en vez de sacarlo afuera.
+    const block = getTenantBlock(tenant);
+
+    return { ...tenantRest, plan, transferInfo, lastTransferReport, block };
+  },
+
+  /**
+   * Pago del servicio por transferencia: el tenant transfiere a la cuenta cargada
+   * en /platform-admin > Cobros y despues informa el nro de operacion desde
+   * /suscripcion. No toca subscriptionStatus/paidUntil -- queda PENDING
+   * hasta que el super-admin la confirma contra el extracto desde
+   * /platform-admin (ver platformTenant.service.ts#reviewTransferReport).
+   * Una sola pendiente por tenant, para no duplicar el mes si informa dos
+   * veces la misma transferencia.
+   */
+  async reportTransfer(tenantId: string, data: { planId?: string; reference?: string; payerName?: string; note?: string }) {
+    if (!(await platformSettingsService.getPublicTransferInfo()).enabled) {
+      throw Object.assign(new Error("El pago por transferencia no está habilitado"), { status: 400 });
+    }
+
+    const reference = data.reference?.trim();
+    if (!reference) {
+      throw Object.assign(new Error("Ingresá el número de operación o comprobante de la transferencia"), { status: 400 });
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new Error("Tenant no encontrado");
+
+    if (tenant.billingPaymentMethod === "MERCADOPAGO") {
+      throw Object.assign(new Error("Tu cuenta está configurada para pagar con Mercado Pago"), { status: 400 });
+    }
+
+    const planId = data.planId && PLANS.some((p) => p.id === data.planId) ? data.planId : tenant.planId;
+
+    const pending = await prisma.tenantTransferReport.findFirst({ where: { tenantId, status: "PENDING" } });
+    if (pending) {
+      throw Object.assign(new Error("Ya tenés una transferencia informada pendiente de confirmación"), { status: 409 });
+    }
+
+    // Mismo plan sin cambio: respeta el precio congelado de lanzamiento si
+    // lo tiene; cambio de plan: precio efectivo del plan nuevo (mismo
+    // criterio que createCheckout).
+    const plan = await planFeatureConfigService.getEffectivePlan(planId);
+    const amount = planId === tenant.planId && tenant.mpSubscriptionAmount ? tenant.mpSubscriptionAmount : getEffectivePrice(plan);
+
+    const [report] = await prisma.$transaction([
+      prisma.tenantTransferReport.create({
+        data: {
+          tenantId,
+          planId,
+          amount,
+          reference: reference.slice(0, 100),
+          payerName: data.payerName?.trim().slice(0, 120) || null,
+          note: data.note?.trim().slice(0, 500) || null,
+        },
+      }),
+      prisma.tenantPaymentLog.create({
+        data: {
+          tenantId,
+          previousStatus: tenant.subscriptionStatus,
+          newStatus: tenant.subscriptionStatus,
+          note: `Transferencia informada por el tenant (plan ${plan.name}, $${amount.toLocaleString("es-AR")}, op. ${reference.slice(0, 100)}). Pendiente de confirmación.`,
+        },
+      }),
+    ]);
+
+    return report;
   },
 
   /**
@@ -104,6 +191,10 @@ export const billingService = {
   async createCheckout(tenantId: string, payerEmail: string, planId?: string) {
     let tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new Error("Tenant no encontrado");
+
+    if (tenant.billingPaymentMethod === "TRANSFER") {
+      throw Object.assign(new Error("Tu cuenta está configurada para pagar por transferencia"), { status: 400 });
+    }
 
     const isPlanChange = !!planId && planId !== tenant.planId;
     const oldPreapprovalId = tenant.mpPreapprovalId;

@@ -1,7 +1,31 @@
 'use client';
 import { create } from 'zustand';
 import api from '@/lib/api';
-import type { PlanFeatureKey } from '@/types';
+import type { BillingPaymentMethod, PlanFeatureKey, TenantSubscriptionStatus, TransferReportStatus } from '@/types';
+
+// Lo minimo de /billing/status que necesita el cartel de "hay que abonar"
+// (components/PaymentDueModal.tsx) -- viene en el mismo request que los
+// features, asi que no suma una llamada mas por pantalla.
+export interface SubscriptionSnapshot {
+  subscriptionStatus: TenantSubscriptionStatus;
+  trialEndsAt: string | null;
+  paidUntil: string | null;
+  hasMpSubscription: boolean;
+  planName: string | null;
+  amount: number | null;
+  transferEnabled: boolean;
+  billingPaymentMethod: BillingPaymentMethod;
+  lastTransferStatus: TransferReportStatus | null;
+}
+
+// Bloqueo por falta de pago / prueba vencida / suspension (mismo codigo que
+// devuelve backend middleware/tenant.ts#getTenantBlock). Con esto seteado el
+// usuario sigue dentro del sistema pero AppLayout reemplaza cada pantalla
+// por BillingBlockedScreen hasta que pague.
+export interface BillingBlock {
+  code: string;
+  message: string;
+}
 
 interface PlanFeaturesState {
   // null = todavia no cargo o fallo la carga -- se trata como "todo
@@ -19,6 +43,9 @@ interface PlanFeaturesState {
   // flag por tenant puntual, prendido a mano desde /platform-admin. Ver
   // Tenant.multiInvoicingEnabled.
   multiInvoicingEnabled: boolean;
+  subscription: SubscriptionSnapshot | null;
+  block: BillingBlock | null;
+  setBlock: (block: BillingBlock | null) => void;
   load: () => Promise<void>;
   reset: () => void;
 }
@@ -29,6 +56,9 @@ export const usePlanFeaturesStore = create<PlanFeaturesState>((set) => ({
   loaded: false,
   posCheckoutModalEnabled: false,
   multiInvoicingEnabled: false,
+  subscription: null,
+  block: null,
+  setBlock: (block) => set({ block }),
   load: async () => {
     try {
       const { data } = await api.get('/billing/status');
@@ -38,13 +68,27 @@ export const usePlanFeaturesStore = create<PlanFeaturesState>((set) => ({
         planName: status?.plan?.name ?? null,
         posCheckoutModalEnabled: !!status?.posCheckoutModalEnabled,
         multiInvoicingEnabled: !!status?.multiInvoicingEnabled,
+        subscription: status?.subscriptionStatus
+          ? {
+              subscriptionStatus: status.subscriptionStatus,
+              trialEndsAt: status.trialEndsAt ?? null,
+              paidUntil: status.paidUntil ?? null,
+              hasMpSubscription: !!status.mpPreapprovalId,
+              planName: status.plan?.name ?? null,
+              amount: status.mpSubscriptionAmount ?? status.plan?.priceArs ?? null,
+              transferEnabled: !!status.transferInfo?.enabled,
+              billingPaymentMethod: status.billingPaymentMethod ?? 'ANY',
+              lastTransferStatus: status.lastTransferReport?.status ?? null,
+            }
+          : null,
+        block: status?.block ?? null,
         loaded: true,
       });
     } catch {
-      set({ features: null, posCheckoutModalEnabled: false, multiInvoicingEnabled: false, loaded: true });
+      set({ features: null, posCheckoutModalEnabled: false, multiInvoicingEnabled: false, subscription: null, block: null, loaded: true });
     }
   },
-  reset: () => set({ features: null, planName: null, posCheckoutModalEnabled: false, multiInvoicingEnabled: false, loaded: false }),
+  reset: () => set({ features: null, planName: null, posCheckoutModalEnabled: false, multiInvoicingEnabled: false, subscription: null, block: null, loaded: false }),
 }));
 
 /** true si no hay info cargada (fail-open) o el modulo no esta explicitamente apagado. */

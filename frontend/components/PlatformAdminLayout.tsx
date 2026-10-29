@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePlatformAuthStore } from '@/store/platformAuth';
-import { Building2, Cpu, LogOut, ShieldCheck, Store } from 'lucide-react';
+import { Building2, Cpu, Landmark, LogOut, ShieldCheck, Store } from 'lucide-react';
 
 interface PlatformAdminLayoutProps {
   children: React.ReactNode;
@@ -67,6 +67,9 @@ export default function PlatformAdminLayout({ children, title, subtitle, actions
           </Link>
           <Link href="/platform-admin/printbox-firmware" className="btn btn-ghost btn-sm" style={{ gap: 6 }}>
             <Cpu size={13} /> Firmware
+          </Link>
+          <Link href="/platform-admin/cobros" className="btn btn-ghost btn-sm" style={{ gap: 6 }}>
+            <Landmark size={13} /> Cobros
           </Link>
           <span style={{ fontSize: 12, color: 'var(--text3)' }}>{admin.name}</span>
           <button onClick={() => logout()} className="btn btn-ghost btn-sm" style={{ gap: 6 }}>
