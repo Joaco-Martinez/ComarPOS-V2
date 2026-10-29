@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import type { Tenant, TenantSubscriptionStatus, BillingPlan, PlanFeatureKey } from '@/types';
 import { fmtDate, normalizeArray, daysRemaining } from '@/lib/helpers';
 import { FEATURE_LABELS, FEATURE_GROUPS } from '@/lib/planFeatureGroups';
-import { Building2, Plus, X, Search, Eye, CreditCard, Gift, LogIn, ShoppingCart, ToggleLeft, ToggleRight, SlidersHorizontal, DollarSign, Save } from 'lucide-react';
+import { Building2, Plus, X, Search, Eye, CreditCard, Gift, LogIn, ShoppingCart, ToggleLeft, ToggleRight, SlidersHorizontal, DollarSign, Save, ChevronDown } from 'lucide-react';
 
 type MpPlanRow = { planId: string; mpPlanId: string; status: string };
 
@@ -29,6 +29,8 @@ const trialLabel = (t: Tenant) => {
 
 const emptyForm = { name: '', slug: '', adminEmail: '', adminPassword: '', planId: '' };
 
+const FEATURES_OPEN_KEY = 'comarpos-platform-plan-features-open';
+
 export default function PlatformAdminTenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,18 @@ export default function PlatformAdminTenantsPage() {
   const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
   const [priceForm, setPriceForm] = useState<Record<string, { priceArs: string; regularPriceArs: string }>>({});
   const [savingPrice, setSavingPrice] = useState<string | null>(null);
+  // "Módulos por plan" es una tabla larga que casi nunca se toca -- arranca
+  // plegada y se recuerda si la dejaste abierta.
+  const [featuresOpen, setFeaturesOpen] = useState(false);
+  useEffect(() => {
+    try { setFeaturesOpen(localStorage.getItem(FEATURES_OPEN_KEY) === 'true'); } catch { /* sin storage: queda plegada */ }
+  }, []);
+  const toggleFeaturesOpen = () => {
+    setFeaturesOpen((open) => {
+      try { localStorage.setItem(FEATURES_OPEN_KEY, String(!open)); } catch { /* no persiste */ }
+      return !open;
+    });
+  };
 
   const load = async () => {
     setLoading(true);
@@ -269,11 +283,17 @@ export default function PlatformAdminTenantsPage() {
 
       {billingPlans.length > 0 && (
         <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={toggleFeaturesOpen}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'inherit', marginBottom: featuresOpen ? 12 : 0 }}
+          >
             <SlidersHorizontal size={14} style={{ color: 'var(--text3)' }} />
             <span style={{ fontWeight: 700, fontSize: 13 }}>Módulos por plan</span>
             <span style={{ fontSize: 11, color: 'var(--text3)' }}>— se aplica al instante a todos los tenants de ese plan</span>
-          </div>
+            <ChevronDown size={15} style={{ marginLeft: 'auto', color: 'var(--text3)', transform: featuresOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+          </button>
+          {featuresOpen && (
           <div className="table-wrap">
             <table>
               <thead>
@@ -323,6 +343,7 @@ export default function PlatformAdminTenantsPage() {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 
