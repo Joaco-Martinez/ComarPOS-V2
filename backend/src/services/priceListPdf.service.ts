@@ -5,7 +5,8 @@
  * foto o la del padre), agrupadas por categoria. El precio sale de la lista
  * elegida; si el producto no tiene precio propio en esa lista se usa el de
  * Minorista (mismo criterio que el POS). Opcionalmente muestra el stock
- * (suma de todas las ubicaciones) de cada producto.
+ * (suma de todas las ubicaciones) de cada producto. Al final va el "precio
+ * por todo": la suma de una unidad de cada producto listado.
  */
 import PDFDocument from "pdfkit";
 import prisma from "../prisma";
@@ -366,6 +367,30 @@ async function exportPdf(params: {
       y += rowH;
       rowIndex += 1;
     }
+  }
+
+  // Precio por todo: la suma de una unidad (o un kg) de cada producto de la
+  // lista, al final, para cotizar la lista completa de una.
+  if (rows.length > 0) {
+    if (col !== 0) y += rowH;
+    const totalH = 34;
+    y += 8;
+    if (y + totalH > pageBottom()) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+    const total = rows.reduce((acc, r) => acc + r.price, 0);
+    const hasKg = rows.some((r) => r.isKg);
+    doc.rect(left, y, width, totalH).fill("#1E3A5F");
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#FFFFFF")
+      .text(`Precio por todo (${rows.length} productos)`, left + 10, y + 7, { width: width - 200, lineBreak: false, ellipsis: true });
+    doc.font("Helvetica").fontSize(7.5).fillColor("#D5DEEA")
+      .text(hasKg ? "1 unidad de cada producto (1 kg en los que se venden por kg)" : "1 unidad de cada producto", left + 10, y + 21, {
+        width: width - 200, lineBreak: false, ellipsis: true,
+      });
+    doc.font("Helvetica-Bold").fontSize(15).fillColor("#FFFFFF")
+      .text(formatMoneyAR(total), left + width - 190, y + 10, { width: 180, align: "right", lineBreak: false });
+    y += totalH;
   }
 
   // Pie en cada hoja: numero de pagina + marca.
