@@ -6,7 +6,7 @@
  * elegida; si el producto no tiene precio propio en esa lista se usa el de
  * Minorista (mismo criterio que el POS). Opcionalmente muestra el stock
  * (suma de todas las ubicaciones) de cada producto. Al final va el "precio
- * por todo": la suma de una unidad de cada producto listado.
+ * por todo": lo que vale todo el stock listado (precio x stock).
  */
 import PDFDocument from "pdfkit";
 import prisma from "../prisma";
@@ -369,8 +369,9 @@ async function exportPdf(params: {
     }
   }
 
-  // Precio por todo: la suma de una unidad (o un kg) de cada producto de la
-  // lista, al final, para cotizar la lista completa de una.
+  // Precio por todo: lo que vale todo el stock de la lista (precio x stock
+  // de cada producto). Los servicios y los de stock sin limite no suman
+  // porque no tienen una cantidad.
   if (rows.length > 0) {
     if (col !== 0) y += rowH;
     const totalH = 34;
@@ -379,15 +380,23 @@ async function exportPdf(params: {
       doc.addPage();
       y = doc.page.margins.top;
     }
-    const total = rows.reduce((acc, r) => acc + r.price, 0);
-    const hasKg = rows.some((r) => r.isKg);
+    let total = 0;
+    let units = 0;
+    let kg = 0;
+    for (const r of rows) {
+      if (typeof r.stock !== "number" || r.stock <= 0) continue;
+      total += r.price * r.stock;
+      if (r.isKg) kg += r.stock;
+      else units += r.stock;
+    }
+    const fmtQty = (n: number, decimals: number) => new Intl.NumberFormat("es-AR", { maximumFractionDigits: decimals }).format(n);
+    const detail = [units > 0 ? `${fmtQty(units, 0)} unidades` : null, kg > 0 ? `${fmtQty(kg, 3)} kg` : null]
+      .filter(Boolean).join(" + ");
     doc.rect(left, y, width, totalH).fill("#1E3A5F");
     doc.font("Helvetica-Bold").fontSize(12).fillColor("#FFFFFF")
-      .text(`Precio por todo (${rows.length} productos)`, left + 10, y + 7, { width: width - 200, lineBreak: false, ellipsis: true });
+      .text("Precio por todo el stock", left + 10, y + 7, { width: width - 200, lineBreak: false, ellipsis: true });
     doc.font("Helvetica").fontSize(7.5).fillColor("#D5DEEA")
-      .text(hasKg ? "1 unidad de cada producto (1 kg en los que se venden por kg)" : "1 unidad de cada producto", left + 10, y + 21, {
-        width: width - 200, lineBreak: false, ellipsis: true,
-      });
+      .text(detail ? `${detail} en stock` : "Sin stock", left + 10, y + 21, { width: width - 200, lineBreak: false, ellipsis: true });
     doc.font("Helvetica-Bold").fontSize(15).fillColor("#FFFFFF")
       .text(formatMoneyAR(total), left + width - 190, y + 10, { width: 180, align: "right", lineBreak: false });
     y += totalH;
