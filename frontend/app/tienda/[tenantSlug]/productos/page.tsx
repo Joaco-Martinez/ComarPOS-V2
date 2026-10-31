@@ -28,6 +28,8 @@ type StoreProduct = {
   price: number;
   stockLabel: string;
   canSell: boolean;
+  // Stock que se puede poner en el carrito (null = sin tope).
+  maxQuantity?: number | null;
   // Variantes: el catálogo trae el padre con sus variantes adentro.
   hasVariants?: boolean;
   variantOptions?: { name: string; values: string[] }[];
@@ -40,7 +42,7 @@ const money = (n: number) =>
 
 export default function TiendaProductosPage() {
   const { tenantSlug, linkPriceListId, setPriceList } = useStore();
-  const { addItem, syncPriceList } = useCartContext();
+  const { cart, addItem, syncPriceList } = useCartContext();
   const searchParams = useSearchParams();
   const categorySlug = searchParams.get('category') ?? '';
 
@@ -66,14 +68,24 @@ export default function TiendaProductosPage() {
       .catch(() => setCategories([]));
   }, [tenantSlug]);
 
+  const unitLabel = (saleUnit: string, n: number) => (saleUnit === 'KG' ? `${n} kg` : `${n} ${n === 1 ? 'unidad' : 'unidades'}`);
+
+  const flashAdded = (id: string) => {
+    setJustAdded(id);
+    setTimeout(() => setJustAdded((cur) => (cur === id ? null : cur)), 1200);
+  };
+
   // El carrito guarda el productId de la variante y su nombre completo
-  // ("Remera - M / Rojo").
+  // ("Remera - M / Rojo"). No deja pasarse del stock disponible.
   const handleAddVariant = (parent: StoreProduct, v: StoreVariant) => {
-    addItem({ productId: v.id, name: v.name, imageUrl: v.imageUrl ?? parent.imageUrl, price: v.price, saleUnit: parent.saleUnit }, 1);
+    const res = addItem({ productId: v.id, name: v.name, imageUrl: v.imageUrl ?? parent.imageUrl, price: v.price, saleUnit: parent.saleUnit, maxQty: v.maxQuantity }, 1);
+    if (!res.ok) {
+      toast.error(`Ya tenés en el carrito todo el stock de ${v.name} (${unitLabel(parent.saleUnit, res.max)})`);
+      return;
+    }
     setChoosing(null);
-    setJustAdded(parent.id);
+    flashAdded(parent.id);
     toast.success(`${v.name} agregado al carrito`);
-    setTimeout(() => setJustAdded((cur) => (cur === parent.id ? null : cur)), 1200);
   };
 
   const handleAdd = (p: StoreProduct) => {
@@ -84,10 +96,21 @@ export default function TiendaProductosPage() {
       setChoosing(p);
       return;
     }
-    addItem({ productId: p.id, name: p.name, imageUrl: p.imageUrl, price: p.price, saleUnit: p.saleUnit }, p.saleUnit === 'KG' ? 1 : 1);
-    setJustAdded(p.id);
-    toast.success(`${p.name} agregado al carrito`);
-    setTimeout(() => setJustAdded((cur) => (cur === p.id ? null : cur)), 1200);
+    const res = addItem({ productId: p.id, name: p.name, imageUrl: p.imageUrl, price: p.price, saleUnit: p.saleUnit, maxQty: p.maxQuantity }, 1);
+    if (!res.ok) {
+      toast.error(`Solo hay ${unitLabel(p.saleUnit, res.max)} de ${p.name} y ya están en tu carrito`);
+      return;
+    }
+    flashAdded(p.id);
+    toast.success(res.capped ? `Agregamos lo que queda de ${p.name}` : `${p.name} agregado al carrito`);
+  };
+
+  // Cantidad que ya hay en el carrito de un producto simple, para mostrar
+  // el boton como "Máximo" cuando ya no queda stock para sumar.
+  const inCart = (productId: string) => {
+    const line = cart.find((l) => l.productId === productId);
+    if (!line) return 0;
+    return line.saleUnit === 'KG' ? line.quantityKg : line.quantity;
   };
 
   const handleScanned = (code: string) => {
@@ -205,6 +228,7 @@ export default function TiendaProductosPage() {
           <div className="t-grid">
             {products.map((p) => {
               const added = justAdded === p.id;
+              const atMax = !p.hasVariants && p.maxQuantity != null && p.canSell && inCart(p.id) >= p.maxQuantity;
               return (
                 <article key={p.id} className={`t-card${p.canSell ? '' : ' is-soldout'}`}>
                   <div className="t-card-media">
@@ -232,10 +256,12 @@ export default function TiendaProductosPage() {
                     <div className="t-card-btn-wrap">
                       <button
                         onClick={() => handleAdd(p)}
-                        disabled={!p.canSell}
+                        disabled={!p.canSell || (atMax && !added)}
                         className={`t-card-btn${added ? ' is-added' : ''}`}
                       >
-                        {!p.canSell ? 'Sin stock' : (
+                        {!p.canSell ? 'Sin stock' : atMax && !added ? (
+                          <><Check size={15} /> En tu carrito</>
+                        ) : (
                           <>
                             {added ? <Check size={15} /> : <Plus size={15} />}
                             {added ? 'Agregado' : p.hasVariants ? 'Opciones' : 'Agregar'}

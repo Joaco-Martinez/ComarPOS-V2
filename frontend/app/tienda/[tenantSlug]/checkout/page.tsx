@@ -11,6 +11,9 @@ import { useCartContext } from '../CartContext';
 import { useAccount } from '../AccountContext';
 import { Package, Banknote, Landmark, Wallet, MessageCircle, UserCircle2, ArrowLeft } from 'lucide-react';
 
+// Datos del invitado, recordados en este navegador para la proxima compra.
+const guestKey = (tenantSlug: string) => `comarpos-tienda-guest-${tenantSlug}`;
+
 const money = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0);
 
@@ -28,14 +31,34 @@ export default function TiendaCheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<'EFECTIVO' | 'TRANSFERENCIA' | 'MERCADOPAGO' | 'WHATSAPP'>('EFECTIVO');
   const [submitting, setSubmitting] = useState(false);
 
-  // Cuenta obligatoria: precarga nombre/email de la cuenta apenas se resuelve
-  // (no pisa lo que el comprador ya haya tipeado a mano).
+  // Cuenta opcional. Con cuenta: precarga nombre/email apenas se resuelve.
+  // Sin cuenta: precarga los datos que el invitado uso la vez anterior en
+  // este navegador. En ningun caso pisa lo que ya se haya tipeado.
   useEffect(() => {
-    if (account && !customerName) setCustomerName(account.name);
-    if (account && !customerEmail) setCustomerEmail(account.email);
-  }, [account]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (accountLoading) return;
+    if (account) {
+      if (!customerName) setCustomerName(account.name);
+      if (!customerEmail) setCustomerEmail(account.email);
+      return;
+    }
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(guestKey(tenantSlug)) || 'null');
+      if (saved && typeof saved === 'object') {
+        if (!customerName && typeof saved.name === 'string') setCustomerName(saved.name);
+        if (!customerPhone && typeof saved.phone === 'string') setCustomerPhone(saved.phone);
+        if (!customerEmail && typeof saved.email === 'string') setCustomerEmail(saved.email);
+      }
+    } catch { /* sin storage */ }
+  }, [account, accountLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const canSubmit = cart.length > 0 && !!account && customerName.trim().length > 0 && !submitting;
+  const isGuest = !accountLoading && !account;
+  const phoneOk = customerPhone.replace(/\D/g, '').length >= 6;
+  const missing = !customerName.trim()
+    ? 'Completá tu nombre'
+    : isGuest && !phoneOk
+      ? 'Completá tu teléfono'
+      : null;
+  const canSubmit = cart.length > 0 && !accountLoading && !missing && !submitting;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -56,6 +79,13 @@ export default function TiendaCheckoutPage() {
       };
 
       const { data } = await api.post(`/tienda/${tenantSlug}/orders`, body);
+      if (isGuest) {
+        try {
+          window.localStorage.setItem(guestKey(tenantSlug), JSON.stringify({
+            name: customerName.trim(), phone: customerPhone.trim(), email: customerEmail.trim(),
+          }));
+        } catch { /* sin storage */ }
+      }
       clear();
       if (paymentMethod === 'MERCADOPAGO' && data.content.mpInitPoint) {
         window.location.href = data.content.mpInitPoint;
@@ -67,10 +97,6 @@ export default function TiendaCheckoutPage() {
       }
       router.push(`/tienda/${tenantSlug}/pedido/${data.content.publicToken}`);
     } catch (err: any) {
-      if (err?.response?.status === 401) {
-        router.push(`/tienda/${tenantSlug}/cuenta?next=/tienda/${tenantSlug}/checkout`);
-        return;
-      }
       toast.error(err?.response?.data?.message ?? 'No se pudo confirmar el pedido');
     } finally {
       setSubmitting(false);
@@ -89,27 +115,6 @@ export default function TiendaCheckoutPage() {
     );
   }
 
-  if (!accountLoading && !account) {
-    return (
-      <div className="t-empty" style={{ gap: 12 }}>
-        <UserCircle2 size={44} />
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: '#172033', marginBottom: 6 }}>Necesitás una cuenta para comprar</div>
-          <p style={{ fontSize: 14, color: '#667085', maxWidth: 320, lineHeight: 1.5 }}>
-            Creá una cuenta o ingresá con la que ya tenés en {store.storeName} para completar tu pedido.
-          </p>
-        </div>
-        <Link
-          href={`/tienda/${tenantSlug}/cuenta?next=/tienda/${tenantSlug}/checkout`}
-          className="t-btn"
-          style={{ width: 'auto', paddingInline: 24 }}
-        >
-          Ingresar o crear cuenta
-        </Link>
-      </div>
-    );
-  }
-
   const itemsCount = cart.reduce((acc, l) => acc + (l.saleUnit === 'KG' ? 1 : l.quantity), 0);
 
   return (
@@ -121,6 +126,18 @@ export default function TiendaCheckoutPage() {
         </Link>
       </div>
 
+      {isGuest && (
+        <div className="t-guest-note">
+          <UserCircle2 size={18} style={{ flexShrink: 0, color: 'var(--store-accent)' }} />
+          <span>
+            Podés comprar sin cuenta: solo dejanos tu nombre y teléfono.{' '}
+            <Link href={`/tienda/${tenantSlug}/cuenta?next=/tienda/${tenantSlug}/checkout`} className="t-link" style={{ display: 'inline' }}>
+              ¿Tenés cuenta? Ingresá
+            </Link>
+          </span>
+        </div>
+      )}
+
       <section className="t-section">
         <h3 className="t-h3">Tus datos</h3>
         <div className="t-stack">
@@ -130,6 +147,7 @@ export default function TiendaCheckoutPage() {
             onChange={(e) => setCustomerName(e.target.value)}
             placeholder="Nombre y apellido *"
             autoComplete="name"
+            aria-required="true"
           />
           <input
             className="t-input"
@@ -137,8 +155,9 @@ export default function TiendaCheckoutPage() {
             inputMode="tel"
             value={customerPhone}
             onChange={(e) => setCustomerPhone(e.target.value)}
-            placeholder="Teléfono"
+            placeholder={isGuest ? 'Teléfono / WhatsApp *' : 'Teléfono'}
             autoComplete="tel"
+            aria-required={isGuest}
           />
           <input
             className="t-input"
@@ -226,7 +245,7 @@ export default function TiendaCheckoutPage() {
           <span className="value">{money(total)}</span>
         </div>
         <button onClick={submit} disabled={!canSubmit} className="t-btn">
-          {submitting ? 'Confirmando...' : 'Confirmar pedido'}
+          {submitting ? 'Confirmando...' : missing ?? 'Confirmar pedido'}
         </button>
       </div>
     </div>

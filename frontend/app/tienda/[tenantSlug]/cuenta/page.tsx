@@ -97,7 +97,7 @@ export default function TiendaCuentaPage() {
         {tab === 'login' ? 'Ingresá a tu cuenta' : `Creá tu cuenta en ${store.storeName}`}
       </h2>
       <p className="t-muted" style={{ marginBottom: 20, textAlign: 'center' }}>
-        Necesitás una cuenta para completar una compra en esta tienda.
+        Con tu cuenta tus datos quedan guardados para la próxima compra. También podés comprar sin cuenta.
       </p>
 
       <div className="t-tabs" role="tablist">

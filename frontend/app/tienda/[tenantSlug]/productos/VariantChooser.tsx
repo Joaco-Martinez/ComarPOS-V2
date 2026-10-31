@@ -14,6 +14,7 @@ export type StoreVariant = {
   price: number;
   stockLabel: string;
   canSell: boolean;
+  maxQuantity?: number | null;
 };
 
 type Props = {

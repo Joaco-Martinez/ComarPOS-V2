@@ -131,7 +131,7 @@ export function getProductStock(product: any) {
     return {
       availableQuantity: available,
       availableKg: 0,
-      stockLabel: available > 0 ? `${available} disponibles` : "Sin stock",
+      stockLabel: available > 0 ? `${available} disponible${available === 1 ? "" : "s"}` : "Sin stock",
       canSell: available > 0,
     };
   }
@@ -152,7 +152,7 @@ export function getProductStock(product: any) {
   return {
     availableQuantity,
     availableKg: 0,
-    stockLabel: availableQuantity > 0 ? `${availableQuantity} disponibles` : "Sin stock",
+    stockLabel: availableQuantity > 0 ? `${availableQuantity} disponible${availableQuantity === 1 ? "" : "s"}` : "Sin stock",
     canSell: availableQuantity > 0,
   };
 }
@@ -207,6 +207,15 @@ export function resolvePrice(product: any, category: CategoryClient, override?: 
 // Variantes: el catalogo muestra padres y productos simples; el padre trae
 // sus variantes activas, cada una con su precio, stock y foto (o la del
 // padre), y el resumen ("desde $X", stock total, canSell si alguna tiene).
+// Tope de cantidad que la tienda deja poner en el carrito: el stock
+// disponible (unidades o kg segun como se vende). null = sin tope (servicio
+// o "stock ilimitado"), igual que la validacion del checkout.
+function maxQuantity(product: any, stock: { availableQuantity: number; availableKg: number }) {
+  if (product.unlimitedStock || product.isService) return null;
+  const max = product.saleUnit === SaleUnit.KG ? stock.availableKg : stock.availableQuantity;
+  return round2(Math.max(0, Number(max) || 0));
+}
+
 function listOverride(product: any): PriceListOverride {
   return Array.isArray(product.priceListItems) ? product.priceListItems[0] ?? null : null;
 }
@@ -226,6 +235,7 @@ function mapVariant(variant: any, parent: any, customer: CustomerContext) {
     publicPrice: pricing.publicPrice,
     availableQuantity: stock.availableQuantity,
     availableKg: stock.availableKg,
+    maxQuantity: maxQuantity(variant, stock),
     stockLabel: stock.stockLabel,
     // Mismo criterio que el checkout (order.service): sin limite o servicio
     // se puede pedir aunque no haya stock cargado.
@@ -290,8 +300,10 @@ function mapSimpleProduct(product: any, customer: CustomerContext) {
     currency: pricing.currency,
     availableQuantity: stock.availableQuantity,
     availableKg: stock.availableKg,
+    maxQuantity: maxQuantity(product, stock),
     stockLabel: stock.stockLabel,
-    canSell: stock.canSell,
+    // Mismo criterio que el checkout: sin limite o servicio se vende igual.
+    canSell: stock.canSell || Boolean(product.unlimitedStock) || Boolean(product.isService),
     components:
       product.type === ProductType.COMPUESTO
         ? product.components.map((component: any) => ({

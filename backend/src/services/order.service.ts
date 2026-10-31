@@ -6,6 +6,8 @@
  * rejectTransfer/convertToSale) corre autenticado, tenant del JWT como
  * siempre.
  *
+ * Se puede comprar con cuenta o como invitado (nombre + telefono).
+ *
  * Sin reserva de stock (decision v1): se valida disponibilidad acá Y de
  * nuevo en convertToSale() - riesgo de sobreventa aceptado y documentado en
  * el plan, no una omision.
@@ -174,17 +176,18 @@ export const orderService = {
     const tenantId = currentTenantId();
     if (!tenantId) throw new AppError("TENANT_NOT_RESOLVED", "No se pudo resolver la tienda", 400);
 
-    // Cuenta obligatoria para comprar (doc "tienda online - checkout por
-    // WhatsApp"): antes se aceptaba invitado + cuenta opcional, ahora toda
-    // venta necesita un userId real (CLIENTE logueado de ESTE tenant - ver
-    // optionalStorefrontAuth, que ya filtra tokens de otro tenant). El
-    // controller resuelve input.userId desde el JWT, nunca desde el body.
-    if (!input.userId) {
-      throw new AppError("LOGIN_REQUIRED", "Necesitás una cuenta para completar la compra", 401);
-    }
-
+    // Compra con o sin cuenta: si el comprador esta logueado como CLIENTE de
+    // este tenant (optionalStorefrontAuth, resuelto en el controller desde el
+    // JWT, nunca desde el body) el pedido queda vinculado a su ficha. Si
+    // compra como invitado, nombre y telefono son obligatorios: es la unica
+    // forma que tiene el negocio de contactarlo.
     if (!input.customerName?.trim()) {
       throw new AppError("CUSTOMER_NAME_REQUIRED", "Falta el nombre del comprador", 400);
+    }
+
+    const phoneDigits = String(input.customerPhone ?? "").replace(/\D/g, "");
+    if (!input.userId && phoneDigits.length < 6) {
+      throw new AppError("CUSTOMER_PHONE_REQUIRED", "Ingresá un teléfono de contacto válido", 400);
     }
 
     if (input.paymentMethod === OrderPaymentMethod.WHATSAPP) {

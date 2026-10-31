@@ -38,6 +38,8 @@ export default function TiendaCarritoPage() {
       <div className="t-lines">
         {cart.map((line) => {
           const qty = line.saleUnit === 'KG' ? line.quantityKg : line.quantity;
+          const max = line.maxQty ?? null;
+          const atMax = max !== null && qty >= max;
           return (
             <div key={line.productId} className="t-line">
               <div className="t-line-img">
@@ -54,6 +56,7 @@ export default function TiendaCarritoPage() {
                   <label className="t-qty-kg">
                     <input
                       type="number" min="0.1" step="0.1" inputMode="decimal"
+                      max={max ?? undefined}
                       value={line.quantityKg}
                       onChange={(e) => updateQty(line.productId, Number(e.target.value))}
                       aria-label="Cantidad en kg"
@@ -66,9 +69,18 @@ export default function TiendaCarritoPage() {
                       <Minus size={15} />
                     </button>
                     <span>{line.quantity}</span>
-                    <button onClick={() => updateQty(line.productId, line.quantity + 1)} aria-label="Sumar uno">
+                    <button
+                      onClick={() => updateQty(line.productId, line.quantity + 1)}
+                      disabled={atMax}
+                      aria-label="Sumar uno"
+                    >
                       <Plus size={15} />
                     </button>
+                  </div>
+                )}
+                {atMax && (
+                  <div className="t-line-max">
+                    {line.saleUnit === 'KG' ? `Máximo disponible: ${max} kg` : `Máximo disponible: ${max}`}
                   </div>
                 )}
               </div>

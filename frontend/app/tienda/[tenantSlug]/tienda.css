@@ -309,6 +309,8 @@ body:has(.t-root) {
   display: flex; align-items: center; justify-content: center; cursor: pointer;
 }
 .t-qty button:active { background: #F2F4F7; }
+.t-qty button:disabled { color: #D0D5DD; cursor: not-allowed; background: #fff; }
+.t-line-max { margin-top: 6px; font-size: 12px; font-weight: 600; color: #B54708; }
 .t-qty span { min-width: 30px; text-align: center; font-size: 14px; font-weight: 700; }
 .t-root .t-qty-kg { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; color: #667085; }
 .t-root.t-root .t-qty-kg input { width: 84px; height: 36px; padding: 0 8px; text-align: center; border-radius: 10px; border: 1px solid #D0D5DD; }
@@ -362,6 +364,13 @@ body:has(.t-root) {
   color: #667085; font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .t-tab.is-active { background: #fff; color: #172033; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.1); }
+
+.t-guest-note {
+  display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; padding: 12px 14px;
+  border-radius: 12px; background: color-mix(in srgb, var(--store-accent) 8%, #fff);
+  border: 1px solid color-mix(in srgb, var(--store-accent) 25%, #fff);
+  font-size: 13px; color: #344054; line-height: 1.5;
+}
 
 /* CTA que queda pegado abajo en mobile (carrito / checkout). */
 .t-sticky-cta {

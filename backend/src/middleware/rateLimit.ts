@@ -45,6 +45,21 @@ export const publicFormRateLimiter = rateLimit({
   },
 });
 
+// Pedidos de la tienda online: se puede comprar sin cuenta, asi que sin
+// tope cualquiera podia llenarle el panel de pedidos falsos a un negocio.
+// 20 pedidos cada 15 minutos por IP alcanza de sobra para un comprador real.
+export const storefrontOrderRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    code: "TOO_MANY_ORDERS",
+    message: "Hiciste muchos pedidos seguidos. Probá de nuevo en unos minutos.",
+  },
+});
+
 // Emparejamiento de PrintBox/desktop-agent: el pairingCode es de 6 digitos
 // y vive 15 minutos, sin tope se podia adivinar por fuerza bruta y quedarse
 // con los tickets de impresion de un negocio. Un emparejamiento real es un
