@@ -46,11 +46,17 @@ export const priceListController = {
 
   async pdf(req: Request, res: Response, next: NextFunction) {
     try {
+      // Al costo muestra los precios de compra: solo para admin.
+      const atCost = req.query.atCost === "true";
+      if (atCost && (req as any).user?.role !== "ADMIN") {
+        return res.status(403).json({ message: "No autorizado" });
+      }
       const result = await priceListPdfService.exportPdf({
         priceListId: getParamAsString(req.params.id, "id"),
         categoryId: typeof req.query.categoryId === "string" && req.query.categoryId ? req.query.categoryId : undefined,
         withImages: req.query.withImages !== "false",
         withStock: req.query.withStock !== "false",
+        atCost,
       });
 
       if (!result) {

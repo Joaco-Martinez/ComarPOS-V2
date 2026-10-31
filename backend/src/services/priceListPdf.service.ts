@@ -7,6 +7,8 @@
  * Minorista (mismo criterio que el POS). Opcionalmente muestra el stock
  * (suma de todas las ubicaciones) de cada producto. Al final va el "precio
  * por todo": lo que vale todo el stock listado (precio x stock).
+ * Con atCost sale al costo (precio de compra) en vez del precio de la lista,
+ * para valuar la mercaderia; solo lo pueden pedir los admin.
  */
 import PDFDocument from "pdfkit";
 import prisma from "../prisma";
@@ -105,7 +107,7 @@ async function fetchImages(urls: string[]): Promise<Map<string, Buffer>> {
   return result;
 }
 
-async function getRows(priceListId: string, categoryId?: string): Promise<{ listName: string; rows: PdfRow[] } | null> {
+async function getRows(priceListId: string, categoryId?: string, atCost = false): Promise<{ listName: string; rows: PdfRow[] } | null> {
   const list = await prisma.priceList.findFirst({
     where: { id: priceListId, ...tenantScope() },
     select: { name: true, isDefault: true },
@@ -122,14 +124,14 @@ async function getRows(priceListId: string, categoryId?: string): Promise<{ list
     where,
     orderBy: { name: "asc" },
     select: {
-      id: true, name: true, sku: true, price: true, pricePerKg: true, saleUnit: true, imageUrl: true,
+      id: true, name: true, sku: true, price: true, pricePerKg: true, purchasePrice: true, saleUnit: true, imageUrl: true,
       isService: true, unlimitedStock: true, stock: { select: { quantity: true, quantityKg: true } },
       category: { select: { name: true } },
       parent: { select: { imageUrl: true, category: { select: { name: true } } } },
     },
   });
 
-  const overrides = list.isDefault
+  const overrides = list.isDefault || atCost
     ? new Map<string, { price: number; pricePerKg: number | null }>()
     : new Map(
         (
@@ -144,7 +146,8 @@ async function getRows(priceListId: string, categoryId?: string): Promise<{ list
     const isKg = p.saleUnit === "KG";
     const item = overrides.get(p.id);
     const basePrice = isKg ? p.pricePerKg ?? p.price : p.price;
-    const price = item ? (isKg ? item.pricePerKg ?? item.price : item.price) : basePrice;
+    // El costo de los productos por kg ya es por kg.
+    const price = atCost ? p.purchasePrice : item ? (isKg ? item.pricePerKg ?? item.price : item.price) : basePrice;
     return {
       name: p.name,
       sku: p.sku,
@@ -177,10 +180,13 @@ async function exportPdf(params: {
   categoryId?: string;
   withImages?: boolean;
   withStock?: boolean;
+  atCost?: boolean;
 }): Promise<{ buffer: Buffer; listName: string } | null> {
-  const data = await getRows(params.priceListId, params.categoryId);
+  const atCost = params.atCost === true;
+  const data = await getRows(params.priceListId, params.categoryId, atCost);
   if (!data) return null;
-  const { listName, rows } = data;
+  const rows = data.rows;
+  const listName = atCost ? "Al costo" : data.listName;
   const withImages = params.withImages !== false;
   const withStock = params.withStock !== false;
 
@@ -225,9 +231,9 @@ async function exportPdf(params: {
   const contact = [tenant?.ticketAddress, tenant?.ticketPhone].filter(Boolean).join(" · ");
   if (contact) doc.text(contact, textX, doc.y + 2, { width: width - (textX - left) });
   doc.font("Helvetica-Bold").fontSize(12).fillColor("#1E3A5F")
-    .text(`Lista de precios: ${listName}`, textX, doc.y + 6, { width: width - (textX - left) });
+    .text(atCost ? "Lista de precios al costo" : `Lista de precios: ${listName}`, textX, doc.y + 6, { width: width - (textX - left) });
   doc.font("Helvetica").fontSize(9).fillColor("#666666")
-    .text(`Precios vigentes al ${formatDateAR(new Date())} · ${rows.length} productos`, textX, doc.y + 2, {
+    .text(`${atCost ? "Costos" : "Precios"} vigentes al ${formatDateAR(new Date())} · ${rows.length} productos`, textX, doc.y + 2, {
       width: width - (textX - left),
     });
   y = Math.max(doc.y, logo ? doc.page.margins.top + 60 : 0) + 12;
@@ -394,7 +400,7 @@ async function exportPdf(params: {
       .filter(Boolean).join(" + ");
     doc.rect(left, y, width, totalH).fill("#1E3A5F");
     doc.font("Helvetica-Bold").fontSize(12).fillColor("#FFFFFF")
-      .text("Precio por todo el stock", left + 10, y + 7, { width: width - 200, lineBreak: false, ellipsis: true });
+      .text(atCost ? "Costo de todo el stock" : "Precio por todo el stock", left + 10, y + 7, { width: width - 200, lineBreak: false, ellipsis: true });
     doc.font("Helvetica").fontSize(7.5).fillColor("#D5DEEA")
       .text(detail ? `${detail} en stock` : "Sin stock", left + 10, y + 21, { width: width - 200, lineBreak: false, ellipsis: true });
     doc.font("Helvetica-Bold").fontSize(15).fillColor("#FFFFFF")

@@ -9,8 +9,11 @@ import type { PriceList, Product, ProductCategory } from '@/types';
 import { fmtMoney, normalizeArray, num } from '@/lib/helpers';
 import { Plus, Edit2, Trash2, X, Search, Lock, ChevronDown, ChevronRight, FileDown } from 'lucide-react';
 import { matchesSearch, sortedVariants } from '@/lib/variants';
+import { useAuthStore } from '@/store/auth';
 
 export default function ListasDePreciosPage() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
   const [lists, setLists] = useState<PriceList[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +40,7 @@ export default function ListasDePreciosPage() {
   const [pdfCategoryId, setPdfCategoryId] = useState('');
   const [pdfWithImages, setPdfWithImages] = useState(true);
   const [pdfWithStock, setPdfWithStock] = useState(true);
+  const [pdfAtCost, setPdfAtCost] = useState(false);
   const [pdfDownloading, setPdfDownloading] = useState(false);
 
   const load = async () => {
@@ -92,6 +96,7 @@ export default function ListasDePreciosPage() {
     setPdfCategoryId('');
     setPdfWithImages(true);
     setPdfWithStock(true);
+    setPdfAtCost(false);
   };
 
   const downloadPdf = async () => {
@@ -99,13 +104,13 @@ export default function ListasDePreciosPage() {
     setPdfDownloading(true);
     try {
       const res = await api.get(`/price-lists/${pdfList.id}/pdf`, {
-        params: { categoryId: pdfCategoryId || undefined, withImages: pdfWithImages ? undefined : false, withStock: pdfWithStock ? undefined : false },
+        params: { categoryId: pdfCategoryId || undefined, withImages: pdfWithImages ? undefined : false, withStock: pdfWithStock ? undefined : false, atCost: pdfAtCost || undefined },
         responseType: 'blob',
       });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `lista-de-precios-${pdfList.name}.pdf`;
+      a.download = pdfAtCost ? 'lista-al-costo.pdf' : `lista-de-precios-${pdfList.name}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       setPdfList(null);
@@ -447,9 +452,16 @@ export default function ListasDePreciosPage() {
                 <input type="checkbox" checked={pdfWithStock} onChange={(e) => setPdfWithStock(e.target.checked)} />
                 Incluir stock (cantidad disponible)
               </label>
+              {isAdmin && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={pdfAtCost} onChange={(e) => setPdfAtCost(e.target.checked)} />
+                  Al costo (precio de compra en vez del de la lista)
+                </label>
+              )}
               <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                 Incluye todos los productos activos agrupados por categoría.
-                {!pdfList.isDefault && ' Los productos sin precio propio en esta lista salen con el precio de Minorista.'}
+                {pdfAtCost && ' Es para uso interno: no se lo mandes a un cliente.'}
+                {!pdfAtCost && !pdfList.isDefault && ' Los productos sin precio propio en esta lista salen con el precio de Minorista.'}
                 {pdfWithStock && ' El stock es la suma de todas las ubicaciones; destildalo si vas a mandarle la lista a un cliente.'}
                 {pdfWithImages && ' Con fotos puede tardar unos segundos si tenés muchos productos.'}
               </div>
