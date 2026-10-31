@@ -210,6 +210,9 @@ export async function create(data: CreateSaleInput) {
   let stockFallbacks: StockFallbackUse[] = [];
 
   const saleStatus = data.status ?? SaleStatus.PENDING;
+  // Cotizacion sin reserva: no valida ni descuenta stock ahora (se hace al
+  // confirmarla, ver updateStatus en sale.lifecycle.ts).
+  const skipStock = saleStatus === SaleStatus.PENDING && data.skipStock === true;
 
   const quotationExpiresAt =
     saleStatus === SaleStatus.PENDING
@@ -218,7 +221,9 @@ export async function create(data: CreateSaleInput) {
 
   const result = await prisma.$transaction(
     async (tx) => {
-      await validateStockAvailability(tx, stockLines, stockLocationId);
+      if (!skipStock) {
+        await validateStockAvailability(tx, stockLines, stockLocationId);
+      }
 
       const sale = await tx.sale.create({
         data: {
@@ -277,6 +282,7 @@ export async function create(data: CreateSaleInput) {
 
           quotationExpiresAt,
           quotationExpiredAt: null,
+          stockDiscounted: !skipStock,
 
           isAccountSale: paymentState.isAccountSale,
           accountDebtAmount: paymentState.debtAmount,
@@ -315,14 +321,16 @@ export async function create(data: CreateSaleInput) {
         },
       });
 
-      stockFallbacks = await discountStockLines(
-        tx,
-        stockLines,
-        data.userId,
-        sale.id,
-        stockLocationId,
-        pendingAlerts
-      );
+      if (!skipStock) {
+        stockFallbacks = await discountStockLines(
+          tx,
+          stockLines,
+          data.userId,
+          sale.id,
+          stockLocationId,
+          pendingAlerts
+        );
+      }
 
       if (paymentState.isAccountSale && paymentState.debtAmount > 0 && data.clientId) {
         await createAccountDebtMovement(tx, {

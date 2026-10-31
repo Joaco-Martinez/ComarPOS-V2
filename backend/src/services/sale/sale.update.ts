@@ -215,16 +215,20 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
 
   const updated = await prisma.$transaction(
     async (tx) => {
-      await restoreStockLines(
-        tx,
-        oldStockLines,
-        sale.userId ?? undefined,
-        sale.id,
-        previousStockLocationId,
-        pendingAlerts
-      );
+      // Cotizacion sin reserva de stock: editar items no mueve stock (se
+      // descuenta recien al confirmarla).
+      if (sale.stockDiscounted) {
+        await restoreStockLines(
+          tx,
+          oldStockLines,
+          sale.userId ?? undefined,
+          sale.id,
+          previousStockLocationId,
+          pendingAlerts
+        );
 
-      await validateStockAvailability(tx, newStockLines, stockLocationId);
+        await validateStockAvailability(tx, newStockLines, stockLocationId);
+      }
 
       await tx.boxContent.deleteMany({
         where: {
@@ -353,14 +357,16 @@ export async function updateItems(id: string, data: Partial<CreateSaleInput>) {
         include: buildSaleInclude(),
       });
 
-      stockFallbacks = await discountStockLines(
-        tx,
-        newStockLines,
-        sale.userId ?? undefined,
-        sale.id,
-        stockLocationId,
-        pendingAlerts
-      );
+      if (sale.stockDiscounted) {
+        stockFallbacks = await discountStockLines(
+          tx,
+          newStockLines,
+          sale.userId ?? undefined,
+          sale.id,
+          stockLocationId,
+          pendingAlerts
+        );
+      }
 
       return editedSale;
     },

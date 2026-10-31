@@ -92,6 +92,7 @@ function normalizeSaleBody(body: any) {
       ...body,
       stockLocationId,
       quotationHours: toNumber(body.quotationHours),
+      skipStock: body.skipStock === true || body.skipStock === "true",
       discountValue: toNumber(body.discountValue),
       priceListId: body.priceListId ?? undefined,
       discounts,

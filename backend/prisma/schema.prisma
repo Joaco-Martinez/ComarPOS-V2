@@ -1120,6 +1120,10 @@ model Sale {
   stockLocationRef        BusinessLocation? @relation("SaleStockLocation", fields: [stockLocationId], references: [id])
   quotationExpiredAt      DateTime?
   quotationExpiresAt      DateTime?
+  // false = cotizacion que NO desconto stock al crearse (pantalla de
+  // Cotizaciones). El stock se descuenta recien al confirmarla (COMPLETED) y
+  // al cancelarla/vencer no hay nada que devolver. true para todo lo demas.
+  stockDiscounted         Boolean           @default(true)
   quotationPdfUrl         String?
   grossProfit             Float             @default(0)
   businessLocationId      String?

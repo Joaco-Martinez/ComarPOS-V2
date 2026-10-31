@@ -45,6 +45,9 @@ export type CreateSaleInput = {
   paymentMethod: PaymentMethod;
 
   quotationHours?: number;
+  // Cotizacion sin reserva de stock: solo aplica si status es PENDING. No
+  // valida ni descuenta stock al crear; se descuenta al confirmar.
+  skipStock?: boolean;
 
   deliveryMethod?: DeliveryMethod;
   deliveryStatus?: DeliveryStatus;

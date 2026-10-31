@@ -7,7 +7,16 @@ import { ProductType, SaleStatus, SaleItemPriceType, SaleUnit } from "@prisma/cl
 import { financeService } from "../finance.service";
 import { productStatsService } from "../productStats.service";
 import { ResolvedSaleItem, StockLine } from "./sale.types";
-import { buildStockLines, requireStockLocationId, restoreStockLines, queueStockAlerts } from "./sale.stock";
+import {
+  buildStockLines,
+  requireStockLocationId,
+  restoreStockLines,
+  validateStockAvailability,
+  discountStockLines,
+  notifyStockFallback,
+  queueStockAlerts,
+  type StockFallbackUse,
+} from "./sale.stock";
 import { reverseAccountDebtFromSale } from "./sale.payment";
 import { tenantScope } from "../../utils/tenantScope";
 import { runWithTenant } from "../../context/tenantContext";
@@ -66,11 +75,18 @@ export async function updateStatus(id: string, status: SaleStatus) {
     throw new Error("No se puede cambiar el estado de una venta cancelada");
   }
 
-  const restoredStockLines: StockLine[] = [];
+  const saleStockLines: StockLine[] = [];
   const pendingAlerts: string[] = [];
+  let stockFallbacks: StockFallbackUse[] = [];
   let stockLocationId: string | null = null;
 
-  if (status === SaleStatus.CANCELLED) {
+  // Cotizacion creada sin reservar stock (stockDiscounted = false): al
+  // cancelarla/vencer no hay nada que devolver, y al confirmarla recien ahi
+  // se valida y descuenta.
+  const mustRestoreStock = status === SaleStatus.CANCELLED && sale.stockDiscounted;
+  const mustDiscountStock = status === SaleStatus.COMPLETED && !sale.stockDiscounted;
+
+  if (mustRestoreStock || mustDiscountStock) {
     stockLocationId = await requireStockLocationId(sale.stockLocationId);
 
     const resolvedItems: ResolvedSaleItem[] = sale.items.map((item) => ({
@@ -100,21 +116,35 @@ export async function updateStatus(id: string, status: SaleStatus) {
         })) ?? [],
     }));
 
-    restoredStockLines.push(...buildStockLines(resolvedItems));
+    saleStockLines.push(...buildStockLines(resolvedItems));
   }
 
   const updated = await prisma.$transaction(
     async (tx) => {
-      if (status === SaleStatus.CANCELLED) {
+      if (mustRestoreStock) {
         await restoreStockLines(
           tx,
-          restoredStockLines,
+          saleStockLines,
           sale.userId ?? undefined,
           sale.id,
           stockLocationId as string,
           pendingAlerts
         );
+      }
 
+      if (mustDiscountStock) {
+        await validateStockAvailability(tx, saleStockLines, stockLocationId as string);
+        stockFallbacks = await discountStockLines(
+          tx,
+          saleStockLines,
+          sale.userId ?? undefined,
+          sale.id,
+          stockLocationId as string,
+          pendingAlerts
+        );
+      }
+
+      if (status === SaleStatus.CANCELLED) {
         await reverseAccountDebtFromSale(tx, sale);
       }
 
@@ -128,7 +158,7 @@ export async function updateStatus(id: string, status: SaleStatus) {
             ? { quotationExpiredAt: sale.quotationExpiredAt ?? new Date() }
             : {}),
           ...(status === SaleStatus.COMPLETED
-            ? { quotationExpiredAt: null }
+            ? { quotationExpiredAt: null, stockDiscounted: true }
             : {}),
         },
         include: {
@@ -156,6 +186,7 @@ export async function updateStatus(id: string, status: SaleStatus) {
   );
 
   queueStockAlerts(pendingAlerts);
+  if (stockFallbacks.length > 0) notifyStockFallback(id, stockFallbacks);
 
   // Audit log de cambio de estado
   if (sale.userId) {

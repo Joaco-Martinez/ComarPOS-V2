@@ -1,15 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { BusinessLocation, Client, PriceList, Product, Sale } from '@/types';
-import { clientName, fmtDate, fmtMoney, normalizeArray, num, skuKey } from '@/lib/helpers';
-import { FileText, Plus, Trash2, Search, Download, RefreshCcw, X } from 'lucide-react';
+import type { BusinessLocation, Client, PriceList, Product, ProductCategory, Sale } from '@/types';
+import { clientName, fmtDate, fmtKg, fmtMoney, normalizeArray, num } from '@/lib/helpers';
+import { AlertTriangle, FileText, Plus, Trash2, Download, RefreshCcw, X, ShoppingCart } from 'lucide-react';
 import VariantPicker from '@/components/products/VariantPicker';
-import { groupByParent } from '@/lib/variants';
+import { stockAt } from '@/lib/variants';
+import ProductBrowser from '@/components/products/ProductBrowser';
 
 type CartLine = {
   product: Product;
@@ -29,6 +30,9 @@ type PriceOverride = { price: number; pricePerKg: number | null };
 
 export default function CotizacionesPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [tab, setTab] = useState<'new' | 'pending'>('new');
+  const cartRef = useRef<HTMLDivElement>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [businessLocations, setBusinessLocations] = useState<BusinessLocation[]>([]);
@@ -36,7 +40,6 @@ export default function CotizacionesPage() {
   const [loading, setLoading] = useState(true);
   const [loadingPending, setLoadingPending] = useState(true);
 
-  const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [clientId, setClientId] = useState('');
   const [priceListId, setPriceListId] = useState('');
@@ -50,14 +53,16 @@ export default function CotizacionesPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [pr, clr, plr, blr] = await Promise.all([
+      const [pr, clr, plr, blr, cr] = await Promise.all([
         // sellable: simples y variantes; las variantes se agrupan por padre
         // en la búsqueda y se eligen con el selector de variantes.
         api.get('/products', { params: { isActive: true, limit: 500, sellable: true } }).catch(() => null),
         api.get('/clients', { params: { limit: 300 } }).catch(() => null),
         api.get('/price-lists').catch(() => null),
         api.get('/business-locations').catch(() => null),
+        api.get('/categories').catch(() => null),
       ]);
+      if (cr) setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
       if (pr) setProducts(normalizeArray<Product>(pr.data));
       if (clr) setClients(normalizeArray<Client>(clr.data));
       if (plr) setPriceLists(normalizeArray<PriceList>(plr.data));
@@ -126,17 +131,6 @@ export default function CotizacionesPage() {
 
   const [variantPicker, setVariantPicker] = useState<Product | null>(null);
 
-  const filteredProducts = useMemo(() => {
-    if (!search.trim()) return [];
-    const q = search.trim().toLowerCase();
-    // Si el SKU coincide exacto con una variante, se ofrece esa sola (no el
-    // grupo) para agregarla directo.
-    const exact = products.filter((p) => p.sku && skuKey(p.sku) === skuKey(q));
-    if (exact.length) return exact;
-    return groupByParent(products.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)))
-      .slice(0, 15);
-  }, [search, products]);
-
   const addProduct = (product: Product) => {
     if (product.hasVariants) {
       setVariantPicker(product);
@@ -155,7 +149,17 @@ export default function CotizacionesPage() {
       }
       return [...prev, { product, quantity: 1, quantityKg: product.saleUnit === 'KG' ? 1 : undefined }];
     });
-    setSearch('');
+  };
+
+  // Stock actual en la sucursal elegida, solo informativo: la cotización no
+  // descuenta stock (se descuenta recién al confirmarla como venta).
+  const lineStockWarning = (line: CartLine) => {
+    const p = line.product;
+    if (p.isService || p.unlimitedStock || p.type === 'COMPUESTO') return null;
+    const stock = stockAt(p, stockLocationId);
+    const qty = p.saleUnit === 'KG' ? num(line.quantityKg) : line.quantity;
+    if (qty <= stock) return null;
+    return `Stock actual: ${p.saleUnit === 'KG' ? `${fmtKg(stock)}kg` : stock}`;
   };
 
   const updateLine = (productId: string, patch: Partial<CartLine>) => {
@@ -215,7 +219,7 @@ export default function CotizacionesPage() {
       return;
     }
     if (!stockLocationId) {
-      toast.error('No hay una sucursal/depósito configurado para reservar el stock');
+      toast.error('No hay una sucursal/depósito configurado');
       return;
     }
     setSaving(true);
@@ -234,6 +238,9 @@ export default function CotizacionesPage() {
         receiptType: 'TICKET',
         paymentMethod: 'EFECTIVO',
         status: 'PENDING',
+        // La cotización no reserva ni descuenta stock: se descuenta recién
+        // cuando se confirma la venta (Historial de Ventas > Confirmar).
+        skipStock: true,
         stockLocationId,
         ...(clientId && { clientId }),
         ...(priceListId && { priceListId }),
@@ -286,99 +293,105 @@ export default function CotizacionesPage() {
     );
   }
 
+  const cartCount = cart.length;
+
   return (
-    <AppLayout title="Cotizaciones" subtitle="Armá presupuestos con descuentos y listas de precios">
-      <div className="grid-responsive" style={{ ['--gtc' as any]: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
-        {/* Carrito */}
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Productos</div>
-          <div style={{ position: 'relative', marginBottom: 10 }}>
-            <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--text3)' }} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar producto por nombre o SKU..."
-              style={{ paddingLeft: 30 }}
-            />
-            {filteredProducts.length > 0 && (
-              <div className="card" style={{ position: 'absolute', zIndex: 10, top: '100%', marginTop: 4, left: 0, right: 0, maxHeight: 260, overflowY: 'auto', padding: 4 }}>
-                {filteredProducts.map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => addProduct(p)}
-                    style={{ padding: '8px 10px', borderRadius: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 8 }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg2)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <span style={{ fontSize: 13, minWidth: 0 }}>
-                      {p.name}
-                      {p.hasVariants && <span style={{ fontSize: 11, color: 'var(--text3)' }}> · {p.variants?.length} variantes</span>}
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', flex: '0 0 auto' }}>
-                      {p.hasVariants
-                        ? `desde ${fmtMoney(Math.min(...(p.variants ?? []).map((v) => resolvedPrice(v))))}`
-                        : fmtMoney(resolvedPrice(p))}
-                    </span>
+    <AppLayout title="Cotizaciones" subtitle="Armá presupuestos con descuentos y listas de precios — no descuentan stock">
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        <button onClick={() => setTab('new')} className={`btn btn-sm ${tab === 'new' ? 'btn-primary' : 'btn-secondary'}`}>
+          Nueva cotización
+        </button>
+        <button onClick={() => { setTab('pending'); loadPending(); }} className={`btn btn-sm ${tab === 'pending' ? 'btn-primary' : 'btn-secondary'}`}>
+          Pendientes{pending.length > 0 ? ` (${pending.length})` : ''}
+        </button>
+      </div>
+
+      {tab === 'new' ? (
+      <div className="pos-layout quote-layout">
+        {/* Productos: mismo buscador que el POS */}
+        <ProductBrowser
+          products={products}
+          categories={categories}
+          stockLocationId={stockLocationId}
+          priceOf={resolvedPrice}
+          onPick={addProduct}
+          requireStock={false}
+          viewModeKey="comarpos:cotizaciones:viewMode"
+        />
+
+        {/* Cotización: productos cargados, cliente, lista, descuentos y totales */}
+        <div className="quote-cart" ref={cartRef}>
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontWeight: 800, fontSize: 14 }}>Cotización{cartCount > 0 ? ` · ${cartCount}` : ''}</span>
+              {cartCount > 0 && (
+                <button onClick={() => setCart([])} className="btn btn-ghost btn-xs">Vaciar</button>
+              )}
+            </div>
+            {cart.length === 0 ? (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+                <FileText size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
+                <div>Tocá un producto para agregarlo</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {cart.map((line) => {
+                  const warning = lineStockWarning(line);
+                  return (
+                  <div key={line.product.id} style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line.product.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                          {alternateList && Math.abs(lineListUnitPrice(line) - lineUnitPrice(line)) > 0.01 ? (
+                            <>Lista: {fmtMoney(lineListUnitPrice(line))} · {alternateList.name}: <strong style={{ color: 'var(--text2)' }}>{fmtMoney(lineUnitPrice(line))}</strong></>
+                          ) : fmtMoney(lineUnitPrice(line))} / {line.product.saleUnit === 'KG' ? 'kg' : 'un.'}
+                        </div>
+                        {warning && (
+                          <div style={{ fontSize: 10, color: 'var(--warn)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <AlertTriangle size={10} /> {warning}
+                          </div>
+                        )}
+                      </div>
+                      <button onClick={() => removeLine(line.product.id)} className="btn btn-ghost btn-xs"><Trash2 size={13} /></button>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                      {line.product.saleUnit === 'KG' ? (
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={line.quantityKg ?? ''}
+                          onChange={(e) => updateLine(line.product.id, { quantityKg: Number(e.target.value) })}
+                          title="Cantidad (kg)"
+                          style={{ width: 70 }}
+                        />
+                      ) : (
+                        <input
+                          type="number" min="1"
+                          value={line.quantity}
+                          onChange={(e) => updateLine(line.product.id, { quantity: Math.max(1, Number(e.target.value)) })}
+                          title="Cantidad"
+                          style={{ width: 60 }}
+                        />
+                      )}
+                      <input
+                        type="number" min="0"
+                        placeholder="precio"
+                        value={line.manualPrice ?? ''}
+                        onChange={(e) => updateLine(line.product.id, { manualPrice: e.target.value })}
+                        title="Precio manual (opcional, pisa el precio de la lista)"
+                        style={{ width: 90 }}
+                      />
+                      <div style={{ marginLeft: 'auto', textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700 }}>
+                        {fmtMoney(lineSubtotal(line))}
+                      </div>
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {cart.length === 0 ? (
-            <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
-              <FileText size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
-              <div>Todavía no agregaste productos</div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {cart.map((line) => (
-                <div key={line.product.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line.product.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                      {alternateList && Math.abs(lineListUnitPrice(line) - lineUnitPrice(line)) > 0.01 ? (
-                        <>Lista: {fmtMoney(lineListUnitPrice(line))} · {alternateList.name}: <strong style={{ color: 'var(--text2)' }}>{fmtMoney(lineUnitPrice(line))}</strong></>
-                      ) : fmtMoney(lineUnitPrice(line))} / {line.product.saleUnit === 'KG' ? 'kg' : 'un.'}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-                  {line.product.saleUnit === 'KG' ? (
-                    <input
-                      type="number" min="0" step="0.01"
-                      value={line.quantityKg ?? ''}
-                      onChange={(e) => updateLine(line.product.id, { quantityKg: Number(e.target.value) })}
-                      style={{ width: 70 }}
-                    />
-                  ) : (
-                    <input
-                      type="number" min="1"
-                      value={line.quantity}
-                      onChange={(e) => updateLine(line.product.id, { quantity: Math.max(1, Number(e.target.value)) })}
-                      style={{ width: 60 }}
-                    />
-                  )}
-                  <input
-                    type="number" min="0"
-                    placeholder="precio"
-                    value={line.manualPrice ?? ''}
-                    onChange={(e) => updateLine(line.product.id, { manualPrice: e.target.value })}
-                    title="Precio manual (opcional, pisa el precio de la lista)"
-                    style={{ width: 90 }}
-                  />
-                  <div style={{ width: 90, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700 }}>
-                    {fmtMoney(lineSubtotal(line))}
-                  </div>
-                  <button onClick={() => removeLine(line.product.id)} className="btn btn-ghost btn-xs"><Trash2 size={13} /></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Cliente, lista de precios, descuentos y totales */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="card" style={{ padding: 16 }}>
             <div className="form-group" style={{ marginBottom: 10 }}>
               <label className="form-label">Cliente</label>
@@ -398,10 +411,13 @@ export default function CotizacionesPage() {
             </div>
             {businessLocations.length > 1 && (
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Reservar stock desde</label>
+                <label className="form-label">Sucursal</label>
                 <select value={stockLocationId} onChange={(e) => setStockLocationId(e.target.value)}>
                   {businessLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                  El stock no se toca ahora: sale de esta sucursal recién cuando se confirma la venta.
+                </div>
               </div>
             )}
           </div>
@@ -498,9 +514,8 @@ export default function CotizacionesPage() {
           </div>
         </div>
       </div>
-
-      {/* Cotizaciones pendientes */}
-      <div className="card" style={{ padding: 16, marginTop: 16 }}>
+      ) : (
+      <div className="card" style={{ padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <span style={{ fontWeight: 800, fontSize: 14 }}>Cotizaciones pendientes</span>
           <button onClick={loadPending} className="btn btn-ghost btn-sm"><RefreshCcw size={13} /></button>
@@ -536,6 +551,20 @@ export default function CotizacionesPage() {
           </div>
         )}
       </div>
+      )}
+
+      {tab === 'new' && cartCount > 0 && (
+        <div className="quote-mobile-bar">
+          <button
+            onClick={() => cartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="btn btn-primary"
+            style={{ width: '100%', justifyContent: 'space-between' }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><ShoppingCart size={14} /> Ver cotización ({cartCount})</span>
+            <span style={{ fontFamily: 'var(--mono)' }}>{fmtMoney(total)}</span>
+          </button>
+        </div>
+      )}
       {variantPicker && (
         <VariantPicker
           parent={variantPicker}
