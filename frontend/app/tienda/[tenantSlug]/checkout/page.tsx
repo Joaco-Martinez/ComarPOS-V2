@@ -15,7 +15,7 @@ const money = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0);
 
 export default function TiendaCheckoutPage() {
-  const { store, tenantSlug } = useStore();
+  const { store, tenantSlug, linkPriceListId, priceList } = useStore();
   const { cart, total, clear } = useCartContext();
   const { account, loading: accountLoading } = useAccount();
   const router = useRouter();
@@ -52,6 +52,7 @@ export default function TiendaCheckoutPage() {
         customerEmail: customerEmail.trim() || undefined,
         paymentMethod,
         customerNotes: customerNotes.trim() || undefined,
+        priceListId: linkPriceListId ?? undefined,
       };
 
       const { data } = await api.post(`/tienda/${tenantSlug}/orders`, body);
@@ -203,7 +204,9 @@ export default function TiendaCheckoutPage() {
       </section>
 
       <section className="t-summary">
-        <h3 className="t-h3" style={{ marginBottom: 0 }}>Resumen · {itemsCount} producto{itemsCount === 1 ? '' : 's'}</h3>
+        <h3 className="t-h3" style={{ marginBottom: 0 }}>
+          Resumen · {itemsCount} producto{itemsCount === 1 ? '' : 's'}{priceList ? ` · Lista ${priceList.name}` : ''}
+        </h3>
         <div className="t-mini-lines">
           {cart.map((l) => {
             const q = l.saleUnit === 'KG' ? l.quantityKg : l.quantity;

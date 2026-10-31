@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { storefrontConfigService } from "../services/storefrontConfig.service";
 import { orderService } from "../services/order.service";
-import { catalogService } from "../services/catalog.service";
+import { catalogService, resolveStorefrontPriceList } from "../services/catalog.service";
 import { authService } from "../services/auth.service";
 import { getParamAsString } from "../utils/params";
 
@@ -21,6 +21,42 @@ export const storefrontController = {
       }
 
       res.json({ ok: true, content: store });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // Catalogo de la tienda: igual que /catalog/products pero con la lista de
+  // precios del link (?lista=<id>) o la del cliente logueado, y siempre con
+  // la categoria publica (lo mismo que cobra el checkout).
+  async getProducts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+
+      const result = await catalogService.getProducts({
+        userId: user?.id,
+        storefront: true,
+        priceListId: typeof req.query.lista === "string" ? req.query.lista : undefined,
+        categorySlug: typeof req.query.category === "string" ? req.query.category : undefined,
+        search: typeof req.query.search === "string" ? req.query.search : undefined,
+        limit: toNumber(req.query.limit),
+        page: toNumber(req.query.page),
+      });
+
+      res.json({ ok: true, content: result });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // Nombre de la lista del link, para mostrarlo en la tienda. Solo listas
+  // activas de este tenant (el id es un uuid, no se puede enumerar).
+  async getPriceList(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = getParamAsString(req.params.id, "id");
+      const list = await resolveStorefrontPriceList(id);
+      if (!list) return res.status(404).json({ ok: false, message: "Lista no disponible" });
+      res.json({ ok: true, content: list });
     } catch (err) {
       next(err);
     }
@@ -49,6 +85,8 @@ export const storefrontController = {
         userId: customer.userId,
         paymentMethod: req.body.paymentMethod,
         customerNotes: req.body.customerNotes,
+        priceListId: typeof req.body.priceListId === "string" ? req.body.priceListId : undefined,
+        clientPriceListId: customer.priceListId ?? null,
       });
 
       res.status(201).json({ ok: true, content: order });

@@ -16,7 +16,7 @@ import { CategoryClient, OrderPaymentMethod, OrderStatus, PaymentMethod } from "
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import { AppError } from "../utils/asyncHandler";
-import { resolvePrice, getProductStock } from "./catalog.service";
+import { resolvePrice, getProductStock, resolveStorefrontPriceList } from "./catalog.service";
 import { storefrontConfigService } from "./storefrontConfig.service";
 import { saleService } from "./sale.service";
 import { tenantMpConfigService } from "./tenantMpConfig.service";
@@ -42,7 +42,8 @@ const PRODUCT_INCLUDE_FOR_STOCK = {
 
 async function resolveAndValidateItems(
   tenantId: string,
-  items: { productId: string; quantity?: number; quantityKg?: number }[]
+  items: { productId: string; quantity?: number; quantityKg?: number }[],
+  priceListId?: string | null
 ) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new AppError("EMPTY_CART", "El pedido debe tener al menos un producto", 400);
@@ -52,7 +53,12 @@ async function resolveAndValidateItems(
 
   const products = await prisma.product.findMany({
     where: { id: { in: productIds }, tenantId, isActive: true },
-    include: PRODUCT_INCLUDE_FOR_STOCK,
+    include: {
+      ...PRODUCT_INCLUDE_FOR_STOCK,
+      ...(priceListId
+        ? { priceListItems: { where: { priceListId }, select: { price: true, pricePerKg: true } } }
+        : {}),
+    },
   });
 
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -89,7 +95,10 @@ async function resolveAndValidateItems(
       }
     }
 
-    const pricing = resolvePrice(product, CategoryClient.Price);
+    // Mismo precio que mostro el catalogo de la tienda (lista del link o
+    // del cliente, ver resolveStorefrontPriceList).
+    const override = priceListId ? (product as any).priceListItems?.[0] ?? null : null;
+    const pricing = resolvePrice(product, CategoryClient.Price, override);
     const unitPrice = pricing.price;
     const subtotal = round2(unitPrice * qty);
 
@@ -159,6 +168,8 @@ export const orderService = {
     userId?: string;
     paymentMethod: OrderPaymentMethod;
     customerNotes?: string;
+    priceListId?: string;
+    clientPriceListId?: string | null;
   }) {
     const tenantId = currentTenantId();
     if (!tenantId) throw new AppError("TENANT_NOT_RESOLVED", "No se pudo resolver la tienda", 400);
@@ -217,7 +228,8 @@ export const orderService = {
       throw new AppError("PICKUP_NOT_AVAILABLE", "Esta tienda no ofrece retiro en el local", 400);
     }
 
-    const resolvedItems = await resolveAndValidateItems(tenantId, input.items);
+    const priceList = await resolveStorefrontPriceList(input.priceListId, input.clientPriceListId);
+    const resolvedItems = await resolveAndValidateItems(tenantId, input.items, priceList?.id ?? null);
     const subtotal = round2(resolvedItems.reduce((acc, i) => acc + i.subtotal, 0));
     const total = subtotal;
 
@@ -243,6 +255,7 @@ export const orderService = {
         businessLocationId: config.businessLocationId,
         paymentMethod: input.paymentMethod,
         customerNotes: input.customerNotes?.trim() || null,
+        priceListId: priceList?.id ?? null,
         items: { create: resolvedItems },
       },
       include: { items: true },
@@ -449,7 +462,7 @@ export const orderService = {
         ...tenantScope(),
         ...(filters?.status ? { status: filters.status as OrderStatus } : {}),
       },
-      include: { items: true, client: true },
+      include: { items: true, client: true, priceList: { select: { id: true, name: true } } },
       orderBy: { createdAt: "desc" },
       take: 200,
     });
@@ -461,6 +474,7 @@ export const orderService = {
       include: {
         items: { include: { product: { select: { name: true, imageUrl: true, saleUnit: true } } } },
         client: true,
+        priceList: { select: { id: true, name: true } },
         sale: { select: { id: true, total: true, status: true } },
       },
     });
@@ -587,6 +601,9 @@ export const orderService = {
       paymentMethod: paymentMethodMap[order.paymentMethod],
       receiptType: "TICKET" as any,
       status: "COMPLETED" as any,
+      // Registro de con que lista se vendio (los items van con precio
+      // MANUAL = el del pedido, la lista no recalcula nada).
+      priceListId: order.priceListId ?? undefined,
       items,
     });
 

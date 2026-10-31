@@ -6,13 +6,40 @@ import { useEffect, useState } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
-import { StoreContext, type StoreInfo } from './StoreContext';
+import { StoreContext, type StoreInfo, type StorePriceList } from './StoreContext';
 import { CartContext } from './CartContext';
 import { useCart } from './useCart';
 import { AccountContext, useAccountState } from './AccountContext';
-import { Store as StoreIcon, MapPin, Phone, Mail, ShoppingCart, Clock, UserCircle2 } from 'lucide-react';
+import { Store as StoreIcon, MapPin, Phone, Mail, ShoppingCart, Clock, UserCircle2, Tag } from 'lucide-react';
 import { getOpenStatus, normalizeBusinessHours } from './businessHours';
 import './tienda.css';
+
+// Lista de precios del link (?lista=<id>): se recuerda por tienda para que
+// siga aplicando al navegar (catalogo -> carrito -> checkout) y al volver
+// otro dia. ?lista=minorista (o vacio) vuelve a los precios normales.
+function listStorageKey(tenantSlug: string) {
+  return `comarpos-tienda-lista-${tenantSlug}`;
+}
+
+function readLinkListId(tenantSlug: string): string | null {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = params.get('lista');
+  try {
+    if (fromUrl !== null) {
+      const clean = fromUrl.trim();
+      if (!clean || clean.toLowerCase() === 'minorista') {
+        window.localStorage.removeItem(listStorageKey(tenantSlug));
+        return null;
+      }
+      window.localStorage.setItem(listStorageKey(tenantSlug), clean);
+      return clean;
+    }
+    return window.localStorage.getItem(listStorageKey(tenantSlug));
+  } catch {
+    return fromUrl?.trim() || null;
+  }
+}
 
 const money = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0);
@@ -30,6 +57,32 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
   // cargando.
   const cart = useCart(tenantSlug);
   const accountState = useAccountState(tenantSlug);
+  const [linkPriceListId, setLinkPriceListId] = useState<string | null>(null);
+  const [priceList, setPriceList] = useState<StorePriceList | null>(null);
+  const [listReady, setListReady] = useState(false);
+
+  // Se relee en cada navegacion: un link nuevo con ?lista= pisa al anterior.
+  useEffect(() => {
+    if (!tenantSlug) return;
+    const id = readLinkListId(tenantSlug);
+    setLinkPriceListId(id);
+    // Sin link no se toca priceList: puede venir de la lista asignada al
+    // cliente logueado (la informa el catalogo, ver productos/page.tsx).
+    if (!id) { setListReady(true); return; }
+
+    let cancelled = false;
+    api.get(`/tienda/${tenantSlug}/price-lists/${encodeURIComponent(id)}`)
+      .then(({ data }) => { if (!cancelled) setPriceList(data.content ?? null); })
+      .catch(() => {
+        if (cancelled) return;
+        // Lista inexistente o desactivada: se olvida y se ve la minorista.
+        try { window.localStorage.removeItem(listStorageKey(tenantSlug)); } catch { /* sin storage */ }
+        setLinkPriceListId(null);
+        setPriceList(null);
+      })
+      .finally(() => { if (!cancelled) setListReady(true); });
+    return () => { cancelled = true; };
+  }, [tenantSlug, pathname]);
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -58,7 +111,7 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
     return () => { cancelled = true; };
   }, [tenantSlug]);
 
-  if (loading) {
+  if (loading || !listReady) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F7F8FA' }}>
         <div style={{ width: 28, height: 28, border: '3px solid #E4E7EC', borderTopColor: '#0D59E7', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -110,7 +163,7 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
     : null;
 
   return (
-    <StoreContext.Provider value={{ store, tenantSlug }}>
+    <StoreContext.Provider value={{ store, tenantSlug, linkPriceListId, priceList, setPriceList }}>
       <div className={`t-root${showCartBar ? ' has-cartbar' : ''}`} style={{ '--store-accent': accent } as React.CSSProperties}>
         {store.bannerUrl && (
           <div className="t-banner">
@@ -158,8 +211,13 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
           </div>
         </header>
 
-        {(store.contactAddress || store.contactPhone || openStatus) && (
+        {(store.contactAddress || store.contactPhone || openStatus || priceList) && (
           <div className="t-info">
+            {priceList && (
+              <span className="t-chip t-chip-list">
+                <Tag size={13} style={{ flexShrink: 0 }} /> <span>Precios: lista {priceList.name}</span>
+              </span>
+            )}
             {openStatus && (
               <span className="t-chip">
                 <Clock size={13} style={{ flexShrink: 0 }} /> <span>{openStatus.todayLabel}</span>

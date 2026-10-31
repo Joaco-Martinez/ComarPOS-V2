@@ -16,6 +16,13 @@ function storageKey(tenantSlug: string) {
   return `comarpos-tienda-cart-${tenantSlug}`;
 }
 
+// Lista de precios con la que se armo el carrito ('' = minorista): si el
+// comprador entra con otro link (u otra cuenta con otra lista), los precios
+// guardados en el carrito ya no valen y se vacia.
+function cartListKey(tenantSlug: string) {
+  return `comarpos-tienda-cart-list-${tenantSlug}`;
+}
+
 function readCart(tenantSlug: string): CartLine[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -100,8 +107,20 @@ export function useCart(tenantSlug: string) {
     persist([]);
   }, [persist]);
 
+  // Devuelve true si vació el carrito porque cambió la lista.
+  const syncPriceList = useCallback((listId: string | null) => {
+    const next = listId ?? '';
+    let prev = '';
+    try { prev = window.localStorage.getItem(cartListKey(tenantSlug)) ?? ''; } catch { /* sin storage */ }
+    if (prev === next) return false;
+    try { window.localStorage.setItem(cartListKey(tenantSlug), next); } catch { /* sin storage */ }
+    const hadItems = readCart(tenantSlug).length > 0;
+    if (hadItems) persist([]);
+    return hadItems;
+  }, [tenantSlug, persist]);
+
   const itemCount = cart.reduce((acc, l) => acc + (l.saleUnit === 'KG' ? 1 : l.quantity), 0);
   const total = cart.reduce((acc, l) => acc + l.price * (l.saleUnit === 'KG' ? l.quantityKg : l.quantity), 0);
 
-  return { cart, loaded, addItem, updateQty, removeItem, clear, itemCount, total };
+  return { cart, loaded, addItem, updateQty, removeItem, clear, syncPriceList, itemCount, total };
 }

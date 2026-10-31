@@ -5,8 +5,9 @@
  * corrio runWithTenant() antes de llegar acá, asi que todo lo de abajo
  * funciona igual que el resto del sistema (tenantScope()/currentTenantId()).
  *
- * El catalogo (categorias/productos) reusa catalogController tal cual, sin
- * duplicar logica - ya es tenant-scoped internamente.
+ * Las categorias reusan catalogController tal cual. Los productos pasan por
+ * storefrontController.getProducts (mismo catalogService) para sumar la
+ * lista de precios del link (?lista=<id>) o la del cliente logueado.
  */
 import { Router } from "express";
 import multer from "multer";
@@ -20,7 +21,8 @@ const router = Router({ mergeParams: true });
 
 router.get("/store", storefrontController.getStore);
 router.get("/catalog/categories", catalogController.getCategories);
-router.get("/catalog/products", optionalStorefrontAuth, catalogController.getProducts);
+router.get("/catalog/products", optionalStorefrontAuth, storefrontController.getProducts);
+router.get("/price-lists/:id", storefrontController.getPriceList);
 
 // Cuenta obligatoria para comprar: alta de cliente propia de esta tienda
 // (tenantId de la URL, no el default) - login/logout/me se resuelven con

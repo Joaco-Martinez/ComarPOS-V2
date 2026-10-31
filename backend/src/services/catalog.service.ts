@@ -14,6 +14,13 @@ import { tenantScope } from "../utils/tenantScope";
 
 type CatalogFilters = {
   userId?: string;
+  // Tienda online: lista de precios pedida por link (?lista=<id>). Si no
+  // viene o no es valida, se usa la lista asignada al cliente logueado.
+  priceListId?: string;
+  // Tienda online: el checkout (order.service) cobra siempre con la
+  // categoria publica (+ lista), asi que el catalogo tiene que mostrar lo
+  // mismo aunque el cliente sea Mayorista.
+  storefront?: boolean;
   categorySlug?: string;
   search?: string;
   limit?: number;
@@ -36,6 +43,7 @@ type CheckoutInput = {
 type CustomerContext = {
   userId?: string;
   clientId?: string;
+  priceListId?: string | null;
   category: CategoryClient;
   customerName?: string;
   dni?: string | null;
@@ -153,10 +161,19 @@ export function getProductStock(product: any) {
 // el mismo precio que el catalogo publico le mostro al comprador (siempre
 // categoria Price/publica en la tienda, ver doc "tienda online por tenant" -
 // un CLIENTE logueado no ve su PriceList custom ahi, decision v1).
-export function resolvePrice(product: any, category: CategoryClient) {
+export type PriceListOverride = { price: number | null; pricePerKg: number | null } | null | undefined;
+
+// Lista de precios: igual que en el POS (sale.pricing.ts#resolveUnitPrice),
+// el precio de la lista pisa solo el precio publico/minorista. Un producto
+// sin precio propio en la lista sigue con su precio minorista.
+export function resolvePrice(product: any, category: CategoryClient, override?: PriceListOverride) {
   const isKg = product.saleUnit === SaleUnit.KG;
 
-  const publicPriceRaw = isKg ? product.pricePerKg : product.price;
+  const overrideRaw = override ? (isKg ? override.pricePerKg : override.price) : null;
+  const hasOverride =
+    overrideRaw !== null && overrideRaw !== undefined && Number.isFinite(Number(overrideRaw));
+
+  const publicPriceRaw = hasOverride ? overrideRaw : isKg ? product.pricePerKg : product.price;
   const wholesalePriceRaw = isKg
     ? product.wholesalePricePerKg
     : product.wholesalePrice;
@@ -190,9 +207,13 @@ export function resolvePrice(product: any, category: CategoryClient) {
 // Variantes: el catalogo muestra padres y productos simples; el padre trae
 // sus variantes activas, cada una con su precio, stock y foto (o la del
 // padre), y el resumen ("desde $X", stock total, canSell si alguna tiene).
+function listOverride(product: any): PriceListOverride {
+  return Array.isArray(product.priceListItems) ? product.priceListItems[0] ?? null : null;
+}
+
 function mapVariant(variant: any, parent: any, customer: CustomerContext) {
   const stock = getProductStock(variant);
-  const pricing = resolvePrice(variant, customer.category);
+  const pricing = resolvePrice(variant, customer.category, listOverride(variant));
 
   return {
     id: variant.id,
@@ -244,7 +265,7 @@ function mapProduct(product: any, customer: CustomerContext) {
 
 function mapSimpleProduct(product: any, customer: CustomerContext) {
   const stock = getProductStock(product);
-  const pricing = resolvePrice(product, customer.category);
+  const pricing = resolvePrice(product, customer.category, listOverride(product));
 
   return {
     id: product.id,
@@ -354,6 +375,32 @@ function buildWhatsappMessage(params: {
     .join("\n");
 }
 
+/**
+ * Lista de precios efectiva de la tienda online: la pedida por link
+ * (?lista=<id>) si es una lista activa de este tenant, si no la asignada al
+ * cliente logueado. La lista principal (Minorista) se devuelve como null:
+ * sus precios son los del producto, no hace falta override.
+ * Exportada para order.service.ts: el checkout resuelve la lista igual que
+ * el catalogo que vio el comprador.
+ */
+export async function resolveStorefrontPriceList(
+  requestedId?: string | null,
+  clientPriceListId?: string | null,
+): Promise<{ id: string; name: string } | null> {
+  for (const id of [requestedId, clientPriceListId]) {
+    if (!id || typeof id !== "string") continue;
+
+    const list = await prisma.priceList.findFirst({
+      where: { id, isActive: true, ...tenantScope() },
+      select: { id: true, name: true, isDefault: true },
+    });
+
+    if (list) return list.isDefault ? null : { id: list.id, name: list.name };
+  }
+
+  return null;
+}
+
 export const catalogService = {
   async getCustomerContext(userId?: string): Promise<CustomerContext> {
     if (!userId) {
@@ -381,6 +428,7 @@ export const catalogService = {
     return {
       userId: user.id,
       clientId: user.client.id,
+      priceListId: user.client.priceListId ?? null,
       category: normalizeCategory(user.client.category),
       customerName:
         [user.client.nombre, user.client.apellido]
@@ -417,7 +465,16 @@ export const catalogService = {
   },
 
   async getProducts(filters: CatalogFilters) {
-    const customer = await this.getCustomerContext(filters.userId);
+    const loggedCustomer = await this.getCustomerContext(filters.userId);
+    const customer: CustomerContext = filters.storefront
+      ? { ...loggedCustomer, category: CategoryClient.Price }
+      : loggedCustomer;
+    const priceList = filters.storefront
+      ? await resolveStorefrontPriceList(filters.priceListId, loggedCustomer.priceListId)
+      : null;
+    const priceListInclude = priceList
+      ? { priceListItems: { where: { priceListId: priceList.id }, select: { price: true, pricePerKg: true } } }
+      : {};
     const limit = cleanLimit(filters.limit);
     const page = cleanPage(filters.page);
     const search = normalizeSearch(filters.search);
@@ -459,10 +516,11 @@ export const catalogService = {
       include: {
         category: true,
         stock: true,
+        ...priceListInclude,
         components: { include: { component: { include: { stock: true } } } },
         variants: {
           where: { isActive: true },
-          include: { stock: true },
+          include: { stock: true, ...priceListInclude },
           orderBy: { createdAt: "asc" },
         },
       },
@@ -499,6 +557,7 @@ export const catalogService = {
         isLoggedIn: !!customer.userId,
         clientId: customer.clientId ?? null,
       },
+      priceList,
       pagination: {
         page: safePage,
         limit,

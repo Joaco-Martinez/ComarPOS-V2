@@ -7,7 +7,7 @@ import AppLayout from '@/components/AppLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { fmtMoney, fmtDate } from '@/lib/helpers';
-import { Package, X, Check, Ban, Banknote, Landmark, Wallet, ShoppingBag, MessageCircle } from 'lucide-react';
+import { Package, X, Check, Ban, Banknote, Landmark, Wallet, ShoppingBag, MessageCircle, Tag } from 'lucide-react';
 
 type OrderListItem = {
   id: string;
@@ -20,6 +20,7 @@ type OrderListItem = {
   items: { id: string }[];
   createdAt: string;
   client?: { nombre: string; apellido: string } | null;
+  priceList?: { id: string; name: string } | null;
 };
 
 type OrderDetail = Omit<OrderListItem, 'items'> & {
@@ -162,6 +163,7 @@ export default function TiendaOnlinePedidosPage() {
                     <div style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                       {fmtDate(o.createdAt)} · {o.items.length} producto{o.items.length === 1 ? '' : 's'}
                       · <PaymentIcon size={11} /> {payment.label}
+                      {o.priceList && <span className="badge badge-blue" style={{ marginLeft: 4 }}>Lista {o.priceList.name}</span>}
                     </div>
                   </div>
                   <span className={`badge ${badge.className}`}>{badge.label}</span>
@@ -196,6 +198,9 @@ export default function TiendaOnlinePedidosPage() {
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <Package size={12} /> Retiro en local
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Tag size={12} /> Lista {detail.priceList?.name ?? 'Minorista'}
                 </span>
               </div>
 

@@ -105,6 +105,11 @@ body:has(.t-root) {
   padding: 6px 10px; border-radius: 999px; background: #fff; border: 1px solid #EAECF0;
   font-size: 12px; color: #475467; text-decoration: none;
 }
+.t-chip-list {
+  background: color-mix(in srgb, var(--store-accent) 10%, #fff);
+  border-color: color-mix(in srgb, var(--store-accent) 35%, #fff);
+  color: var(--store-accent); font-weight: 700;
+}
 .t-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .t-main { flex: 1; width: 100%; max-width: 1080px; margin: 0 auto; padding: 16px 16px 48px; }

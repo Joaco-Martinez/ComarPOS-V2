@@ -39,8 +39,8 @@ const money = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0);
 
 export default function TiendaProductosPage() {
-  const { tenantSlug } = useStore();
-  const { addItem } = useCartContext();
+  const { tenantSlug, linkPriceListId, setPriceList } = useStore();
+  const { addItem, syncPriceList } = useCartContext();
   const searchParams = useSearchParams();
   const categorySlug = searchParams.get('category') ?? '';
 
@@ -108,15 +108,23 @@ export default function TiendaProductosPage() {
     const params: Record<string, any> = { page, limit: 24 };
     if (categorySlug) params.category = categorySlug;
     if (query) params.search = query;
+    if (linkPriceListId) params.lista = linkPriceListId;
 
     api.get(`/tienda/${tenantSlug}/catalog/products`, { params })
       .then(({ data }) => {
+        // La lista que realmente aplica la decide el backend (link o la del
+        // cliente logueado): si cambió, el carrito tenía otros precios.
+        const appliedList = data.content?.priceList ?? null;
+        setPriceList(appliedList);
+        if (syncPriceList(appliedList?.id ?? null)) {
+          toast(`Actualizamos los precios${appliedList ? ` a la lista ${appliedList.name}` : ''}: vaciamos tu carrito para que coincidan.`, { icon: '🏷️' });
+        }
         setProducts(data.content?.products ?? []);
         setTotalPages(data.content?.pagination?.totalPages ?? 1);
       })
       .catch(() => setProducts([]))
       .finally(() => setLoading(false));
-  }, [tenantSlug, categorySlug, query, page]);
+  }, [tenantSlug, categorySlug, query, page, linkPriceListId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeCategory = categories.find((c) => c.slug === categorySlug);
 

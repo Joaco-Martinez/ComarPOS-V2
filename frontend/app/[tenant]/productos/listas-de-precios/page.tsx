@@ -7,7 +7,8 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { PriceList, Product, ProductCategory } from '@/types';
 import { fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { Plus, Edit2, Trash2, X, Search, Lock, ChevronDown, ChevronRight, FileDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Search, Lock, ChevronDown, ChevronRight, FileDown, Share2 } from 'lucide-react';
+import StoreListLinkActions, { buildStoreListUrl } from '@/components/StoreListLinkActions';
 import { matchesSearch, sortedVariants } from '@/lib/variants';
 import { useAuthStore } from '@/store/auth';
 
@@ -43,6 +44,11 @@ export default function ListasDePreciosPage() {
   const [pdfAtCost, setPdfAtCost] = useState(false);
   const [pdfDownloading, setPdfDownloading] = useState(false);
 
+  // Link de la tienda online con la lista aplicada (?lista=<id>).
+  const [tenantSlug, setTenantSlug] = useState('');
+  const [tenantName, setTenantName] = useState('');
+  const [shareList, setShareList] = useState<PriceList | null>(null);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -53,6 +59,9 @@ export default function ListasDePreciosPage() {
         api.get('/products', { params: { isActive: true, limit: 500, grouped: true } }).catch(() => null),
         api.get('/categories').catch(() => null),
       ]);
+      api.get('/tenant/me')
+        .then(({ data }) => { setTenantSlug(data?.tenant?.slug ?? ''); setTenantName(data?.tenant?.name ?? ''); })
+        .catch(() => undefined);
       if (lr) setLists(normalizeArray<PriceList>(lr.data));
       if (pr) setProducts(normalizeArray<Product>(pr.data));
       if (cr) setCategories(normalizeArray<ProductCategory>(cr.data).filter((c) => c.isActive));
@@ -257,6 +266,9 @@ export default function ListasDePreciosPage() {
                   {list.isDefault && <span className="badge badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Lock size={9} /> Principal</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                  {tenantSlug && (
+                    <button onClick={() => setShareList(list)} className="btn btn-ghost btn-xs" title="Link de la tienda online con esta lista"><Share2 size={12} /></button>
+                  )}
                   <button onClick={() => openPdf(list)} className="btn btn-ghost btn-xs" title="Descargar PDF con fotos"><FileDown size={12} /></button>
                   {!list.isDefault && (
                     <>
@@ -471,6 +483,29 @@ export default function ListasDePreciosPage() {
               <button onClick={downloadPdf} disabled={pdfDownloading} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
                 {pdfDownloading ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><FileDown size={13} /> Descargar</>}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {shareList && (
+        <div className="modal-overlay" onClick={() => setShareList(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 800, fontSize: 15 }}>Tienda online con la lista &quot;{shareList.name}&quot;</span>
+              <button onClick={() => setShareList(null)} className="btn btn-ghost btn-xs"><X size={14} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
+                {shareList.isDefault
+                  ? 'Este es el link normal de tu tienda, con los precios minoristas.'
+                  : 'Quien entre con este link ve y paga los precios de esta lista en la tienda online. Los productos sin precio propio en la lista salen con el precio de Minorista. Mandáselo solo a los clientes que correspondan.'}
+              </div>
+              <input readOnly value={buildStoreListUrl(tenantSlug, shareList)} onFocus={(e) => e.target.select()} style={{ fontSize: 12 }} />
+              <StoreListLinkActions url={buildStoreListUrl(tenantSlug, shareList)} listName={shareList.name} storeName={tenantName} size="sm" />
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                La tienda tiene que estar activada (Tienda Online → Personalización).
+              </div>
             </div>
           </div>
         </div>

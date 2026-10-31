@@ -2039,6 +2039,7 @@ model PriceList {
   items   PriceListItem[]
   clients Client[]
   sales   Sale[]
+  orders  Order[]
 
   @@index([tenantId])
   @@index([isActive])
@@ -2195,6 +2196,12 @@ model Order {
 
   customerNotes String? @db.Text
 
+  // Lista de precios con la que se cotizo el pedido (link de la tienda con
+  // ?lista=<id>, o la lista asignada al cliente). Null = precio minorista.
+  // Se copia a Sale.priceListId al convertir el pedido en venta.
+  priceListId String?
+  priceList   PriceList? @relation(fields: [priceListId], references: [id])
+
   // Se completa recien al convertir el pedido en una venta real (ver
   // order.service.ts#convertToSale) - null hasta entonces.
   saleId String? @unique
@@ -2211,6 +2218,7 @@ model Order {
   @@index([status])
   @@index([tenantId, status])
   @@index([publicToken])
+  @@index([priceListId])
 }
 
 model OrderItem {

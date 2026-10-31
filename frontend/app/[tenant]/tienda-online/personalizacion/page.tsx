@@ -11,6 +11,8 @@ import { normalizeArray } from '@/lib/helpers';
 import { UploadCloud, Trash2, ImageOff, Save, Copy, ExternalLink, Clock } from 'lucide-react';
 import { DAY_NAMES, normalizeBusinessHours, type BusinessHoursDay } from '@/app/tienda/[tenantSlug]/businessHours';
 import ImageCropModal from '@/components/ImageCropModal';
+import StoreListLinkActions, { buildStoreListUrl } from '@/components/StoreListLinkActions';
+import type { PriceList } from '@/types';
 
 const BANNER_WIDTH = 1600;
 const BANNER_HEIGHT = 500;
@@ -38,6 +40,7 @@ export default function TiendaOnlinePersonalizacionPage() {
   const [uploading, setUploading] = useState(false);
   const [businessLocations, setBusinessLocations] = useState<BusinessLocation[]>([]);
   const [tenantSlug, setTenantSlug] = useState('');
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [hours, setHours] = useState<BusinessHoursDay[]>([]);
   const [bannerCropFile, setBannerCropFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,11 +48,13 @@ export default function TiendaOnlinePersonalizacionPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [cr, blr, tr] = await Promise.all([
+      const [cr, blr, tr, plr] = await Promise.all([
         api.get('/tienda-online/config').catch(() => null),
         api.get('/business-locations').catch(() => null),
         api.get('/tenant/me').catch(() => null),
+        api.get('/price-lists').catch(() => null),
       ]);
+      if (plr) setPriceLists(normalizeArray<PriceList>(plr.data).filter((l) => l.isActive !== false));
       if (cr) {
         setConfig(cr.data.content);
         setHours(normalizeBusinessHours(cr.data.content?.businessHours));
@@ -174,6 +179,31 @@ export default function TiendaOnlinePersonalizacionPage() {
           </div>
         )}
       </div>
+
+      {storeUrl && priceLists.length > 1 && (
+        <div className="card" style={{ padding: 22, maxWidth: 640, marginBottom: 16 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>Links por lista de precios</h2>
+          <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>
+            Mandale a cada cliente el link con su lista (ej. mayorista): la tienda le muestra y le cobra esos precios.
+            Los productos sin precio en la lista se venden a precio minorista. Los clientes con una lista asignada en su
+            ficha la ven automáticamente al ingresar con su cuenta.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {priceLists.map((list) => {
+              const url = buildStoreListUrl(tenantSlug, list);
+              return (
+                <div key={list.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{list.name}{list.isDefault ? ' (principal)' : ''}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>{url}</div>
+                  </div>
+                  <StoreListLinkActions url={url} listName={list.name} storeName={config.storeName} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ padding: 22, maxWidth: 640, marginBottom: 16 }}>
         <h2 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>Marca</h2>

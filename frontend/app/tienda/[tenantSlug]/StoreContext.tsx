@@ -18,7 +18,19 @@ export type StoreInfo = {
   contactAddress: string | null;
 };
 
-export const StoreContext = createContext<{ store: StoreInfo; tenantSlug: string } | null>(null);
+export type StorePriceList = { id: string; name: string };
+
+export const StoreContext = createContext<{
+  store: StoreInfo;
+  tenantSlug: string;
+  // Lista de precios pedida por link (?lista=<id>), recordada mientras el
+  // comprador navega la tienda. Se manda al catalogo y al checkout.
+  linkPriceListId: string | null;
+  // Lista que efectivamente aplica (la del link o la asignada al cliente
+  // logueado) - la informa el backend con cada pagina del catalogo.
+  priceList: StorePriceList | null;
+  setPriceList: (list: StorePriceList | null) => void;
+} | null>(null);
 
 export function useStore() {
   const ctx = useContext(StoreContext);
