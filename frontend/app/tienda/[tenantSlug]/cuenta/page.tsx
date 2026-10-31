@@ -3,15 +3,12 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useStore } from '../StoreContext';
 import { useAccount } from '../AccountContext';
 import { User, Mail, Lock, Phone, IdCard, UserCircle2, LogOut } from 'lucide-react';
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #D0D5DD', fontSize: 13, outline: 'none',
-};
 
 export default function TiendaCuentaPage() {
   const { store, tenantSlug } = useStore();
@@ -80,98 +77,75 @@ export default function TiendaCuentaPage() {
 
   if (account) {
     return (
-      <div style={{ paddingTop: 8, maxWidth: 420, margin: '0 auto', paddingBottom: 40, textAlign: 'center' }}>
-        <UserCircle2 size={40} style={{ color: 'var(--store-accent)', marginBottom: 10 }} />
-        <h2 style={{ fontSize: 16, fontWeight: 800, color: '#172033', marginBottom: 2 }}>{account.name}</h2>
-        <p style={{ fontSize: 12, color: '#667085', marginBottom: 24 }}>{account.email}</p>
-        <button
-          onClick={async () => { await logout(); }}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 8,
-            border: '1px solid #E4E7EC', background: '#fff', fontSize: 13, fontWeight: 700, color: '#F04438', cursor: 'pointer',
-          }}
-        >
-          <LogOut size={14} /> Cerrar sesión
-        </button>
+      <div className="t-narrow" style={{ maxWidth: 420, textAlign: 'center', paddingTop: 16 }}>
+        <UserCircle2 size={48} style={{ color: 'var(--store-accent)', marginBottom: 10 }} />
+        <h2 className="t-h2" style={{ marginBottom: 4 }}>{account.name}</h2>
+        <p className="t-muted" style={{ marginBottom: 24 }}>{account.email}</p>
+        <div className="t-stack">
+          <Link href={`/tienda/${tenantSlug}/productos`} className="t-btn">Ver productos</Link>
+          <button onClick={async () => { await logout(); }} className="t-btn t-btn-outline" style={{ color: '#F04438' }}>
+            <LogOut size={16} /> Cerrar sesión
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ paddingTop: 8, maxWidth: 420, margin: '0 auto', paddingBottom: 40 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 800, color: '#172033', marginBottom: 4, textAlign: 'center' }}>
+    <div className="t-narrow" style={{ maxWidth: 420 }}>
+      <h2 className="t-h2" style={{ marginBottom: 6, textAlign: 'center' }}>
         {tab === 'login' ? 'Ingresá a tu cuenta' : `Creá tu cuenta en ${store.storeName}`}
       </h2>
-      <p style={{ fontSize: 12, color: '#667085', marginBottom: 20, textAlign: 'center' }}>
+      <p className="t-muted" style={{ marginBottom: 20, textAlign: 'center' }}>
         Necesitás una cuenta para completar una compra en esta tienda.
       </p>
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: '#F7F8FA', padding: 4, borderRadius: 10 }}>
-        <button
-          onClick={() => setTab('login')}
-          style={tabButtonStyle(tab === 'login')}
-        >
+      <div className="t-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'login'} onClick={() => setTab('login')} className={`t-tab${tab === 'login' ? ' is-active' : ''}`}>
           Ya tengo cuenta
         </button>
-        <button
-          onClick={() => setTab('register')}
-          style={tabButtonStyle(tab === 'register')}
-        >
+        <button role="tab" aria-selected={tab === 'register'} onClick={() => setTab('register')} className={`t-tab${tab === 'register' ? ' is-active' : ''}`}>
           Crear cuenta
         </button>
       </div>
 
       {tab === 'login' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Field icon={Mail}><input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="Email" style={inputStyle} /></Field>
-          <Field icon={Lock}><input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Contraseña" style={inputStyle} onKeyDown={(e) => e.key === 'Enter' && submitLogin()} /></Field>
-          <button onClick={submitLogin} disabled={submitting} style={submitButtonStyle}>
+        <form className="t-stack" onSubmit={(e) => { e.preventDefault(); submitLogin(); }}>
+          <Field icon={Mail}><input className="t-input" type="email" inputMode="email" autoComplete="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="Email" /></Field>
+          <Field icon={Lock}><input className="t-input" type="password" autoComplete="current-password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Contraseña" /></Field>
+          <button type="submit" disabled={submitting} className="t-btn" style={{ marginTop: 4 }}>
             {submitting ? 'Ingresando...' : 'Ingresar'}
           </button>
-        </div>
+        </form>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Field icon={User}><input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre *" style={inputStyle} /></Field>
-            <Field><input value={apellido} onChange={(e) => setApellido(e.target.value)} placeholder="Apellido" style={inputStyle} /></Field>
+        <form className="t-stack" onSubmit={(e) => { e.preventDefault(); submitRegister(); }}>
+          <div className="t-row2">
+            <Field icon={User}><input className="t-input" autoComplete="given-name" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre *" /></Field>
+            <Field><input className="t-input" autoComplete="family-name" value={apellido} onChange={(e) => setApellido(e.target.value)} placeholder="Apellido" /></Field>
           </div>
-          <Field icon={IdCard}><input value={dni} onChange={(e) => setDni(e.target.value)} placeholder="DNI/CUIT *" style={inputStyle} /></Field>
-          <Field icon={Phone}><input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Teléfono" style={inputStyle} /></Field>
-          <Field icon={Mail}><input type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} placeholder="Email *" style={inputStyle} /></Field>
-          <Field icon={Lock}><input type="password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} placeholder="Contraseña (mínimo 6 caracteres) *" style={inputStyle} /></Field>
+          <Field icon={IdCard}><input className="t-input" inputMode="numeric" value={dni} onChange={(e) => setDni(e.target.value)} placeholder="DNI/CUIT *" /></Field>
+          <Field icon={Phone}><input className="t-input" type="tel" inputMode="tel" autoComplete="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Teléfono" /></Field>
+          <Field icon={Mail}><input className="t-input" type="email" inputMode="email" autoComplete="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} placeholder="Email *" /></Field>
+          <Field icon={Lock}><input className="t-input" type="password" autoComplete="new-password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} placeholder="Contraseña (mín. 6 caracteres) *" /></Field>
           <button
-            onClick={submitRegister}
+            type="submit"
             disabled={submitting || !nombre.trim() || !dni.trim() || !regEmail.trim() || regPassword.length < 6}
-            style={submitButtonStyle}
+            className="t-btn"
+            style={{ marginTop: 4 }}
           >
             {submitting ? 'Creando cuenta...' : 'Crear cuenta'}
           </button>
-        </div>
+        </form>
       )}
     </div>
   );
 }
 
 function Field({ icon: Icon, children }: { icon?: any; children: React.ReactNode }) {
-  if (!Icon) return <div style={{ flex: 1 }}>{children}</div>;
   return (
-    <div style={{ position: 'relative', flex: 1 }}>
-      <Icon size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#98A2B3' }} />
-      <div style={{ paddingLeft: 26 }}>{children}</div>
+    <div className={`t-field${Icon ? ' has-icon' : ''}`}>
+      {Icon && <Icon size={16} />}
+      {children}
     </div>
   );
 }
-
-function tabButtonStyle(active: boolean): React.CSSProperties {
-  return {
-    flex: 1, padding: '9px 10px', borderRadius: 8, border: 'none',
-    background: active ? '#fff' : 'transparent', color: active ? '#172033' : '#667085',
-    fontSize: 12, fontWeight: 700, cursor: 'pointer',
-    boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-  };
-}
-
-const submitButtonStyle: React.CSSProperties = {
-  width: '100%', padding: '11px 14px', borderRadius: 8, border: 'none',
-  background: 'var(--store-accent)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: 4,
-};

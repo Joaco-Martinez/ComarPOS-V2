@@ -3,7 +3,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
 import { StoreContext, type StoreInfo } from './StoreContext';
@@ -12,9 +12,14 @@ import { useCart } from './useCart';
 import { AccountContext, useAccountState } from './AccountContext';
 import { Store as StoreIcon, MapPin, Phone, Mail, ShoppingCart, Clock, UserCircle2 } from 'lucide-react';
 import { getOpenStatus, normalizeBusinessHours } from './businessHours';
+import './tienda.css';
+
+const money = (n: number) =>
+  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0);
 
 export default function TiendaLayout({ children }: { children: React.ReactNode }) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const pathname = usePathname();
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [unavailable, setUnavailable] = useState<string | null>(null);
@@ -96,104 +101,84 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
   const hours = normalizeBusinessHours(store.businessHours);
   const hasAnyHours = hours.some((h) => h.enabled);
   const openStatus = hasAnyHours ? getOpenStatus(hours) : null;
+  // Barra flotante "Ver carrito" en mobile: solo mientras se navega el
+  // catálogo (en carrito/checkout/pedido ya hay un CTA propio).
+  const showCartBar = cart.itemCount > 0 && !/\/(carrito|checkout|pedido|cuenta)(\/|$)/.test(pathname ?? '');
+  const phoneHref = store.contactPhone ? `tel:${store.contactPhone.replace(/[^\d+]/g, '')}` : null;
+  const mapsHref = store.contactAddress
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.contactAddress)}`
+    : null;
 
   return (
     <StoreContext.Provider value={{ store, tenantSlug }}>
-      <div style={{ '--store-accent': accent } as React.CSSProperties}>
+      <div className={`t-root${showCartBar ? ' has-cartbar' : ''}`} style={{ '--store-accent': accent } as React.CSSProperties}>
         {store.bannerUrl && (
-          <div style={{ width: '100%', height: 200, overflow: 'hidden', background: '#E4E7EC' }}>
-            <img src={store.bannerUrl} alt={store.storeName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div className="t-banner">
+            <img src={store.bannerUrl} alt={store.storeName} />
           </div>
         )}
 
-        <header style={{ maxWidth: 1080, margin: '0 auto', padding: '20px 20px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
-          {store.logoUrl ? (
-            <img src={store.logoUrl} alt={store.storeName} style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'cover', flexShrink: 0, border: '1px solid #E4E7EC' }} />
-          ) : (
-            <div style={{ width: 56, height: 56, borderRadius: 12, background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <StoreIcon size={24} style={{ color: '#fff' }} />
-            </div>
-          )}
-          <div style={{ minWidth: 0 }}>
-            <a href={`/tienda/${tenantSlug}`} style={{ textDecoration: 'none' }}>
-              <h1 style={{ fontSize: 20, fontWeight: 800, color: '#172033', margin: 0 }}>{store.storeName}</h1>
-            </a>
-            {(store.contactAddress || store.contactPhone || openStatus) && (
-              <div style={{ display: 'flex', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
-                {store.contactAddress && (
-                  <span style={{ fontSize: 12, color: '#667085', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <MapPin size={11} /> {store.contactAddress}
-                  </span>
-                )}
-                {store.contactPhone && (
-                  <span style={{ fontSize: 12, color: '#667085', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Phone size={11} /> {store.contactPhone}
-                  </span>
-                )}
+        <header className="t-header">
+          <div className="t-header-inner">
+            <Link href={`/tienda/${tenantSlug}`} className="t-brand">
+              {store.logoUrl ? (
+                <img src={store.logoUrl} alt="" className="t-logo" />
+              ) : (
+                <div className="t-logo"><StoreIcon size={22} /></div>
+              )}
+              <div style={{ minWidth: 0 }}>
+                <h1 className="t-store-name">{store.storeName}</h1>
                 {openStatus && (
-                  <span style={{
-                    fontSize: 12, display: 'flex', alignItems: 'center', gap: 4,
-                    color: openStatus.isOpenNow ? '#12B76A' : '#98A2B3',
-                  }}>
-                    <Clock size={11} /> {openStatus.isOpenNow ? 'Abierto ahora' : 'Cerrado'} · {openStatus.todayLabel}
-                  </span>
+                  <div className="t-store-status" style={{ color: openStatus.isOpenNow ? '#12B76A' : '#98A2B3' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 4, background: 'currentColor', flexShrink: 0 }} />
+                    {openStatus.isOpenNow ? 'Abierto ahora' : 'Cerrado'}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {!accountState.loading && (
-              accountState.account ? (
-                <Link
-                  href={`/tienda/${tenantSlug}/cuenta`}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', height: 44,
-                    borderRadius: 10, border: '1px solid #E4E7EC', background: '#fff', textDecoration: 'none',
-                    fontSize: 12, fontWeight: 700, color: '#172033',
-                  }}
-                  title={accountState.account.email}
-                >
-                  <UserCircle2 size={17} style={{ color: 'var(--store-accent)' }} />
-                  {accountState.account.name.split(' ')[0]}
-                </Link>
-              ) : (
-                <Link
-                  href={`/tienda/${tenantSlug}/cuenta`}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', height: 44,
-                    borderRadius: 10, border: '1px solid #E4E7EC', background: '#fff', textDecoration: 'none',
-                    fontSize: 12, fontWeight: 700, color: '#172033',
-                  }}
-                >
-                  <UserCircle2 size={17} /> Ingresar
-                </Link>
-              )
-            )}
-
-            <Link
-              href={`/tienda/${tenantSlug}/carrito`}
-              style={{
-                flexShrink: 0, position: 'relative', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', width: 44, height: 44,
-                borderRadius: 10, border: '1px solid #E4E7EC', background: '#fff', textDecoration: 'none',
-              }}
-            >
-              <ShoppingCart size={19} style={{ color: '#172033' }} />
-              {cart.itemCount > 0 && (
-                <span style={{
-                  position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
-                  background: 'var(--store-accent)', color: '#fff', fontSize: 10, fontWeight: 800,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
-                }}>
-                  {cart.itemCount}
-                </span>
-              )}
             </Link>
+
+            <div className="t-actions">
+              {!accountState.loading && (
+                <Link
+                  href={`/tienda/${tenantSlug}/cuenta`}
+                  className="t-icon-btn t-account"
+                  title={accountState.account?.email ?? 'Ingresar'}
+                  aria-label={accountState.account ? 'Mi cuenta' : 'Ingresar'}
+                >
+                  <UserCircle2 size={19} style={{ color: accountState.account ? 'var(--store-accent)' : undefined }} />
+                  <span className="t-hide-xs">{accountState.account ? accountState.account.name.split(' ')[0] : 'Ingresar'}</span>
+                </Link>
+              )}
+
+              <Link href={`/tienda/${tenantSlug}/carrito`} className="t-icon-btn" style={{ padding: 0, width: 44 }} aria-label="Carrito">
+                <ShoppingCart size={20} />
+                {cart.itemCount > 0 && <span className="t-badge">{cart.itemCount}</span>}
+              </Link>
+            </div>
           </div>
         </header>
 
-        <main style={{ maxWidth: 1080, margin: '0 auto', padding: '0 20px 60px' }}>
+        {(store.contactAddress || store.contactPhone || openStatus) && (
+          <div className="t-info">
+            {openStatus && (
+              <span className="t-chip">
+                <Clock size={13} style={{ flexShrink: 0 }} /> <span>{openStatus.todayLabel}</span>
+              </span>
+            )}
+            {store.contactAddress && mapsHref && (
+              <a className="t-chip" href={mapsHref} target="_blank" rel="noopener noreferrer">
+                <MapPin size={13} style={{ flexShrink: 0 }} /> <span>{store.contactAddress}</span>
+              </a>
+            )}
+            {store.contactPhone && phoneHref && (
+              <a className="t-chip" href={phoneHref}>
+                <Phone size={13} style={{ flexShrink: 0 }} /> <span>{store.contactPhone}</span>
+              </a>
+            )}
+          </div>
+        )}
+
+        <main className="t-main">
           <AccountContext.Provider value={accountState}>
             <CartContext.Provider value={cart}>
               {children}
@@ -201,14 +186,22 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
           </AccountContext.Provider>
         </main>
 
-        <footer style={{ borderTop: '1px solid #E4E7EC', padding: '20px', textAlign: 'center', fontSize: 11, color: '#98A2B3' }}>
+        <footer className="t-footer">
           {store.contactEmail && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 6 }}>
-              <Mail size={11} /> {store.contactEmail}
-            </div>
+            <a href={`mailto:${store.contactEmail}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 6, color: 'inherit', textDecoration: 'none' }}>
+              <Mail size={12} /> {store.contactEmail}
+            </a>
           )}
           Tienda impulsada por ComarPOS
         </footer>
+
+        {showCartBar && (
+          <Link href={`/tienda/${tenantSlug}/carrito`} className="t-cartbar">
+            <span className="t-cartbar-count">{cart.itemCount}</span>
+            <span className="t-cartbar-label">Ver carrito</span>
+            <span className="t-cartbar-total">{money(cart.total)}</span>
+          </Link>
+        )}
       </div>
     </StoreContext.Provider>
   );

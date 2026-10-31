@@ -93,14 +93,14 @@ export default function TiendaPedidoPage() {
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-        <div style={{ width: 24, height: 24, border: '3px solid #E4E7EC', borderTopColor: 'var(--store-accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <div className="t-spinner" />
       </div>
     );
   }
 
   if (error || !order) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 0', color: '#98A2B3' }}>
+      <div className="t-empty">
         <Package size={36} />
         <span style={{ fontSize: 14 }}>{error || 'Pedido no encontrado'}</span>
       </div>
@@ -118,7 +118,7 @@ export default function TiendaPedidoPage() {
   const needsProof = order.paymentMethod === 'TRANSFERENCIA' && order.status === 'PENDING';
 
   return (
-    <div style={{ paddingTop: 8, maxWidth: 560, paddingBottom: 40 }}>
+    <div className="t-narrow">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 14, borderRadius: 10, background: `${statusInfo.color}14`, marginBottom: 20 }}>
         <StatusIcon size={22} style={{ color: statusInfo.color, flexShrink: 0 }} />
         <div>
@@ -128,7 +128,7 @@ export default function TiendaPedidoPage() {
       </div>
 
       {needsProof && (
-        <div style={{ marginBottom: 20, padding: 16, borderRadius: 10, border: '1px dashed #D0D5DD' }}>
+        <div style={{ marginBottom: 20, padding: 16, borderRadius: 14, border: '1px dashed #D0D5DD', background: '#fff' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#172033', marginBottom: 6 }}>Subí tu comprobante de transferencia</div>
           <div style={{ fontSize: 12, color: '#667085', marginBottom: 12 }}>Foto o PDF del comprobante para que podamos confirmar tu pedido.</div>
           <input
@@ -141,11 +141,7 @@ export default function TiendaPedidoPage() {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            style={{
-              width: '100%', padding: '10px 12px', borderRadius: 8, border: 'none', background: 'var(--store-accent)',
-              color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              cursor: uploading ? 'default' : 'pointer',
-            }}
+            className="t-btn"
           >
             <UploadCloud size={15} /> {uploading ? 'Subiendo...' : 'Elegir archivo'}
           </button>
@@ -163,7 +159,7 @@ export default function TiendaPedidoPage() {
           const qty = item.quantityKg ?? item.quantity ?? 0;
           const name = item.product?.name || item.productNameSnapshot || 'Producto';
           return (
-            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10, border: '1px solid #E4E7EC', borderRadius: 10 }}>
+            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10, border: '1px solid #EAECF0', borderRadius: 14, background: '#fff' }}>
               <div style={{ width: 44, height: 44, borderRadius: 8, background: '#F7F8FA', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                 {item.product?.imageUrl ? (
                   <img src={item.product.imageUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -172,10 +168,10 @@ export default function TiendaPedidoPage() {
                 )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#172033' }}>{name}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#172033', overflowWrap: 'anywhere' }}>{name}</div>
                 <div style={{ fontSize: 11, color: '#98A2B3' }}>{qty} {item.product?.saleUnit === 'KG' ? 'kg' : 'un.'} × {money(item.unitPrice)}</div>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#172033' }}>{money(item.subtotal)}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#172033', whiteSpace: 'nowrap' }}>{money(item.subtotal)}</div>
             </div>
           );
         })}
@@ -185,7 +181,6 @@ export default function TiendaPedidoPage() {
         <span>Total</span><span>{money(order.total)}</span>
       </div>
 
-      <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
     </div>
   );
 }

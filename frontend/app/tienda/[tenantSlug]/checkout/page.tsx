@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import { useStore } from '../StoreContext';
 import { useCartContext } from '../CartContext';
 import { useAccount } from '../AccountContext';
-import { Package, Banknote, Landmark, Wallet, MessageCircle, UserCircle2 } from 'lucide-react';
+import { Package, Banknote, Landmark, Wallet, MessageCircle, UserCircle2, ArrowLeft } from 'lucide-react';
 
 const money = (n: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0);
@@ -78,29 +78,30 @@ export default function TiendaCheckoutPage() {
 
   if (cart.length === 0) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 0', color: '#98A2B3' }}>
-        <Package size={36} />
-        <span style={{ fontSize: 14 }}>Tu carrito está vacío</span>
+      <div className="t-empty">
+        <Package size={40} />
+        <span style={{ fontSize: 15, fontWeight: 700, color: '#344054' }}>Tu carrito está vacío</span>
+        <Link href={`/tienda/${tenantSlug}/productos`} className="t-btn" style={{ width: 'auto', marginTop: 8, paddingInline: 24 }}>
+          Ver productos
+        </Link>
       </div>
     );
   }
 
   if (!accountLoading && !account) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '60px 0', textAlign: 'center' }}>
-        <UserCircle2 size={40} style={{ color: '#98A2B3' }} />
+      <div className="t-empty" style={{ gap: 12 }}>
+        <UserCircle2 size={44} />
         <div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#172033', marginBottom: 4 }}>Necesitás una cuenta para comprar</div>
-          <p style={{ fontSize: 13, color: '#667085', maxWidth: 320 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#172033', marginBottom: 6 }}>Necesitás una cuenta para comprar</div>
+          <p style={{ fontSize: 14, color: '#667085', maxWidth: 320, lineHeight: 1.5 }}>
             Creá una cuenta o ingresá con la que ya tenés en {store.storeName} para completar tu pedido.
           </p>
         </div>
         <Link
           href={`/tienda/${tenantSlug}/cuenta?next=/tienda/${tenantSlug}/checkout`}
-          style={{
-            padding: '10px 20px', borderRadius: 8, border: 'none', background: 'var(--store-accent)',
-            color: '#fff', fontSize: 13, fontWeight: 700, textDecoration: 'none',
-          }}
+          className="t-btn"
+          style={{ width: 'auto', paddingInline: 24 }}
         >
           Ingresar o crear cuenta
         </Link>
@@ -108,121 +109,123 @@ export default function TiendaCheckoutPage() {
     );
   }
 
-  return (
-    <div style={{ paddingTop: 8, maxWidth: 560, paddingBottom: 40 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 800, color: '#172033', marginBottom: 16 }}>Finalizar compra</h2>
+  const itemsCount = cart.reduce((acc, l) => acc + (l.saleUnit === 'KG' ? 1 : l.quantity), 0);
 
-      <section style={{ marginBottom: 20 }}>
-        <h3 style={{ fontSize: 12, fontWeight: 700, color: '#667085', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>Tus datos</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+  return (
+    <div className="t-narrow">
+      <div className="t-section-head">
+        <h2 className="t-h2">Finalizar compra</h2>
+        <Link href={`/tienda/${tenantSlug}/carrito`} className="t-link">
+          <ArrowLeft size={14} /> Carrito
+        </Link>
+      </div>
+
+      <section className="t-section">
+        <h3 className="t-h3">Tus datos</h3>
+        <div className="t-stack">
           <input
+            className="t-input"
             value={customerName}
             onChange={(e) => setCustomerName(e.target.value)}
             placeholder="Nombre y apellido *"
-            style={inputStyle}
+            autoComplete="name"
           />
           <input
+            className="t-input"
+            type="tel"
+            inputMode="tel"
             value={customerPhone}
             onChange={(e) => setCustomerPhone(e.target.value)}
             placeholder="Teléfono"
-            style={inputStyle}
+            autoComplete="tel"
           />
           <input
+            className="t-input"
             type="email"
+            inputMode="email"
             value={customerEmail}
             onChange={(e) => setCustomerEmail(e.target.value)}
             placeholder="Email (opcional)"
-            style={inputStyle}
+            autoComplete="email"
           />
         </div>
       </section>
 
-      <section style={{ marginBottom: 20 }}>
-        <h3 style={{ fontSize: 12, fontWeight: 700, color: '#667085', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>Entrega</h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, border: '1px solid #D0D5DD', fontSize: 13, color: '#344054' }}>
-          <Package size={14} style={{ color: 'var(--store-accent)' }} /> Retiro en el local
+      <section className="t-section">
+        <h3 className="t-h3">Entrega</h3>
+        <div className="t-box">
+          <Package size={16} style={{ color: 'var(--store-accent)', flexShrink: 0 }} /> Retiro en el local
         </div>
       </section>
 
-      <section style={{ marginBottom: 20 }}>
-        <h3 style={{ fontSize: 12, fontWeight: 700, color: '#667085', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>Forma de pago</h3>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setPaymentMethod('EFECTIVO')} style={segButtonStyle(paymentMethod === 'EFECTIVO')}>
-            <Banknote size={14} /> Efectivo
+      <section className="t-section">
+        <h3 className="t-h3">Forma de pago</h3>
+        <div className="t-pay-grid">
+          <button onClick={() => setPaymentMethod('EFECTIVO')} className={`t-pay${paymentMethod === 'EFECTIVO' ? ' is-active' : ''}`} aria-pressed={paymentMethod === 'EFECTIVO'}>
+            <Banknote size={17} /> Efectivo
           </button>
-          <button onClick={() => setPaymentMethod('TRANSFERENCIA')} style={segButtonStyle(paymentMethod === 'TRANSFERENCIA')}>
-            <Landmark size={14} /> Transferencia
+          <button onClick={() => setPaymentMethod('TRANSFERENCIA')} className={`t-pay${paymentMethod === 'TRANSFERENCIA' ? ' is-active' : ''}`} aria-pressed={paymentMethod === 'TRANSFERENCIA'}>
+            <Landmark size={17} /> Transferencia
           </button>
           {store.mpEnabled && (
-            <button onClick={() => setPaymentMethod('MERCADOPAGO')} style={segButtonStyle(paymentMethod === 'MERCADOPAGO')}>
-              <Wallet size={14} /> Mercado Pago
+            <button onClick={() => setPaymentMethod('MERCADOPAGO')} className={`t-pay${paymentMethod === 'MERCADOPAGO' ? ' is-active' : ''}`} aria-pressed={paymentMethod === 'MERCADOPAGO'}>
+              <Wallet size={17} /> Mercado Pago
             </button>
           )}
           {store.contactPhone && (
-            <button onClick={() => setPaymentMethod('WHATSAPP')} style={segButtonStyle(paymentMethod === 'WHATSAPP')}>
-              <MessageCircle size={14} /> WhatsApp
+            <button onClick={() => setPaymentMethod('WHATSAPP')} className={`t-pay${paymentMethod === 'WHATSAPP' ? ' is-active' : ''}`} aria-pressed={paymentMethod === 'WHATSAPP'}>
+              <MessageCircle size={17} /> WhatsApp
             </button>
           )}
         </div>
         {paymentMethod === 'MERCADOPAGO' && (
-          <div style={{ marginTop: 10, padding: 12, borderRadius: 8, background: '#F7F8FA', fontSize: 12, color: '#344054' }}>
-            Te vamos a redirigir a Mercado Pago para completar el pago de forma segura.
-          </div>
+          <div className="t-note">Te vamos a redirigir a Mercado Pago para completar el pago de forma segura.</div>
         )}
         {paymentMethod === 'TRANSFERENCIA' && store.transferInstructions && (
-          <div style={{ marginTop: 10, padding: 12, borderRadius: 8, background: '#F7F8FA', fontSize: 12, color: '#344054', whiteSpace: 'pre-wrap' }}>
-            {store.transferInstructions}
-          </div>
+          <div className="t-note" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{store.transferInstructions}</div>
         )}
         {paymentMethod === 'WHATSAPP' && (
-          <div style={{ marginTop: 10, padding: 12, borderRadius: 8, background: '#F7F8FA', fontSize: 12, color: '#344054' }}>
+          <div className="t-note">
             Dejamos tu pedido como pendiente y te vamos a redirigir al WhatsApp del local con el detalle, para coordinar el pago y la entrega.
           </div>
         )}
       </section>
 
-      <section style={{ marginBottom: 20 }}>
+      <section className="t-section">
+        <h3 className="t-h3">Notas</h3>
         <textarea
+          className="t-input"
           value={customerNotes}
           onChange={(e) => setCustomerNotes(e.target.value)}
           placeholder="Notas para tu pedido (opcional)"
           rows={2}
-          style={{ ...inputStyle, resize: 'vertical' }}
         />
       </section>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16, paddingTop: 12, borderTop: '1px solid #E4E7EC' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#667085' }}>
-          <span>Subtotal</span><span>{money(total)}</span>
+      <section className="t-summary">
+        <h3 className="t-h3" style={{ marginBottom: 0 }}>Resumen · {itemsCount} producto{itemsCount === 1 ? '' : 's'}</h3>
+        <div className="t-mini-lines">
+          {cart.map((l) => {
+            const q = l.saleUnit === 'KG' ? l.quantityKg : l.quantity;
+            return (
+              <div key={l.productId} className="t-mini-line">
+                <span>{l.saleUnit === 'KG' ? `${q} kg` : `${q}×`} {l.name}</span>
+                <span>{money(l.price * q)}</span>
+              </div>
+            );
+          })}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 17, fontWeight: 800, color: '#172033', marginTop: 4 }}>
-          <span>Total</span><span>{money(total)}</span>
-        </div>
-      </div>
+      </section>
 
-      <button
-        onClick={submit}
-        disabled={!canSubmit}
-        style={{
-          width: '100%', padding: '13px 16px', borderRadius: 10, border: 'none',
-          background: canSubmit ? 'var(--store-accent)' : '#E4E7EC', color: canSubmit ? '#fff' : '#98A2B3',
-          fontSize: 14, fontWeight: 700, cursor: canSubmit ? 'pointer' : 'not-allowed',
-        }}
-      >
-        {submitting ? 'Confirmando...' : 'Confirmar pedido'}
-      </button>
+      <div className="t-sticky-cta">
+        <div className="t-total-row" style={{ marginBottom: 12 }}>
+          <span className="label">Total</span>
+          <span className="value">{money(total)}</span>
+        </div>
+        <button onClick={submit} disabled={!canSubmit} className="t-btn">
+          {submitting ? 'Confirmando...' : 'Confirmar pedido'}
+        </button>
+      </div>
     </div>
   );
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #D0D5DD', fontSize: 13, outline: 'none',
-};
-
-function segButtonStyle(active: boolean): React.CSSProperties {
-  return {
-    flex: 1, padding: '10px 12px', borderRadius: 8, border: `1px solid ${active ? 'var(--store-accent)' : '#D0D5DD'}`,
-    background: active ? 'var(--store-accent)' : '#fff', color: active ? '#fff' : '#344054',
-    fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer',
-  };
 }
