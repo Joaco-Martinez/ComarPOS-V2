@@ -157,6 +157,17 @@ export function getProductStock(product: any) {
   };
 }
 
+// Descuento a mostrar en la tienda: precio Minorista tachado + % off. Solo
+// si el precio final es realmente menor (un recargo no se muestra).
+export function discountInfo(price: number, regular: number) {
+  if (!Number.isFinite(regular) || regular <= 0 || !(price < regular)) {
+    return { regularPrice: null as number | null, discountPercent: null as number | null };
+  }
+  const pct = Math.round((1 - price / regular) * 100);
+  if (pct < 1) return { regularPrice: null as number | null, discountPercent: null as number | null };
+  return { regularPrice: round2(regular), discountPercent: pct };
+}
+
 // Exportada para order.service.ts: el checkout tiene que cobrar exactamente
 // el mismo precio que el catalogo publico le mostro al comprador (siempre
 // categoria Price/publica en la tienda, ver doc "tienda online por tenant" -
@@ -194,8 +205,17 @@ export function resolvePrice(product: any, category: CategoryClient, override?: 
     priceList = "WHOLESALE";
   }
 
+  // Precio "de lista" (Minorista, sin la lista de precios aplicada): la
+  // tienda lo muestra tachado con el % de descuento cuando la lista deja el
+  // producto mas barato que Minorista.
+  const regular = Number(isKg ? product.pricePerKg : product.price);
+  const finalPrice = round2(Number.isFinite(price) ? price : 0);
+  const discount = discountInfo(finalPrice, priceList === "PUBLIC" && hasOverride ? regular : NaN);
+
   return {
-    price: round2(Number.isFinite(price) ? price : 0),
+    price: finalPrice,
+    regularPrice: discount.regularPrice,
+    discountPercent: discount.discountPercent,
     priceList,
     publicPrice: round2(safePublicPrice),
     clientPrice: round2(safePublicPrice),
@@ -232,6 +252,8 @@ function mapVariant(variant: any, parent: any, customer: CustomerContext) {
     attributes: variant.variantAttributes ?? {},
     imageUrl: variant.imageUrl || parent.imageUrl || null,
     price: pricing.price,
+    regularPrice: pricing.regularPrice,
+    discountPercent: pricing.discountPercent,
     publicPrice: pricing.publicPrice,
     availableQuantity: stock.availableQuantity,
     availableKg: stock.availableKg,
@@ -253,6 +275,9 @@ function mapProduct(product: any, customer: CustomerContext) {
     const totalQty = variants.reduce((acc: number, v: any) => acc + v.availableQuantity, 0);
     const totalKg = variants.reduce((acc: number, v: any) => acc + v.availableKg, 0);
     const canSell = variants.some((v: any) => v.canSell);
+    // Descuento del "desde": el de la variante mas barata.
+    const cheapest = variants.find((v: any) => v.price === minPrice);
+    const discount = discountInfo(minPrice, Number(cheapest?.regularPrice ?? NaN));
 
     return {
       ...mapSimpleProduct({ ...product, type: ProductType.SIMPLE, components: [] }, customer),
@@ -260,6 +285,8 @@ function mapProduct(product: any, customer: CustomerContext) {
       variantOptions: product.variantOptions ?? [],
       variants,
       price: round2(minPrice),
+      regularPrice: discount.regularPrice,
+      discountPercent: discount.discountPercent,
       priceFrom: round2(minPrice),
       priceTo: round2(maxPrice),
       hasPriceRange: maxPrice !== minPrice,
@@ -293,6 +320,8 @@ function mapSimpleProduct(product: any, customer: CustomerContext) {
         }
       : null,
     price: pricing.price,
+    regularPrice: pricing.regularPrice,
+    discountPercent: pricing.discountPercent,
     priceList: pricing.priceList,
     publicPrice: pricing.publicPrice,
     clientPrice: pricing.clientPrice,

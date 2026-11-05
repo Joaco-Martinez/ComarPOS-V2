@@ -221,6 +221,12 @@ body:has(.t-root) {
 }
 .t-card-price { font-size: 16px; font-weight: 800; color: #172033; margin-top: 4px; line-height: 1.2; overflow-wrap: anywhere; }
 .t-card-price small { font-size: 11px; font-weight: 600; color: #667085; }
+/* Descuento por lista de precios: precio Minorista tachado + % off */
+.t-card-regular { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 12px; color: #98A2B3; line-height: 1.2; }
+.t-card-regular s { text-decoration-thickness: 1px; }
+.t-card-regular + .t-card-price { margin-top: 0; }
+.t-discount-pill { font-size: 11px; font-weight: 800; color: #067647; background: #DCFAE6; border-radius: 6px; padding: 1px 6px; }
+.t-discount-badge { position: absolute; top: 8px; left: 8px; background: #D92D20; color: #fff; font-size: 12px; font-weight: 800; border-radius: 8px; padding: 3px 7px; }
 .t-card-meta { font-size: 11px; color: #667085; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .t-card-meta.is-out { color: #F04438; }
 .t-card-btn {

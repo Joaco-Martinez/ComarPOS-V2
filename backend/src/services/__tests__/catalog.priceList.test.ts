@@ -39,6 +39,27 @@ describe("resolvePrice con lista de precios", () => {
   });
 });
 
+describe("descuento a mostrar en la tienda", () => {
+  it("lista mas barata que Minorista: precio tachado + % off", () => {
+    const r = resolvePrice(unitProduct, "Price" as any, { price: 850, pricePerKg: null });
+    expect(r.price).toBe(850);
+    expect(r.regularPrice).toBe(1000);
+    expect(r.discountPercent).toBe(15);
+  });
+
+  it("por kg compara contra el precio por kg", () => {
+    const r = resolvePrice(kgProduct, "Price" as any, { price: 0, pricePerKg: 4500 });
+    expect(r.regularPrice).toBe(5000);
+    expect(r.discountPercent).toBe(10);
+  });
+
+  it("sin lista, con recargo o Mayorista no muestra descuento", () => {
+    expect(resolvePrice(unitProduct, "Price" as any).discountPercent).toBeNull();
+    expect(resolvePrice(unitProduct, "Price" as any, { price: 1100, pricePerKg: null }).discountPercent).toBeNull();
+    expect(resolvePrice(unitProduct, "Mayorista" as any, { price: 750, pricePerKg: null }).discountPercent).toBeNull();
+  });
+});
+
 describe("resolveStorefrontPriceList", () => {
   beforeEach(() => findFirst.mockReset());
 

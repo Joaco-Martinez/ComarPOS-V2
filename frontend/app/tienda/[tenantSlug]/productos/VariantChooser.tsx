@@ -12,6 +12,8 @@ export type StoreVariant = {
   attributes: Record<string, string>;
   imageUrl: string | null;
   price: number;
+  regularPrice?: number | null;
+  discountPercent?: number | null;
   stockLabel: string;
   canSell: boolean;
   maxQuantity?: number | null;
@@ -62,6 +64,10 @@ export default function VariantChooser({ name, description, imageUrl, saleUnit, 
   const maxPrice = Math.max(...prices);
   const unit = saleUnit === 'KG' ? '/kg' : '';
   const shownImage = chosen?.imageUrl || imageUrl;
+  // Descuento por lista de precios: el de la variante elegida, o el de la
+  // más barata (la del "desde").
+  const discountRefRaw = chosen ?? variants.find((v) => v.price === minPrice);
+  const discountRef = discountRefRaw?.discountPercent && discountRefRaw.regularPrice != null ? discountRefRaw : null;
 
   // Bloquea el scroll del fondo mientras la hoja está abierta y cierra con Esc.
   useEffect(() => {
@@ -92,7 +98,13 @@ export default function VariantChooser({ name, description, imageUrl, saleUnit, 
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#172033', lineHeight: 1.25 }}>{name}</div>
               {description && <div style={{ fontSize: 14, color: '#667085', marginTop: 6, lineHeight: 1.5 }}>{description}</div>}
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#172033', marginTop: 10 }}>
+              {discountRef && (
+                <div className="t-card-regular" style={{ marginTop: 10, fontSize: 14 }}>
+                  <s>{money(discountRef.regularPrice!)}{unit}</s>
+                  <span className="t-discount-pill">{discountRef.discountPercent}% OFF</span>
+                </div>
+              )}
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#172033', marginTop: discountRef ? 2 : 10 }}>
                 {chosen
                   ? `${money(chosen.price)}${unit}`
                   : minPrice === maxPrice ? `${money(minPrice)}${unit}` : `Desde ${money(minPrice)}${unit}`}

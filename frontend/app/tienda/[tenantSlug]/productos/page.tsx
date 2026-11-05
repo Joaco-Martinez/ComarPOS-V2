@@ -26,6 +26,10 @@ type StoreProduct = {
   saleUnit: string;
   category: { id: string; name: string; slug: string } | null;
   price: number;
+  // Precio Minorista tachado + % off cuando la lista de precios lo deja más
+  // barato (null = sin descuento).
+  regularPrice?: number | null;
+  discountPercent?: number | null;
   stockLabel: string;
   canSell: boolean;
   // Stock que se puede poner en el carrito (null = sin tope).
@@ -238,9 +242,16 @@ export default function TiendaProductosPage() {
                       <Package size={28} style={{ color: '#D0D5DD' }} />
                     )}
                     {!p.canSell && <span className="t-soldout">Sin stock</span>}
+                    {p.canSell && !!p.discountPercent && <span className="t-discount-badge">-{p.discountPercent}%</span>}
                   </div>
                   <div className="t-card-body">
                     <h3 className="t-card-name">{p.name}</h3>
+                    {!!p.discountPercent && p.regularPrice != null && (
+                      <div className="t-card-regular">
+                        <s>{money(p.regularPrice)}</s>
+                        <span className="t-discount-pill">{p.discountPercent}% OFF</span>
+                      </div>
+                    )}
                     <div className="t-card-price">
                       {p.hasPriceRange && <small>Desde </small>}
                       {money(p.price)}
