@@ -10,7 +10,7 @@ import { useParams } from 'next/navigation';
 // navegador. No usa el store de notificaciones (Notification model) a
 // proposito: esto es un anuncio de producto para TODOS los usuarios, no un
 // evento de negocio individual.
-const LATEST_ID = 'medios-de-pago-2026-10-28';
+const LATEST_ID = 'barcodes-categoria-2026-11-13';
 const STORAGE_KEY = 'comarpos-whatsnew-seen';
 
 export default function WhatsNewModal() {
@@ -40,21 +40,20 @@ export default function WhatsNewModal() {
             </div>
             <div>
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Novedades</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Descuentos por medio de pago</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Códigos de barra por categoría</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-xs" onClick={dismiss}><X size={14} /></button>
         </div>
 
         <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, margin: '0 0 12px' }}>
-          Ahora podés premiar el pago en efectivo (o cobrar un recargo con tarjeta) sin que el vendedor tenga que acordarse de cargarlo a mano.
+          Ahora podés imprimir las etiquetas de toda una categoría de una sola vez, sin buscar producto por producto.
         </p>
 
         <ul style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 18px', paddingLeft: 18 }}>
-          <li><strong>Configuralo</strong> en Administración → Medios de pago (o desde el POS, debajo del medio de pago): por ejemplo, Efectivo con 10% de descuento o Tarjeta con 15% de recargo.</li>
-          <li><strong>Se aplica solo</strong>: en el POS, al elegir el medio de pago, el descuento o recargo aparece en el resumen y en el total.</li>
-          <li><strong>Para una venta puntual</strong> el vendedor lo puede quitar con la ✕ o cargar otro descuento a mano.</li>
-          <li><strong>Lista de precios en PDF</strong>: en Listas de precios descargá cualquier lista con la foto, el precio y el stock de cada producto.</li>
+          <li><strong>Dónde</strong>: en Productos → Códigos de barra, elegí una categoría en el nuevo filtro (o &quot;Sin categoría&quot;).</li>
+          <li><strong>Se combina con el proveedor</strong>: por ejemplo, solo las Bebidas de un proveedor.</li>
+          <li><strong>Actúa sobre lo filtrado</strong>: &quot;Seleccionar todos&quot;, &quot;Cantidad = stock&quot; y la descarga en PDF o Excel incluyen solo esos productos.</li>
         </ul>
 
         <div style={{ display: 'flex', gap: 8 }}>

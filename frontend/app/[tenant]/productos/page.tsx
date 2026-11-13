@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
@@ -77,6 +77,7 @@ export default function ProductosPage() {
   const [barcodeSize, setBarcodeSize] = useState<Record<string, BarcodeSize>>({});
   const [barcodeSearch, setBarcodeSearch] = useState('');
   const [barcodeSupplier, setBarcodeSupplier] = useState('');
+  const [barcodeCategory, setBarcodeCategory] = useState('');
   const [barcodeDownloading, setBarcodeDownloading] = useState<'pdf' | 'excel' | null>(null);
   // Listas de precios extra para imprimir en la etiqueta debajo del precio
   // principal (ej. "Efectivo"). La default (Minorista) ya es el precio.
@@ -411,20 +412,25 @@ export default function ProductosPage() {
   const barcodeProducts = useMemo(
     () => products
       .flatMap((p) => (p.hasVariants
-        ? sortedVariants(p).map((v) => ({ ...v, supplierId: v.supplierId ?? p.supplierId, parent: { id: p.id, name: p.name, sku: p.sku, imageUrl: p.imageUrl, variantOptions: p.variantOptions, hasVariants: true } }))
+        ? sortedVariants(p).map((v) => ({ ...v, supplierId: v.supplierId ?? p.supplierId, categoryId: v.categoryId ?? p.categoryId, parent: { id: p.id, name: p.name, sku: p.sku, imageUrl: p.imageUrl, variantOptions: p.variantOptions, hasVariants: true } }))
         : [p]))
       .filter((p) => p.sku && p.sku.trim() && p.isActive !== false),
     [products]
   );
 
+  // Filtros de proveedor y categoria ('none' = sin asignar).
+  const barcodeMatchesFilters = useCallback((p: { supplierId?: string | null; categoryId?: string | null }) => {
+    if (barcodeSupplier && (barcodeSupplier === 'none' ? !!p.supplierId : p.supplierId !== barcodeSupplier)) return false;
+    if (barcodeCategory && (barcodeCategory === 'none' ? !!p.categoryId : p.categoryId !== barcodeCategory)) return false;
+    return true;
+  }, [barcodeSupplier, barcodeCategory]);
+
   const barcodeFiltered = useMemo(() => {
-    const bySupplier = barcodeSupplier
-      ? barcodeProducts.filter((p) => (barcodeSupplier === 'none' ? !p.supplierId : p.supplierId === barcodeSupplier))
-      : barcodeProducts;
-    if (!barcodeSearch.trim()) return bySupplier;
+    const byFilters = barcodeProducts.filter(barcodeMatchesFilters);
+    if (!barcodeSearch.trim()) return byFilters;
     const q = barcodeSearch.toLowerCase();
-    return bySupplier.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || Boolean(p.parent?.name.toLowerCase().includes(q)));
-  }, [barcodeProducts, barcodeSearch, barcodeSupplier]);
+    return byFilters.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || Boolean(p.parent?.name.toLowerCase().includes(q)));
+  }, [barcodeProducts, barcodeSearch, barcodeMatchesFilters]);
 
   const openBarcodeModal = () => {
     const selected: Record<string, boolean> = {};
@@ -436,6 +442,7 @@ export default function ProductosPage() {
     setBarcodeSize(size);
     setBarcodeSearch('');
     setBarcodeSupplier('');
+    setBarcodeCategory('');
     setBarcodeModal(true);
     api.get('/price-lists')
       .then(({ data }) => setBarcodePriceLists(normalizeArray<PriceList>(data).filter((pl) => !pl.isDefault)))
@@ -472,16 +479,14 @@ export default function ProductosPage() {
     setBarcodeSize(next);
   };
 
-  // Con un proveedor elegido solo cuentan los productos de ese proveedor,
-  // aunque otros hayan quedado tildados (al abrir se tildan todos).
+  // Con un proveedor o categoria elegidos solo cuentan los productos que
+  // coinciden, aunque otros hayan quedado tildados (al abrir se tildan todos).
   const barcodeSelectedIds = useMemo(() => {
     const ids = Object.entries(barcodeSelected).filter(([, v]) => v).map(([id]) => id);
-    if (!barcodeSupplier) return ids;
-    const allowed = new Set(barcodeProducts
-      .filter((p) => (barcodeSupplier === 'none' ? !p.supplierId : p.supplierId === barcodeSupplier))
-      .map((p) => p.id));
+    if (!barcodeSupplier && !barcodeCategory) return ids;
+    const allowed = new Set(barcodeProducts.filter(barcodeMatchesFilters).map((p) => p.id));
     return ids.filter((id) => allowed.has(id));
-  }, [barcodeSelected, barcodeSupplier, barcodeProducts]);
+  }, [barcodeSelected, barcodeSupplier, barcodeCategory, barcodeProducts, barcodeMatchesFilters]);
 
   const downloadBarcodes = async (type: 'pdf' | 'excel') => {
     if (barcodeSelectedIds.length === 0) {
@@ -1168,6 +1173,16 @@ export default function ProductosPage() {
                   <option value="">Todos los proveedores</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   <option value="none">Sin proveedor</option>
+                </select>
+                <select
+                  value={barcodeCategory}
+                  onChange={(e) => setBarcodeCategory(e.target.value)}
+                  style={{ flex: '0 1 220px' }}
+                  title="Filtrar por categoría"
+                >
+                  <option value="">Todas las categorías</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="none">Sin categoría</option>
                 </select>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)' }}>

@@ -14,6 +14,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2.10',
+    date: '2026-11-13',
+    title: 'Códigos de barra por categoría',
+    sections: [
+      {
+        title: 'Nuevo',
+        items: [
+          'Códigos de barra por categoría: en Productos → Códigos de barra, además de filtrar por proveedor, ahora podés filtrar por categoría (o "Sin categoría"). Los dos filtros se combinan, y "Seleccionar todos", "Cantidad = stock" y la descarga en PDF/Excel actúan solo sobre lo filtrado.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.9',
     date: '2026-10-28',
     title: 'Descuentos por medio de pago y lista de precios en PDF',
