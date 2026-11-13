@@ -138,7 +138,8 @@ export const priceListController = {
     try {
       const result = await priceListService.bulkApply(
         getParamAsString(req.params.id, "id"),
-        Number(req.body.percentage)
+        Number(req.body.percentage),
+        { roundToInteger: req.body.round === true || req.body.round === "true" }
       );
 
       return sendServiceResponse(res, result);

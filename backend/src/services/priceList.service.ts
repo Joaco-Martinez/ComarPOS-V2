@@ -274,7 +274,7 @@ export const priceListService = {
    * lista con el nuevo porcentaje, calculado siempre desde Minorista, nunca
    * desde un override previo, para que el resultado sea predecible).
    */
-  async bulkApply(priceListId: string, percentage: number) {
+  async bulkApply(priceListId: string, percentage: number, options: { roundToInteger?: boolean } = {}) {
     const list = await prisma.priceList.findFirst({ where: { id: priceListId, ...tenantScope() } });
 
     if (!list) {
@@ -297,7 +297,10 @@ export const priceListService = {
     });
 
     const factor = 1 + percentage / 100;
-    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    // roundToInteger: precios enteros, sin centavos (ej. 1.234,56 -> 1.235).
+    const round2 = options.roundToInteger
+      ? (n: number) => Math.round(n)
+      : (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
     await prisma.$transaction(
       products.map((product) =>

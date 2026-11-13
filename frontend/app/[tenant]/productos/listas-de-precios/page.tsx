@@ -7,7 +7,9 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { PriceList, Product, ProductCategory } from '@/types';
 import { fmtMoney, normalizeArray, num } from '@/lib/helpers';
-import { Plus, Edit2, Trash2, X, Search, Lock, ChevronDown, ChevronRight, FileDown, Share2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Search, Lock, ChevronDown, ChevronRight, ChevronLeft, FileDown, Share2 } from 'lucide-react';
+
+const PAGE_SIZE = 40;
 import StoreListLinkActions, { buildStoreListUrl } from '@/components/StoreListLinkActions';
 import { matchesSearch, sortedVariants } from '@/lib/variants';
 import { useAuthStore } from '@/store/auth';
@@ -25,6 +27,7 @@ export default function ListasDePreciosPage() {
   // detalle), con un % sobre Minorista (ej. -10 para una lista "Efectivo").
   const [loadAll, setLoadAll] = useState(true);
   const [loadAllPct, setLoadAllPct] = useState('0');
+  const [loadAllRound, setLoadAllRound] = useState(true);
   const [editing, setEditing] = useState<PriceList | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -32,6 +35,8 @@ export default function ListasDePreciosPage() {
   const [detailSearch, setDetailSearch] = useState('');
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [bulkPct, setBulkPct] = useState('');
+  const [bulkRound, setBulkRound] = useState(true);
+  const [detailPage, setDetailPage] = useState(0);
   const [applyingBulk, setApplyingBulk] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -77,6 +82,7 @@ export default function ListasDePreciosPage() {
       const { data } = await api.get(`/price-lists/${list.id}`);
       setDetail(data);
       setDetailSearch('');
+      setDetailPage(0);
       setPriceDrafts({});
       setBulkPct('');
     } catch {
@@ -88,7 +94,7 @@ export default function ListasDePreciosPage() {
     if (!detail || bulkPct === '') return;
     setApplyingBulk(true);
     try {
-      const { data } = await api.post(`/price-lists/${detail.id}/bulk-apply`, { percentage: num(bulkPct) });
+      const { data } = await api.post(`/price-lists/${detail.id}/bulk-apply`, { percentage: num(bulkPct), round: bulkRound });
       toast.success(`${data.count} productos cargados con ${num(bulkPct) >= 0 ? '+' : ''}${bulkPct}%`);
       const { data: refreshed } = await api.get(`/price-lists/${detail.id}`);
       setDetail(refreshed);
@@ -130,7 +136,7 @@ export default function ListasDePreciosPage() {
     }
   };
 
-  const openCreate = () => { setForm({ name: '', description: '' }); setLoadAll(true); setLoadAllPct('0'); setEditing(null); setModal('create'); };
+  const openCreate = () => { setForm({ name: '', description: '' }); setLoadAll(true); setLoadAllPct('0'); setLoadAllRound(true); setEditing(null); setModal('create'); };
   const openEdit = (list: PriceList) => {
     setForm({ name: list.name, description: list.description ?? '' });
     setEditing(list);
@@ -145,7 +151,7 @@ export default function ListasDePreciosPage() {
         const { data: created } = await api.post('/price-lists', form);
         if (loadAll && created?.id) {
           const pct = num(loadAllPct);
-          const { data: bulk } = await api.post(`/price-lists/${created.id}/bulk-apply`, { percentage: pct });
+          const { data: bulk } = await api.post(`/price-lists/${created.id}/bulk-apply`, { percentage: pct, round: loadAllRound });
           toast.success(`Lista creada con ${bulk.count} productos${pct !== 0 ? ` (${pct > 0 ? '+' : ''}${pct}% sobre Minorista)` : ''}`);
         } else {
           toast.success('Lista de precios creada');
@@ -178,7 +184,9 @@ export default function ListasDePreciosPage() {
     () => (detailSearch.trim() ? products.filter((p) => matchesSearch(p, detailSearch)) : products),
     [products, detailSearch]
   );
-  const detailProducts = detailMatches.slice(0, 40);
+  const totalPages = Math.max(1, Math.ceil(detailMatches.length / PAGE_SIZE));
+  const currentPage = Math.min(detailPage, totalPages - 1);
+  const detailProducts = detailMatches.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const overrideFor = (productId: string) => detail?.items?.find((i) => i.productId === productId);
 
@@ -322,6 +330,10 @@ export default function ListasDePreciosPage() {
                         />
                         <span style={{ fontSize: 12, color: 'var(--text3)' }}>%</span>
                       </div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 8, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={loadAllRound} onChange={(e) => setLoadAllRound(e.target.checked)} />
+                        Redondear precios (sin decimales)
+                      </label>
                       <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
                         Negativo = más barato (ej. -10 para una lista de pago en efectivo), positivo = recargo, 0 = mismo precio.
                         Después podés cambiar el precio de cada producto desde el detalle de la lista.
@@ -382,18 +394,22 @@ export default function ListasDePreciosPage() {
                         {applyingBulk ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Aplicar a todos'}
                       </button>
                     </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={bulkRound} onChange={(e) => setBulkRound(e.target.checked)} />
+                      Redondear precios (sin decimales)
+                    </label>
                   </div>
 
                   <div style={{ position: 'relative', marginBottom: 10 }}>
                     <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--text3)' }} />
                     <input
                       value={detailSearch}
-                      onChange={(e) => setDetailSearch(e.target.value)}
+                      onChange={(e) => { setDetailSearch(e.target.value); setDetailPage(0); }}
                       placeholder="Buscar producto por nombre o SKU..."
                       style={{ paddingLeft: 30 }}
                     />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflowY: 'auto' }}>
+                  <div key={currentPage} style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflowY: 'auto' }}>
                     {detailProducts.map((p) => {
                       if (!p.hasVariants) return renderPriceRow(p);
                       const variants = sortedVariants(p);
@@ -427,12 +443,31 @@ export default function ListasDePreciosPage() {
                         </div>
                       );
                     })}
-                    {detailMatches.length > detailProducts.length && (
-                      <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', padding: 6 }}>
-                        Mostrando {detailProducts.length} de {detailMatches.length} productos. Buscá por nombre o SKU para encontrar el resto.
-                      </div>
+                    {detailMatches.length === 0 && (
+                      <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: 12 }}>No se encontraron productos.</div>
                     )}
                   </div>
+                  {totalPages > 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 10 }}>
+                      <button
+                        onClick={() => setDetailPage(currentPage - 1)}
+                        disabled={currentPage === 0}
+                        className="btn btn-secondary btn-xs" style={{ gap: 4 }}
+                      >
+                        <ChevronLeft size={12} /> Anterior
+                      </button>
+                      <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+                        {currentPage * PAGE_SIZE + 1}–{currentPage * PAGE_SIZE + detailProducts.length} de {detailMatches.length} · Página {currentPage + 1} de {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setDetailPage(currentPage + 1)}
+                        disabled={currentPage >= totalPages - 1}
+                        className="btn btn-secondary btn-xs" style={{ gap: 4 }}
+                      >
+                        Siguiente <ChevronRight size={12} />
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
