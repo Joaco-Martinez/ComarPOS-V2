@@ -23,7 +23,7 @@ export type PreviewProduct = {
   extraPrices: { listId: string; label: string; price: number }[];
 };
 
-const MM_PX = 96 / 25.4;
+export const MM_PX = 96 / 25.4;
 const PT_PX = 96 / 72;
 
 const barcodeCache = new Map<string, string>();
@@ -55,6 +55,7 @@ export default function LabelPreview({
   selectedElement,
   onSelectElement,
   onOverflowChange,
+  compact = false,
 }: {
   design: LabelDesign;
   product: PreviewProduct;
@@ -62,6 +63,8 @@ export default function LabelPreview({
   selectedElement?: LabelElementKey | null;
   onSelectElement?: (key: LabelElementKey) => void;
   onOverflowChange?: (overflow: boolean) => void;
+  // Miniatura: sin el texto de aviso (solo el borde rojo si no entra).
+  compact?: boolean;
 }) {
   const barcodeUrl = useBarcodeDataUrl(product.sku);
   const mm = (n: number) => n * MM_PX * zoom;
@@ -174,8 +177,8 @@ export default function LabelPreview({
           {elements}
         </div>
       </div>
-      {overflow && (
-        <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>No entra todo: achicá algo o agrandá la etiqueta</span>
+      {overflow && !compact && (
+        <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600, textAlign: 'center', maxWidth: '100%' }}>No entra todo: achicá algo o agrandá la etiqueta</span>
       )}
     </div>
   );

@@ -55,17 +55,21 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
   // valor fijo a mano porque en mobile el header puede pasar a 2 lineas
   // (title+actions largos, ver @media max-width:640px en globals.css) -- un
   // numero fijo se hubiera desincronizado en ese caso.
+  // Depende de loading/user: mientras carga la sesion se muestra el spinner
+  // (sin <header>), y con [] el efecto corria una sola vez con headerRef
+  // vacio -- nunca se media y quedaba en 56px (contenido tapado en mobile).
+  const headerMounted = !loading && !!user;
   useEffect(() => {
     const el = headerRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
 
     const observer = new ResizeObserver((entries) => {
-      const height = entries[0]?.contentRect.height;
+      const height = entries[0]?.borderBoxSize?.[0]?.blockSize ?? entries[0]?.contentRect.height;
       if (height) setHeaderHeight(Math.ceil(height));
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [headerMounted]);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');

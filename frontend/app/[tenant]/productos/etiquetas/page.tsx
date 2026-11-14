@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
-import LabelPreview, { type PreviewProduct } from '@/components/labels/LabelPreview';
+import LabelPreview, { MM_PX, type PreviewProduct } from '@/components/labels/LabelPreview';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { PriceList, Product, ProductCategory, Supplier } from '@/types';
@@ -45,12 +45,6 @@ const SWATCHES = ['#000000', '#dc2626', '#2563eb', '#16a34a', '#ea580c', '#7c3ae
 type BarcodeProduct = Product & { parent?: { id: string; name: string } };
 type ListPrices = Record<string, { price: number; pricePerKg?: number | null }>;
 
-const sectionStyle: React.CSSProperties = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 10,
-  padding: 14,
-};
 const smallLabel: React.CSSProperties = { fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3 };
 
 export default function EtiquetasPage() {
@@ -340,17 +334,17 @@ export default function EtiquetasPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 62 }}>Tamaño</span>
-        <button className="btn btn-secondary btn-xs" onClick={() => onChange({ size: Math.max(4, style.size - 0.5) })} aria-label="Achicar letra">A−</button>
+        <button className="btn btn-secondary btn-xs lbl-tap" onClick={() => onChange({ size: Math.max(4, style.size - 0.5) })} aria-label="Achicar letra">A−</button>
         <input
-          type="number" min={4} max={48} step={0.5}
+          type="number" inputMode="decimal" min={4} max={48} step={0.5}
           value={style.size}
           onChange={(e) => onChange({ size: Math.min(48, Math.max(4, num(e.target.value) || 4)) })}
           style={{ width: 64, textAlign: 'center' }}
           aria-label="Tamaño de letra en puntos"
         />
-        <button className="btn btn-secondary btn-xs" onClick={() => onChange({ size: Math.min(48, style.size + 0.5) })} aria-label="Agrandar letra">A+</button>
+        <button className="btn btn-secondary btn-xs lbl-tap" onClick={() => onChange({ size: Math.min(48, style.size + 0.5) })} aria-label="Agrandar letra">A+</button>
         <button
-          className={`btn btn-xs ${style.bold ? 'btn-primary' : 'btn-secondary'}`}
+          className={`btn btn-xs lbl-tap ${style.bold ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => onChange({ bold: !style.bold })}
           aria-pressed={style.bold}
           title="Negrita"
@@ -359,10 +353,11 @@ export default function EtiquetasPage() {
         </button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 62 }}>Color</span>
+        <span className="lbl-ctl-label" style={{ fontSize: 12, color: 'var(--text2)', minWidth: 62 }}>Color</span>
         {SWATCHES.map((c) => (
           <button
             key={c}
+            className="lbl-swatch"
             onClick={() => onChange({ color: c })}
             aria-label={`Color ${c}`}
             style={{
@@ -386,7 +381,7 @@ export default function EtiquetasPage() {
           {([['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]] as const).map(([a, Icon]) => (
             <button
               key={a}
-              className={`btn btn-xs ${style.align === a ? 'btn-primary' : 'btn-secondary'}`}
+              className={`btn btn-xs lbl-tap ${style.align === a ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => onChange({ align: a })}
               aria-pressed={style.align === a}
               title={a === 'left' ? 'Izquierda' : a === 'center' ? 'Centro' : 'Derecha'}
@@ -414,6 +409,7 @@ export default function EtiquetasPage() {
                 <button
                   key={n}
                   className={`btn btn-xs ${design.name.maxLines === n ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ minHeight: 36 }}
                   onClick={() => updateDesign((d) => ({ ...d, name: { ...d.name, maxLines: n } }))}
                 >
                   {n === 1 ? '1 renglón' : 'Hasta 2'}
@@ -515,40 +511,93 @@ export default function EtiquetasPage() {
     }
   };
 
+  // Zoom de las vistas previas segun el ancho disponible: en celular la
+  // etiqueta grande se achica para entrar entera, en PC se ve a 2x.
+  const [sizesEl, setSizesEl] = useState<HTMLDivElement | null>(null);
+  const [previewEl, setPreviewEl] = useState<HTMLDivElement | null>(null);
+  const sizesW = useElementWidth(sizesEl);
+  const previewW = useElementWidth(previewEl);
+  const SIZE_CARD_PAD = 8;
+  const SIZE_GAP = 8;
+  const totalSizesPx = LABEL_SIZE_KEYS.reduce((acc, s) => acc + designs[s].widthMm * MM_PX, 0);
+  const sizesZoom = sizesW > 0
+    ? Math.min(1, (sizesW - SIZE_GAP * 2 - SIZE_CARD_PAD * 2 * 3 - 12) / totalSizesPx)
+    : 1;
+  const previewZoom = previewW > 0
+    ? Math.max(0.3, Math.min(2, (previewW - 2) / (design.widthMm * MM_PX)))
+    : 1.5;
+
   return (
     <AppLayout
       title="Etiquetas"
       subtitle="Elegí los productos, diseñá la etiqueta y descargá el PDF para imprimir"
       actions={
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <a href={`/${tenant}/productos`} className="btn btn-ghost btn-sm" style={{ gap: 6 }}>
-            <ArrowLeft size={13} /> Productos
+        <div style={{ display: 'flex', gap: 8 }}>
+          <a href={`/${tenant}/productos`} className="btn btn-ghost btn-sm" style={{ gap: 6 }} aria-label="Volver a Productos">
+            <ArrowLeft size={13} /> <span className="lbl-hide-sm">Productos</span>
           </a>
-          <button onClick={() => download('excel')} disabled={!!downloading || selectedIds.length === 0} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+          <button onClick={() => download('excel')} disabled={!!downloading || selectedIds.length === 0} className="btn btn-secondary btn-sm" style={{ gap: 6 }} aria-label="Descargar Excel">
             {downloading === 'excel' ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <FileSpreadsheet size={13} />}
-            Excel
+            <span className="lbl-hide-sm">Excel</span>
           </button>
           <button onClick={() => download('pdf')} disabled={!!downloading || selectedIds.length === 0} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
             {downloading === 'pdf' ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <Download size={13} />}
-            PDF para imprimir
+            PDF<span className="lbl-hide-sm">para imprimir</span>
           </button>
         </div>
       }
     >
+      <style>{`
+        /* clip (no hidden): con hidden el body pasa a ser contenedor de
+           scroll y la vista previa fija (sticky) no se queda arriba. Mismo
+           arreglo que la tienda online (tienda.css). */
+        html:has(.lbl-page), body:has(.lbl-page) { overflow-x: clip; }
+        .lbl-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; min-width: 0; }
+        .lbl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+        .lbl-sizes { display: flex; gap: ${SIZE_GAP}px; align-items: stretch; }
+        .lbl-size-card { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; padding: ${SIZE_CARD_PAD}px; cursor: pointer; border-radius: 10px; min-width: 0; }
+        .lbl-editor { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+        .lbl-preview-wrap { background: linear-gradient(var(--surface2), var(--surface2)), var(--bg); border-radius: 10px; padding: 16px; position: sticky; top: calc(var(--app-header-height, 56px) + 12px); z-index: 5; }
+        .lbl-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+        .lbl-filters input { flex: 1 1 200px; min-width: 0; }
+        .lbl-filters select { flex: 0 1 220px; min-width: 0; }
+        .lbl-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 130px 84px; grid-template-areas: "chk name size qty"; align-items: center; gap: 6px 8px; padding: 8px; border-bottom: 1px solid var(--border2); }
+        .lbl-row:last-child { border-bottom: none; }
+        .lbl-tap { display: inline-flex; align-items: center; justify-content: center; }
+        @media (max-width: 767px) {
+          .lbl-section { padding: 12px; border-radius: 12px; }
+          .lbl-hide-sm { display: none; }
+          .lbl-sample { flex: 1 1 100%; }
+          .lbl-sample select { flex: 1; min-width: 0; max-width: none !important; }
+          .lbl-size-card .lbl-size-mm { display: none; }
+          .lbl-editor { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+          .lbl-preview-wrap { padding: 10px; top: var(--app-header-height, 56px); border-radius: 0 0 12px 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+          .lbl-toolbar { width: 100%; }
+          .lbl-toolbar > button { flex: 1 1 auto; justify-content: center; min-height: 36px; }
+          .lbl-tap { min-width: 40px; min-height: 40px; }
+          .lbl-swatch { width: 32px !important; height: 32px !important; }
+          .lbl-ctl-label { flex-basis: 100%; }
+          .lbl-filters input, .lbl-filters select { flex: 1 1 100%; }
+          .lbl-bulk { width: 100%; justify-content: space-between; }
+          .lbl-row { grid-template-columns: 32px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "chk name name" ". size qty"; padding: 10px 8px; }
+          .lbl-row select, .lbl-row input[type=number] { width: 100% !important; min-height: 40px; font-size: 16px !important; }
+          .lbl-list { max-height: none !important; }
+        }
+      `}</style>
       {loading ? (
         <div style={{ padding: 40, textAlign: 'center' }}><span className="spinner" /></div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="lbl-page" style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
           {/* 1. Tamanos */}
-          <section style={sectionStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          <section className="lbl-section">
+            <div className="lbl-head">
               <div>
                 <div style={{ fontWeight: 800, fontSize: 15 }}>1. Tamaños</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>Así queda cada tamaño (a escala real en pantalla). Tocá uno para editarlo.</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>Así queda cada tamaño. Tocá uno para editarlo.</div>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
+              <label className="lbl-sample" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
                 <Eye size={13} /> Ver con:
-                <select value={sampleId} onChange={(e) => setSampleId(e.target.value)} style={{ maxWidth: 240, fontSize: 12 }}>
+                <select value={sampleId} onChange={(e) => setSampleId(e.target.value)} style={{ maxWidth: 240 }}>
                   {sampleOptions.length === 0 && <option value="">Producto de ejemplo</option>}
                   {sampleOptions.map((p) => (
                     <option key={p.id} value={p.id}>{p.parent ? `${p.parent.name} ${p.variantLabel ?? ''}` : p.name}</option>
@@ -556,25 +605,24 @@ export default function EtiquetasPage() {
                 </select>
               </label>
             </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="lbl-sizes" ref={setSizesEl}>
               {LABEL_SIZE_KEYS.map((s) => (
                 <button
                   key={s}
+                  className="lbl-size-card"
                   onClick={() => setEditSize(s)}
                   aria-pressed={editSize === s}
                   style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 12, cursor: 'pointer',
-                    borderRadius: 10, background: editSize === s ? 'var(--accent-dim)' : 'var(--surface2)',
+                    background: editSize === s ? 'var(--accent-dim)' : 'var(--surface2)',
                     border: editSize === s ? '2px solid var(--accent)' : '2px solid transparent',
-                    maxWidth: '100%', overflow: 'hidden',
                   }}
                 >
-                  <LabelPreview design={designs[s]} product={sample} zoom={1} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
-                    {SIZE_LABELS[s]} · {designs[s].widthMm}×{designs[s].heightMm} mm
+                  <LabelPreview design={designs[s]} product={sample} zoom={sizesZoom} compact />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', textAlign: 'center' }}>
+                    {SIZE_LABELS[s]}<span className="lbl-size-mm"> · {designs[s].widthMm}×{designs[s].heightMm} mm</span>
                   </span>
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                    {countBySize[s] > 0 ? `${countBySize[s]} etiqueta${countBySize[s] === 1 ? '' : 's'} a imprimir` : 'Ninguna a imprimir'}
+                  <span style={{ fontSize: 11, color: countBySize[s] > 0 ? 'var(--accent)' : 'var(--text3)', fontWeight: countBySize[s] > 0 ? 700 : 400, textAlign: 'center' }}>
+                    {countBySize[s] > 0 ? `${countBySize[s]} a imprimir` : 'Ninguna'}
                   </span>
                 </button>
               ))}
@@ -582,15 +630,15 @@ export default function EtiquetasPage() {
           </section>
 
           {/* 2. Editor */}
-          <section style={sectionStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <section className="lbl-section">
+            <div className="lbl-head">
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15 }}>2. Diseño de la etiqueta {SIZE_LABELS[editSize].toLowerCase()}</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>Tocá un elemento en la etiqueta o en la lista para cambiarlo.</div>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>2. Diseño · {SIZE_LABELS[editSize]} <span style={{ fontWeight: 500, color: 'var(--text3)', fontSize: 13 }}>{design.widthMm}×{design.heightMm} mm</span></div>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>Tocá una parte de la etiqueta o de la lista para cambiarla.</div>
               </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div className="lbl-toolbar" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button onClick={copyStyleToOthers} className="btn btn-ghost btn-xs" title="Copia colores, negritas, orden y estilos a los otros tamaños (las letras se escalan)">
-                  Copiar estilo a los otros tamaños
+                  Copiar a otros tamaños
                 </button>
                 <button onClick={resetSize} className="btn btn-ghost btn-xs" style={{ gap: 4 }}>
                   <RotateCcw size={12} /> Restablecer
@@ -602,44 +650,34 @@ export default function EtiquetasPage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 16, alignItems: 'start' }}>
-              {/* Vista grande */}
-              <div style={{ background: 'var(--surface2)', borderRadius: 10, padding: 16, display: 'flex', justifyContent: 'center', overflowX: 'auto', minHeight: 200, alignItems: 'center' }}>
-                <LabelPreview
-                  design={design}
-                  product={sample}
-                  zoom={design.widthMm > 70 ? 1.6 : 2}
-                  selectedElement={editElement}
-                  onSelectElement={setEditElement}
-                />
+            <div className="lbl-editor">
+              {/* Vista grande (queda fija arriba mientras se editan los controles) */}
+              <div className="lbl-preview-wrap">
+                <div ref={setPreviewEl} style={{ display: 'flex', justifyContent: 'center', minWidth: 0 }}>
+                  <LabelPreview
+                    design={design}
+                    product={sample}
+                    zoom={previewZoom}
+                    selectedElement={editElement}
+                    onSelectElement={setEditElement}
+                  />
+                </div>
               </div>
 
               {/* Controles */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div>
-                  <div style={{ ...smallLabel, marginBottom: 6 }}>Medidas</div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      Ancho
-                      <input type="number" min={15} max={200} value={design.widthMm}
-                        onChange={(e) => updateDesign((d) => ({ ...d, widthMm: Math.min(200, Math.max(15, num(e.target.value) || 15)) }))}
-                        style={{ width: 60, textAlign: 'center' }} /> mm
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      Alto
-                      <input type="number" min={10} max={200} value={design.heightMm}
-                        onChange={(e) => updateDesign((d) => ({ ...d, heightMm: Math.min(200, Math.max(10, num(e.target.value) || 10)) }))}
-                        style={{ width: 60, textAlign: 'center' }} /> mm
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={design.border} onChange={(e) => updateDesign((d) => ({ ...d, border: e.target.checked }))} />
-                      Borde para cortar
-                    </label>
-                  </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{ELEMENT_LABELS[editElement]}</div>
+                  {!design[editElement].show && (
+                    <div style={{ fontSize: 12, color: 'var(--warn)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      Está oculto. <button className="btn btn-secondary btn-xs" onClick={() => toggleShow(editElement)}>Mostrar</button>
+                    </div>
+                  )}
+                  {elementEditor()}
                 </div>
 
                 <div>
-                  <div style={{ ...smallLabel, marginBottom: 6 }}>Elementos (de arriba hacia abajo)</div>
+                  <div style={{ ...smallLabel, marginBottom: 6 }}>Partes de la etiqueta (de arriba hacia abajo)</div>
                   <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
                     {design.order.map((key, i) => {
                       const shown = design[key].show;
@@ -648,130 +686,131 @@ export default function EtiquetasPage() {
                         <div
                           key={key}
                           style={{
-                            display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
+                            display: 'flex', alignItems: 'center', gap: 4, padding: '4px 6px',
                             background: active ? 'var(--accent-dim)' : 'transparent',
                             borderTop: i > 0 ? '1px solid var(--border)' : undefined,
                           }}
                         >
-                          <button className="btn btn-ghost btn-xs" onClick={() => toggleShow(key)} title={shown ? 'Ocultar' : 'Mostrar'} aria-label={shown ? `Ocultar ${ELEMENT_LABELS[key]}` : `Mostrar ${ELEMENT_LABELS[key]}`}>
-                            {shown ? <Eye size={13} /> : <EyeOff size={13} style={{ opacity: 0.5 }} />}
+                          <button className="btn btn-ghost btn-xs lbl-tap" onClick={() => toggleShow(key)} title={shown ? 'Ocultar' : 'Mostrar'} aria-label={shown ? `Ocultar ${ELEMENT_LABELS[key]}` : `Mostrar ${ELEMENT_LABELS[key]}`}>
+                            {shown ? <Eye size={14} /> : <EyeOff size={14} style={{ opacity: 0.5 }} />}
                           </button>
                           <button
                             onClick={() => setEditElement(key)}
-                            style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: active ? 700 : 500, color: shown ? 'var(--text)' : 'var(--text3)', padding: '2px 0' }}
+                            style={{ flex: 1, minWidth: 0, minHeight: 36, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: active ? 700 : 500, color: shown ? 'var(--text)' : 'var(--text3)', padding: '2px 0' }}
                           >
                             {ELEMENT_LABELS[key]}
                           </button>
-                          <button className="btn btn-ghost btn-xs" onClick={() => moveElement(key, -1)} disabled={i === 0} aria-label="Subir"><ArrowUp size={12} /></button>
-                          <button className="btn btn-ghost btn-xs" onClick={() => moveElement(key, 1)} disabled={i === design.order.length - 1} aria-label="Bajar"><ArrowDown size={12} /></button>
+                          <button className="btn btn-ghost btn-xs lbl-tap" onClick={() => moveElement(key, -1)} disabled={i === 0} aria-label={`Subir ${ELEMENT_LABELS[key]}`}><ArrowUp size={14} /></button>
+                          <button className="btn btn-ghost btn-xs lbl-tap" onClick={() => moveElement(key, 1)} disabled={i === design.order.length - 1} aria-label={`Bajar ${ELEMENT_LABELS[key]}`}><ArrowDown size={14} /></button>
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{ELEMENT_LABELS[editElement]}</div>
-                  {!design[editElement].show && (
-                    <div style={{ fontSize: 12, color: 'var(--warn)' }}>
-                      Está oculto. <button className="btn btn-ghost btn-xs" onClick={() => toggleShow(editElement)}>Mostrar</button>
-                    </div>
-                  )}
-                  {elementEditor()}
+                <div>
+                  <div style={{ ...smallLabel, marginBottom: 6 }}>Medidas de la etiqueta</div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 13, color: 'var(--text2)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Ancho
+                      <input type="number" inputMode="numeric" min={15} max={200} value={design.widthMm}
+                        onChange={(e) => updateDesign((d) => ({ ...d, widthMm: Math.min(200, Math.max(15, num(e.target.value) || 15)) }))}
+                        style={{ width: 64, textAlign: 'center' }} /> mm
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Alto
+                      <input type="number" inputMode="numeric" min={10} max={200} value={design.heightMm}
+                        onChange={(e) => updateDesign((d) => ({ ...d, heightMm: Math.min(200, Math.max(10, num(e.target.value) || 10)) }))}
+                        style={{ width: 64, textAlign: 'center' }} /> mm
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minHeight: 36 }}>
+                      <input type="checkbox" checked={design.border} onChange={(e) => updateDesign((d) => ({ ...d, border: e.target.checked }))} />
+                      Borde para cortar
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
           </section>
 
           {/* 3. Productos */}
-          <section style={sectionStyle}>
+          <section className="lbl-section">
             <div style={{ fontWeight: 800, fontSize: 15 }}>3. Productos</div>
             <p style={{ fontSize: 12, color: 'var(--text3)', margin: '2px 0 10px' }}>
               Elegí los productos, el tamaño y cuántas etiquetas querés de cada uno. Solo se listan los productos activos con SKU cargado.
             </p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre o SKU..." style={{ flex: '1 1 200px' }} />
-              <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)} style={{ flex: '0 1 220px' }} title="Filtrar por proveedor">
+            <div className="lbl-filters">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre o SKU..." />
+              <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)} title="Filtrar por proveedor">
                 <option value="">Todos los proveedores</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 <option value="none">Sin proveedor</option>
               </select>
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ flex: '0 1 220px' }} title="Filtrar por categoría">
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} title="Filtrar por categoría">
                 <option value="">Todas las categorías</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 <option value="none">Sin categoría</option>
               </select>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minHeight: 36 }}>
                 <input type="checkbox" checked={filtered.length > 0 && filtered.every((p) => selected[p.id])} onChange={(e) => toggleAll(e.target.checked)} />
-                Seleccionar todos
+                Todos
               </label>
               <span>· {selectedIds.length} seleccionados</span>
-              <button onClick={applyStockQty} className="btn btn-secondary btn-xs" title="Pone como cantidad de etiquetas el stock actual de cada producto seleccionado">
+              <button onClick={applyStockQty} className="btn btn-secondary btn-xs" style={{ minHeight: 32 }} title="Pone como cantidad de etiquetas el stock actual de cada producto seleccionado">
                 Cantidad = stock
               </button>
-              <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className="lbl-bulk" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
                 Tamaño para todos:
                 <select
                   defaultValue=""
                   onChange={(e) => { if (e.target.value) applySizeToAll(e.target.value as LabelSize); e.target.value = ''; }}
-                  style={{ fontSize: 11 }}
                 >
                   <option value="" disabled>Elegir...</option>
                   {LABEL_SIZE_KEYS.map((s) => <option key={s} value={s}>{SIZE_LABELS[s]}</option>)}
                 </select>
               </span>
             </div>
-            <div style={{ maxHeight: 480, overflowY: 'auto', border: '1px solid var(--border2)', borderRadius: 6 }}>
+            <div className="lbl-list" style={{ maxHeight: 480, overflowY: 'auto', border: '1px solid var(--border2)', borderRadius: 8 }}>
               {filtered.length === 0 ? (
                 <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>No hay productos con SKU que coincidan.</div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <tbody>
-                    {filtered.map((p) => (
-                      <tr key={p.id} style={{ borderBottom: '1px solid var(--border2)' }}>
-                        <td style={{ padding: '6px 8px', width: 28 }}>
-                          <input type="checkbox" checked={!!selected[p.id]} onChange={(e) => setSelected((prev) => ({ ...prev, [p.id]: e.target.checked }))} aria-label={`Seleccionar ${p.name}`} />
-                        </td>
-                        <td style={{ padding: '6px 8px', fontSize: 12 }}>
-                          <button
-                            onClick={() => setSampleId(p.id)}
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'inherit' }}
-                            title="Ver en la vista previa"
-                          >
-                            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{p.parent ? p.parent.name : p.name}</div>
-                            {p.parent && <div style={{ fontSize: 11, color: 'var(--text2)' }}>{p.variantLabel}</div>}
-                            <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text3)' }}>
-                              {p.sku} · stock {p.saleUnit === 'KG' ? fmtKg(productStock(p)) : productStock(p)}
-                            </div>
-                          </button>
-                        </td>
-                        <td style={{ padding: '6px 8px', width: 130 }}>
-                          <select
-                            value={sizeOf[p.id] ?? 'mediano'}
-                            disabled={!selected[p.id]}
-                            onChange={(e) => setSizeOf((prev) => ({ ...prev, [p.id]: e.target.value as LabelSize }))}
-                            style={{ width: '100%', fontSize: 11 }}
-                            title="Tamaño de la etiqueta"
-                          >
-                            {LABEL_SIZE_KEYS.map((s) => <option key={s} value={s}>{SIZE_LABELS[s]}</option>)}
-                          </select>
-                        </td>
-                        <td style={{ padding: '6px 8px', width: 90, textAlign: 'right' }}>
-                          <input
-                            type="number" min="1" step="1"
-                            value={qty[p.id] ?? '1'}
-                            disabled={!selected[p.id]}
-                            onChange={(e) => setQty((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                            style={{ width: 70, textAlign: 'center' }}
-                            title="Cantidad de etiquetas"
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                filtered.map((p) => (
+                  <div key={p.id} className="lbl-row" style={{ opacity: selected[p.id] ? 1 : 0.6 }}>
+                    <div style={{ gridArea: 'chk', display: 'flex', justifyContent: 'center' }}>
+                      <input type="checkbox" checked={!!selected[p.id]} onChange={(e) => setSelected((prev) => ({ ...prev, [p.id]: e.target.checked }))} aria-label={`Seleccionar ${p.name}`} style={{ width: 18, height: 18 }} />
+                    </div>
+                    <button
+                      onClick={() => setSampleId(p.id)}
+                      style={{ gridArea: 'name', minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'inherit', fontSize: 13 }}
+                      title="Ver en la vista previa"
+                    >
+                      <div style={{ fontWeight: 600, color: 'var(--text)', overflowWrap: 'anywhere' }}>{p.parent ? p.parent.name : p.name}</div>
+                      {p.parent && <div style={{ fontSize: 12, color: 'var(--text2)' }}>{p.variantLabel}</div>}
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)', overflowWrap: 'anywhere' }}>
+                        {p.sku} · stock {p.saleUnit === 'KG' ? fmtKg(productStock(p)) : productStock(p)}
+                      </div>
+                    </button>
+                    <select
+                      value={sizeOf[p.id] ?? 'mediano'}
+                      disabled={!selected[p.id]}
+                      onChange={(e) => setSizeOf((prev) => ({ ...prev, [p.id]: e.target.value as LabelSize }))}
+                      style={{ gridArea: 'size', width: '100%', minWidth: 0 }}
+                      aria-label="Tamaño de la etiqueta"
+                    >
+                      {LABEL_SIZE_KEYS.map((s) => <option key={s} value={s}>{SIZE_LABELS[s]}</option>)}
+                    </select>
+                    <input
+                      type="number" inputMode="numeric" min="1" step="1"
+                      value={qty[p.id] ?? '1'}
+                      disabled={!selected[p.id]}
+                      onChange={(e) => setQty((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                      style={{ gridArea: 'qty', width: '100%', minWidth: 0, textAlign: 'center' }}
+                      aria-label="Cantidad de etiquetas"
+                    />
+                  </div>
+                ))
               )}
             </div>
           </section>
@@ -779,4 +818,18 @@ export default function EtiquetasPage() {
       )}
     </AppLayout>
   );
+}
+
+// Ancho de un elemento, actualizado al rotar el celular o achicar la ventana.
+function useElementWidth(el: HTMLElement | null) {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    if (!el) return;
+    setWidth(el.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return width;
 }
