@@ -591,6 +591,19 @@ export const productController = {
     }
   },
 
+  async labelPreview(req: Request, res: Response, next: NextFunction) {
+    try {
+      const body = req.body ?? {};
+      res.json(await barcodeService.previewData({
+        sampleId: typeof body.sampleId === "string" && body.sampleId ? body.sampleId : undefined,
+        productIds: asIdList(body.productIds),
+        priceListIds: asIdList(body.priceListIds),
+      }));
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getLabelDesign(_req: Request, res: Response, next: NextFunction) {
     try {
       res.json({ designs: await barcodeService.getSavedDesigns() });

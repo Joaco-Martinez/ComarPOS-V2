@@ -85,6 +85,7 @@ router.post("/barcodes/excel", authMiddleware, productController.barcodesExcel);
 // Diseno de las etiquetas (Productos -> Etiquetas), compartido por el negocio.
 router.get("/barcodes/design", authMiddleware, productController.getLabelDesign);
 router.put("/barcodes/design", authMiddleware, productController.saveLabelDesign);
+router.post("/barcodes/preview", authMiddleware, productController.labelPreview);
 
 // CRUD
 router.get("/", authMiddleware, productController.getAll);

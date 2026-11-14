@@ -43,7 +43,6 @@ const ELEMENT_LABELS: Record<LabelElementKey, string> = {
 const SWATCHES = ['#000000', '#dc2626', '#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#6b7280'];
 
 type BarcodeProduct = Product & { parent?: { id: string; name: string } };
-type ListPrices = Record<string, { price: number; pricePerKg?: number | null }>;
 
 const smallLabel: React.CSSProperties = { fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3 };
 
@@ -62,7 +61,6 @@ export default function EtiquetasPage() {
   const [supplierFilter, setSupplierFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [listSel, setListSel] = useState<Record<string, boolean>>({});
-  const [listPrices, setListPrices] = useState<Record<string, ListPrices>>({});
   const [downloading, setDownloading] = useState<'pdf' | 'excel' | null>(null);
 
   const [designs, setDesigns] = useState<LabelDesigns>(DEFAULT_DESIGNS);
@@ -171,18 +169,11 @@ export default function EtiquetasPage() {
     setSizeOf(next);
   };
 
-  // Precios de las listas tildadas (para la vista previa con un producto real).
-  const toggleList = async (list: PriceList, checked: boolean) => {
+  const toggleList = (list: PriceList, checked: boolean) => {
     setListSel((prev) => ({ ...prev, [list.id]: checked }));
-    if (!checked || listPrices[list.id]) return;
-    try {
-      const { data } = await api.get(`/price-lists/${list.id}`);
-      const map: ListPrices = {};
-      (data?.content?.items ?? data?.items ?? []).forEach((i: any) => { map[i.productId] = { price: i.price, pricePerKg: i.pricePerKg }; });
-      setListPrices((prev) => ({ ...prev, [list.id]: map }));
-    } catch { /* la vista previa muestra un precio de ejemplo */ }
   };
   const activeLists = priceLists.filter((pl) => listSel[pl.id]);
+  const activeListKey = activeLists.map((l) => l.id).join(',');
 
   // Producto de muestra para la vista previa.
   const sampleOptions = useMemo(() => {
@@ -191,23 +182,48 @@ export default function EtiquetasPage() {
     return (list.length > 0 ? list : barcodeProducts).slice(0, 300);
   }, [barcodeProducts, selectedIds]);
   const sampleProduct = sampleOptions.find((o) => o.id === sampleId) ?? sampleOptions[0];
-  const sampleMissingLists = sampleProduct
-    ? activeLists.filter((l) => listPrices[l.id] && !listPrices[l.id][sampleProduct.id])
+
+  // Precios de otras listas del producto de muestra: los calcula el backend
+  // con la misma funcion que arma el PDF (POST /products/barcodes/preview),
+  // asi la vista previa muestra exactamente lo que se va a imprimir.
+  const [samplePrices, setSamplePrices] = useState<{ key: string; extraPrices: PreviewProduct['extraPrices'] } | null>(null);
+  const sampleKey = sampleProduct ? `${sampleProduct.id}|${activeListKey}` : '';
+  useEffect(() => {
+    const [id, lists] = sampleKey.split('|');
+    if (!id || !lists) return;
+    let cancelled = false;
+    api.post('/products/barcodes/preview', { sampleId: id, priceListIds: lists.split(',') })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const extra = (data?.sample?.extraPrices ?? []) as PreviewProduct['extraPrices'];
+        setSamplePrices({ key: sampleKey, extraPrices: extra });
+      })
+      .catch(() => { if (!cancelled) setSamplePrices(null); });
+    return () => { cancelled = true; };
+  }, [sampleKey]);
+  const loadedExtras = samplePrices && samplePrices.key === sampleKey ? samplePrices.extraPrices : null;
+  const sampleMissingLists = sampleProduct && loadedExtras
+    ? activeLists.filter((l) => !loadedExtras.some((e) => e.listId === l.id))
     : [];
 
   // Cuantos de los seleccionados tienen precio en cada lista tildada (los
-  // que no, salen sin esa linea).
-  const listCoverage = useMemo(() => {
-    const out: Record<string, number> = {};
-    activeLists.forEach((l) => {
-      const map = listPrices[l.id];
-      if (map) out[l.id] = selectedIds.filter((id) => map[id]).length;
-    });
-    return out;
-  }, [activeLists, listPrices, selectedIds]);
+  // que no, salen sin esa linea). Se pide con una pausa para no consultar
+  // en cada tilde.
+  const [listCoverage, setListCoverage] = useState<Record<string, number>>({});
+  const selectedKey = selectedIds.join(',');
+  useEffect(() => {
+    if (!activeListKey || !selectedKey) { setListCoverage({}); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      api.post('/products/barcodes/preview', { productIds: selectedKey.split(','), priceListIds: activeListKey.split(',') })
+        .then(({ data }) => { if (!cancelled) setListCoverage(data?.coverage ?? {}); })
+        .catch(() => { if (!cancelled) setListCoverage({}); });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [activeListKey, selectedKey]);
 
   const sample = useMemo<PreviewProduct>(() => {
-    const p = sampleOptions.find((o) => o.id === sampleId) ?? sampleOptions[0];
+    const p = sampleProduct;
     if (!p) {
       return {
         name: 'Producto de ejemplo',
@@ -222,15 +238,11 @@ export default function EtiquetasPage() {
       name: p.parent ? `${p.parent.name} ${p.variantLabel ?? ''}`.trim() : p.name,
       sku: p.sku ?? '',
       price,
-      extraPrices: activeLists.flatMap((l) => {
-        const map = listPrices[l.id];
-        if (!map) return [{ listId: l.id, label: l.name, price }];
-        const item = map[p.id];
-        if (!item) return [];
-        return [{ listId: l.id, label: l.name, price: isKg ? item.pricePerKg ?? item.price : item.price }];
-      }),
+      // Mientras llega la respuesta se dejan las lineas con el precio base
+      // (asi no "salta" la etiqueta); despues, las reales.
+      extraPrices: loadedExtras ?? activeLists.map((l) => ({ listId: l.id, label: l.name, price })),
     };
-  }, [sampleOptions, sampleId, activeLists, listPrices]);
+  }, [sampleProduct, activeLists, loadedExtras]);
 
   // ---- edicion del diseno ----
   const design = designs[editSize];

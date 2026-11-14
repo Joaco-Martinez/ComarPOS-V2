@@ -341,7 +341,36 @@ async function exportExcel(params: { productIds?: string[]; priceListIds?: strin
   return wb.xlsx.writeBuffer();
 }
 
+// Datos para la vista previa de Productos -> Etiquetas, sacados con la MISMA
+// funcion que arma el PDF (getProducts), para que lo que se ve en pantalla
+// (ej. la linea "Efectivo: $900") sea exactamente lo que se imprime.
+// coverage: cuantos de los productos elegidos tienen precio en cada lista.
+async function previewData(params: { sampleId?: string; productIds?: string[]; priceListIds?: string[] }) {
+  const priceListIds = params.priceListIds ?? [];
+  const sample = params.sampleId
+    ? (await getProducts([params.sampleId], priceListIds)).find((p) => p.id === params.sampleId) ?? null
+    : null;
+
+  const coverage: Record<string, number> = {};
+  if (priceListIds.length > 0 && params.productIds && params.productIds.length > 0) {
+    const lists = await prisma.priceList.findMany({
+      where: { ...tenantScope(), id: { in: priceListIds }, isDefault: false, isActive: true },
+      select: { id: true },
+    });
+    const rows = await prisma.priceListItem.groupBy({
+      by: ["priceListId"],
+      where: { priceListId: { in: lists.map((l) => l.id) }, productId: { in: params.productIds } },
+      _count: { _all: true },
+    });
+    lists.forEach((l) => { coverage[l.id] = 0; });
+    rows.forEach((r) => { coverage[r.priceListId] = r._count._all; });
+  }
+
+  return { sample, coverage };
+}
+
 export const barcodeService = {
+  previewData,
   exportPdf,
   exportExcel,
   getSavedDesigns,
