@@ -29,7 +29,7 @@ export type PromotionType = 'PRODUCT_DISCOUNT' | 'CATEGORY_DISCOUNT' | 'CART_DIS
 export type PurchaseOrderStatus = 'DRAFT' | 'SENT' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED';
 export type GoalMetric = 'REVENUE' | 'GROSS_PROFIT' | 'UNITS_SOLD' | 'SALES_COUNT';
 export type StockCountStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-export type NotificationType = 'LOW_STOCK' | 'DEBT_ALERT' | 'GOAL_REACHED' | 'PROMOTION_EXPIRING' | 'CASH_SESSION_OPEN' | 'SYSTEM' | 'ONBOARDING_PENDING' | 'PRINTER_NOT_CONFIGURED' | 'STOCK_FALLBACK';
+export type NotificationType = 'LOW_STOCK' | 'DEBT_ALERT' | 'GOAL_REACHED' | 'PROMOTION_EXPIRING' | 'CASH_SESSION_OPEN' | 'SYSTEM' | 'ONBOARDING_PENDING' | 'PRINTER_NOT_CONFIGURED' | 'STOCK_FALLBACK' | 'ORDER_NEW' | 'ORDER_PAID' | 'ORDER_TRANSFER_PROOF';
 
 export interface QuickAccessFolder {
   id: string;
@@ -696,6 +696,15 @@ export interface Reservation {
   sale?: { id: string; total: number; status: SaleStatus; invoiceStatus?: string; receiptType: ReceiptType; createdAt: string } | null;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface NotificationPreference {
+  type: NotificationType;
+  group: string;
+  label: string;
+  description: string;
+  inApp: boolean;
+  push: boolean;
 }
 
 export interface Notification {

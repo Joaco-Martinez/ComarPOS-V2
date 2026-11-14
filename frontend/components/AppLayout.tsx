@@ -16,6 +16,7 @@ import SectionIntro from './SectionIntro';
 import { Sun, Moon, Lock } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { initPushNotifications } from '@/lib/push';
+import { syncWebPushSubscription } from '@/lib/webPush';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -83,6 +84,14 @@ export default function AppLayout({ children, title, subtitle, actions }: AppLay
     if (loading || !user || !params?.tenant) return;
     initPushNotifications((href) => router.push(`/${params.tenant}${href}`));
   }, [loading, user, params?.tenant, router]);
+
+  // PWA (Web Push): si este dispositivo ya habia activado las notificaciones,
+  // re-asocia la suscripcion al usuario logueado. El permiso en si se pide
+  // solo desde Configuracion > Notificaciones (iOS exige un toque del usuario).
+  useEffect(() => {
+    if (loading || !user?.id) return;
+    syncWebPushSubscription();
+  }, [loading, user?.id]);
 
   // La URL siempre lleva el slug del negocio (ej. /grupo-vj/pos), como en Mi
   // Taller Ya, para que quede claro en qué empresa estás parado. Si el slug

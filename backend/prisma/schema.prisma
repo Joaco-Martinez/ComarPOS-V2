@@ -186,6 +186,7 @@ model Tenant {
   printboxDevices PrintboxDevice[]
   printJobs       PrintJob[]
   pushTokens      PushToken[]
+  webPushSubscriptions WebPushSubscription[]
 
   users             User[]
   clients           Client[]
@@ -443,6 +444,10 @@ model User {
   auditLogs                  AuditLog[]
   returns                    Return[]
   pushTokens                 PushToken[]
+  webPushSubscriptions       WebPushSubscription[]
+  // Preferencias de notificaciones por tipo: { [NotificationType]: { inApp?: boolean, push?: boolean } }.
+  // Ausente/true = activado (ver notificationPrefs.service.ts).
+  notificationPrefs          Json?
   repairOrders               RepairOrder[]
   vatSettlementsClosed       VatSettlement[]
   supplierAccountMovements   SupplierAccountMovement[]
@@ -1997,6 +2002,28 @@ model PushToken {
   @@index([tenantId])
 }
 
+// Suscripcion Web Push (estandar W3C + VAPID) de la PWA instalada en el
+// celu/compu -- a diferencia de PushToken (FCM, solo app nativa Capacitor),
+// esto funciona con la app agregada a Inicio en iPhone (iOS 16.4+) y en
+// Chrome/Android/escritorio sin ninguna cuenta de terceros. Un usuario puede
+// tener varias (un endpoint por navegador/dispositivo).
+model WebPushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([tenantId])
+}
+
 model LoyaltyAccount {
   id            String   @id @default(uuid())
   tenantId      String?
@@ -2729,6 +2756,9 @@ enum NotificationType {
   ONBOARDING_PENDING
   PRINTER_NOT_CONFIGURED
   STOCK_FALLBACK
+  ORDER_NEW
+  ORDER_PAID
+  ORDER_TRANSFER_PROOF
 }
 
 enum RepairOrderStatus {

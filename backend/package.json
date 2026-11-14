@@ -58,6 +58,7 @@
     "streamifier": "^0.1.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
+    "web-push": "^3.6.7",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
@@ -77,6 +78,7 @@
     "@types/streamifier": "^0.1.2",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
+    "@types/web-push": "^3.6.4",
     "@types/xml2js": "^0.4.14",
     "jest": "^30.4.2",
     "nodemon": "^3.1.10",

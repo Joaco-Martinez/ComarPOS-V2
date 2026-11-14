@@ -14,9 +14,10 @@
  */
 import fs from "fs";
 import prisma from "../prisma";
-import { CategoryClient, OrderPaymentMethod, OrderStatus, PaymentMethod } from "@prisma/client";
+import { CategoryClient, NotificationType, OrderPaymentMethod, OrderStatus, PaymentMethod } from "@prisma/client";
 import { tenantScope } from "../utils/tenantScope";
-import { currentTenantId } from "../context/tenantContext";
+import { currentTenantId, runWithTenant } from "../context/tenantContext";
+import { notificationService } from "./notification.service";
 import { AppError } from "../utils/asyncHandler";
 import { resolvePrice, getProductStock, resolveStorefrontPriceList } from "./catalog.service";
 import { storefrontConfigService } from "./storefrontConfig.service";
@@ -160,6 +161,15 @@ function buildWhatsappOrderMessage(params: {
     .join("\n");
 }
 
+const PAYMENT_LABELS: Record<string, string> = {
+  EFECTIVO: "efectivo al retirar",
+  TRANSFERENCIA: "transferencia",
+  MERCADOPAGO: "Mercado Pago",
+  WHATSAPP: "WhatsApp",
+};
+
+const ORDERS_HREF = "/tienda-online/pedidos";
+
 export const orderService = {
   async create(input: {
     items: { productId: string; quantity?: number; quantityKg?: number }[];
@@ -262,6 +272,14 @@ export const orderService = {
         items: { create: resolvedItems },
       },
       include: { items: true },
+    });
+
+    const itemCount = resolvedItems.length;
+    await notificationService.notifyStaff({
+      type: NotificationType.ORDER_NEW,
+      title: `🛒 Nuevo pedido · ${formatMoney(order.total)}`,
+      body: `${order.customerName} pidió ${itemCount} producto${itemCount === 1 ? "" : "s"} por la tienda online (pago: ${PAYMENT_LABELS[order.paymentMethod] ?? order.paymentMethod}).`,
+      data: { href: ORDERS_HREF, orderId: order.id },
     });
 
     if (input.paymentMethod === OrderPaymentMethod.MERCADOPAGO && mpAccessToken) {
@@ -387,6 +405,17 @@ export const orderService = {
         where: { id: order.id },
         data: { status: OrderStatus.CONFIRMED, paymentStatus: "APPROVED", mpPaymentId: String(payment.id) },
       });
+      // MP reintenta el webhook: solo se avisa la primera vez que pasa a aprobado.
+      if (order.paymentStatus !== "APPROVED") {
+        await runWithTenant(tenantId, () =>
+          notificationService.notifyStaff({
+            type: NotificationType.ORDER_PAID,
+            title: `💳 Pago aprobado · ${formatMoney(order.total)}`,
+            body: `Mercado Pago aprobó el pago del pedido de ${order.customerName}. Ya lo podés preparar.`,
+            data: { href: ORDERS_HREF, orderId: order.id },
+          })
+        );
+      }
     } else if (payment.status === "rejected" || payment.status === "cancelled") {
       await prisma.order.update({
         where: { id: order.id },
@@ -442,7 +471,7 @@ export const orderService = {
         await cloudinary.uploader.destroy(order.transferProofId).catch(() => undefined);
       }
 
-      return await prisma.order.update({
+      const updated = await prisma.order.update({
         where: { id: order.id },
         data: {
           transferProofUrl: result.secure_url,
@@ -450,6 +479,15 @@ export const orderService = {
           status: OrderStatus.PAYMENT_PENDING_REVIEW,
         },
       });
+
+      await notificationService.notifyStaff({
+        type: NotificationType.ORDER_TRANSFER_PROOF,
+        title: `🧾 Comprobante recibido · ${formatMoney(order.total)}`,
+        body: `${order.customerName} subió el comprobante de transferencia de su pedido. Revisalo para confirmarlo.`,
+        data: { href: ORDERS_HREF, orderId: order.id },
+      });
+
+      return updated;
     } catch (err) {
       safeDeleteLocalFile(file.path);
       if (newProofId) await cloudinary.uploader.destroy(newProofId).catch(() => undefined);

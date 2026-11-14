@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { notificationService } from "../services/notification.service";
 import { pushService } from "../services/push.service";
 import { PushPlatform } from "@prisma/client";
+import { notificationPrefsService } from "../services/notificationPrefs.service";
 
 function wrap(fn: (req: Request, res: Response) => Promise<any>) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -46,4 +47,32 @@ export const notificationController = {
     await pushService.unregisterToken(token);
     return { ok: true };
   }),
+
+  getPreferences: wrap(async (req) =>
+    notificationPrefsService.getForUser(userId(req), (req as any).user?.role)
+  ),
+
+  updatePreferences: wrap(async (req) =>
+    notificationPrefsService.updateForUser(userId(req), (req.body as any)?.preferences)
+  ),
+
+  webPushPublicKey: wrap(async () => pushService.webPushPublicKey()),
+
+  subscribeWebPush: wrap(async (req) => {
+    await pushService.registerWebSubscription(
+      userId(req),
+      (req.body as any)?.subscription,
+      req.get("user-agent") ?? undefined
+    );
+    return { ok: true };
+  }),
+
+  unsubscribeWebPush: wrap(async (req) => {
+    const endpoint = (req.body as any)?.endpoint;
+    if (typeof endpoint !== "string" || !endpoint) throw new Error("endpoint es requerido.");
+    await pushService.unregisterWebSubscription(userId(req), endpoint);
+    return { ok: true };
+  }),
+
+  sendTestPush: wrap(async (req) => notificationService.sendTest(userId(req))),
 };

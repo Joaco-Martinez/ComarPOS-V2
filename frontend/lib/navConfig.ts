@@ -51,6 +51,10 @@ export const NAV: NavItem[] = [
     intro: 'Manejá tus habitaciones o cabañas: disponibilidad, reservas y check-in/check-out.' },
   { href: '/facturacion',  icon: FacturacionIcon, label: 'AFIP / Facturas',    color: '#00B4DB', moduleKey: 'facturacion', group: 'Facturación',
     intro: 'Todas las facturas emitidas con CAE de AFIP, para consultarlas o reimprimirlas cuando haga falta.' },
+  // Sin moduleKey: cada usuario (admin o empleado) elige que avisos recibir
+  // y activa las notificaciones push en su propio celu.
+  { href: '/configuracion/notificaciones', icon: AlertasIcon, label: 'Notificaciones', color: '#EF4444', group: 'Administración',
+    intro: 'Elegí qué avisos querés recibir (pedidos de la tienda, stock bajo y más) y activá las notificaciones en tu celu para que te lleguen aunque no tengas la app abierta.' },
   { href: '/ayuda',        icon: AyudaIcon,       label: 'Ayuda y contacto',   color: '#6474BB', group: 'Ayuda' },
 ];
 
@@ -152,7 +156,7 @@ const ALL_NAV_ITEMS = [...NAV, ...ADMIN_NAV];
 
 // El contador no vende: solo ve lo fiscal (el backend tambien lo limita, ver
 // contador.routes.ts y afip.routes.ts).
-const CONTADOR_HREFS = ['/contador', '/facturacion', '/ayuda'];
+const CONTADOR_HREFS = ['/contador', '/facturacion', '/ayuda', '/configuracion/notificaciones'];
 
 /** Items de menu segun el rol, compartido por Sidebar y BottomNav. */
 export function navForRole(role?: string | null): NavItem[] {

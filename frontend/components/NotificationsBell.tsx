@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import api from '@/lib/api';
 import { normalizeArray, fmtDate } from '@/lib/helpers';
 import type { Notification } from '@/types';
-import { Bell, CheckCheck, AlertTriangle, Wallet, Target, Tag, Wallet as CashIcon, Info, Rocket, Printer, Warehouse } from 'lucide-react';
+import { Bell, CheckCheck, AlertTriangle, Wallet, Target, Tag, Wallet as CashIcon, Info, Rocket, Printer, Warehouse, ShoppingBag, CreditCard, Receipt, Settings } from 'lucide-react';
 
 const ICONS: Record<Notification['type'], typeof AlertTriangle> = {
   LOW_STOCK: AlertTriangle,
@@ -17,6 +17,9 @@ const ICONS: Record<Notification['type'], typeof AlertTriangle> = {
   ONBOARDING_PENDING: Rocket,
   PRINTER_NOT_CONFIGURED: Printer,
   STOCK_FALLBACK: Warehouse,
+  ORDER_NEW: ShoppingBag,
+  ORDER_PAID: CreditCard,
+  ORDER_TRANSFER_PROOF: Receipt,
 };
 
 export default function NotificationsBell() {
@@ -129,11 +132,22 @@ export default function NotificationsBell() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
             <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>Notificaciones</span>
-            {unread > 0 && (
-              <button onClick={markAllRead} className="btn btn-ghost btn-xs" style={{ gap: 4, fontSize: 11 }}>
-                <CheckCheck size={11} /> Marcar todas
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {unread > 0 && (
+                <button onClick={markAllRead} className="btn btn-ghost btn-xs" style={{ gap: 4, fontSize: 11 }}>
+                  <CheckCheck size={11} /> Marcar todas
+                </button>
+              )}
+              <button
+                onClick={() => { setOpen(false); router.push(`/${tenant}/configuracion/notificaciones`); }}
+                className="btn btn-ghost btn-xs"
+                title="Configurar notificaciones"
+                aria-label="Configurar notificaciones"
+                style={{ padding: 5 }}
+              >
+                <Settings size={12} />
               </button>
-            )}
+            </div>
           </div>
 
           <div style={{ maxHeight: 360, overflowY: 'auto' }}>

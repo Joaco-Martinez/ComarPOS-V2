@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import type { QuickAccessConfig, TenantOption, User } from '@/types';
 import api from '@/lib/api';
+import { detachWebPushFromAccount } from '@/lib/webPush';
 import { writeCachedQuickAccessConfig } from '@/lib/quickAccess';
 
 interface AuthState {
@@ -51,6 +52,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return user;
   },
   logout: async () => {
+    await detachWebPushFromAccount();
     await api.post('/auth/logout').catch(() => {});
     set({ user: null });
     if (typeof window !== 'undefined') {

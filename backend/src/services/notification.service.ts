@@ -1,11 +1,20 @@
 import prisma from "../prisma";
-import { NotificationType } from "@prisma/client";
+import { NotificationType, Role } from "@prisma/client";
+import { notificationPrefsService } from "./notificationPrefs.service";
 import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId } from "../context/tenantContext";
 import onboardingService, { ONBOARDING_STEPS } from "./onboarding.service";
 import { pushService } from "./push.service";
 
 export const notificationService = {
+  // Respeta las preferencias de cada usuario (Configuracion >
+  // Notificaciones): push = llega al celu; inApp = se muestra en la
+  // campanita. Si al menos un canal esta prendido la fila se guarda igual
+  // (aunque inApp este apagado, getForUser la oculta): checkLowStock,
+  // checkOnboarding y el aviso de impresora deduplican mirando las filas sin
+  // leer, y sin la fila un usuario con "solo push" recibiria el mismo push en
+  // cada corrida del cron / cada venta. Si los dos canales estan apagados no
+  // se hace nada.
   async create(data: {
     userId: string;
     type: NotificationType;
@@ -13,17 +22,23 @@ export const notificationService = {
     body: string;
     data?: object;
   }) {
-    const notif = await prisma.notification.create({
-      data: {
-        userId: data.userId,
-        type: data.type,
-        title: data.title,
-        body: data.body,
-        data: data.data ?? undefined,
-        tenantId: currentTenantId(),
-      },
-    });
-    await pushService.sendToUsers([data.userId], { title: data.title, body: data.body, data: data.data });
+    const { store, push } = await notificationPrefsService.splitRecipients([data.userId], data.type);
+    let notif = null;
+    if (store.length) {
+      notif = await prisma.notification.create({
+        data: {
+          userId: data.userId,
+          type: data.type,
+          title: data.title,
+          body: data.body,
+          data: data.data ?? undefined,
+          tenantId: currentTenantId(),
+        },
+      });
+    }
+    if (push.length) {
+      await pushService.sendToUsers(push, { title: data.title, body: data.body, data: data.data });
+    }
     return notif;
   },
 
@@ -34,25 +49,75 @@ export const notificationService = {
     body: string;
     data?: object;
   }) {
-    const result = await prisma.notification.createMany({
-      data: data.userIds.map((userId) => ({
-        userId,
-        type: data.type,
-        title: data.title,
-        body: data.body,
-        data: data.data ?? undefined,
-        tenantId: currentTenantId(),
-      })),
-    });
-    await pushService.sendToUsers(data.userIds, { title: data.title, body: data.body, data: data.data });
+    const { store, push } = await notificationPrefsService.splitRecipients(data.userIds, data.type);
+    const result = store.length
+      ? await prisma.notification.createMany({
+          data: store.map((userId) => ({
+            userId,
+            type: data.type,
+            title: data.title,
+            body: data.body,
+            data: data.data ?? undefined,
+            tenantId: currentTenantId(),
+          })),
+        })
+      : { count: 0 };
+    if (push.length) {
+      await pushService.sendToUsers(push, { title: data.title, body: data.body, data: data.data });
+    }
     return result;
   },
 
+  // Avisa a todo el personal activo del tenant actual con alguno de esos
+  // roles (por defecto ADMIN + EMPLEADO). Pensado para eventos que pasan
+  // fuera de una sesion del negocio (ej. un pedido de la tienda online) --
+  // nunca tira: un error notificando no puede romper el flujo que lo origino.
+  async notifyStaff(data: {
+    type: NotificationType;
+    title: string;
+    body: string;
+    data?: object;
+    roles?: Role[];
+  }) {
+    try {
+      const tenantId = currentTenantId();
+      if (!tenantId) return { count: 0 };
+      const staff = await prisma.user.findMany({
+        where: { tenantId, isActive: true, role: { in: data.roles ?? ["ADMIN", "EMPLEADO"] } },
+        select: { id: true },
+      });
+      if (!staff.length) return { count: 0 };
+      return await this.broadcast({
+        userIds: staff.map((u) => u.id),
+        type: data.type,
+        title: data.title,
+        body: data.body,
+        data: data.data,
+      });
+    } catch (err) {
+      console.error(`[notifications] No se pudo notificar ${data.type}:`, err);
+      return { count: 0 };
+    }
+  },
+
+  // Push de prueba solo al usuario que lo pide (ignora preferencias), para
+  // verificar desde Configuracion > Notificaciones que le llega al celu.
+  async sendTest(userId: string) {
+    return pushService.sendToUsers([userId], {
+      title: "¡Notificaciones activadas! 🎉",
+      body: "Así te van a llegar los avisos de ComarPOS a este dispositivo.",
+      data: { href: "/configuracion/notificaciones" },
+      tag: "TEST",
+    });
+  },
+
   async getForUser(userId: string, onlyUnread = false) {
+    const hiddenTypes = await notificationPrefsService.hiddenInAppTypes(userId);
     return prisma.notification.findMany({
       where: {
         userId,
         ...tenantScope(),
+        ...(hiddenTypes.length ? { type: { notIn: hiddenTypes } } : {}),
         ...(onlyUnread ? { isRead: false } : {}),
       },
       orderBy: { createdAt: "desc" },
@@ -76,8 +141,14 @@ export const notificationService = {
   },
 
   async getUnreadCount(userId: string) {
+    const hiddenTypes = await notificationPrefsService.hiddenInAppTypes(userId);
     return prisma.notification.count({
-      where: { userId, isRead: false, ...tenantScope() },
+      where: {
+        userId,
+        isRead: false,
+        ...tenantScope(),
+        ...(hiddenTypes.length ? { type: { notIn: hiddenTypes } } : {}),
+      },
     });
   },
 
