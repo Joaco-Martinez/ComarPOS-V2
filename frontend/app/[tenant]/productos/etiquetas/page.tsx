@@ -178,7 +178,7 @@ export default function EtiquetasPage() {
     try {
       const { data } = await api.get(`/price-lists/${list.id}`);
       const map: ListPrices = {};
-      (data?.items ?? []).forEach((i: any) => { map[i.productId] = { price: i.price, pricePerKg: i.pricePerKg }; });
+      (data?.content?.items ?? data?.items ?? []).forEach((i: any) => { map[i.productId] = { price: i.price, pricePerKg: i.pricePerKg }; });
       setListPrices((prev) => ({ ...prev, [list.id]: map }));
     } catch { /* la vista previa muestra un precio de ejemplo */ }
   };
@@ -190,6 +190,22 @@ export default function EtiquetasPage() {
     const list = barcodeProducts.filter((p) => sel.has(p.id));
     return (list.length > 0 ? list : barcodeProducts).slice(0, 300);
   }, [barcodeProducts, selectedIds]);
+  const sampleProduct = sampleOptions.find((o) => o.id === sampleId) ?? sampleOptions[0];
+  const sampleMissingLists = sampleProduct
+    ? activeLists.filter((l) => listPrices[l.id] && !listPrices[l.id][sampleProduct.id])
+    : [];
+
+  // Cuantos de los seleccionados tienen precio en cada lista tildada (los
+  // que no, salen sin esa linea).
+  const listCoverage = useMemo(() => {
+    const out: Record<string, number> = {};
+    activeLists.forEach((l) => {
+      const map = listPrices[l.id];
+      if (map) out[l.id] = selectedIds.filter((id) => map[id]).length;
+    });
+    return out;
+  }, [activeLists, listPrices, selectedIds]);
+
   const sample = useMemo<PreviewProduct>(() => {
     const p = sampleOptions.find((o) => o.id === sampleId) ?? sampleOptions[0];
     if (!p) {
@@ -476,6 +492,13 @@ export default function EtiquetasPage() {
                     </label>
                   ))}
                 </div>
+                {activeLists.map((pl) => listCoverage[pl.id] !== undefined && listCoverage[pl.id] < selectedIds.length && (
+                  <div key={pl.id} style={{ fontSize: 12, color: 'var(--warn)', lineHeight: 1.45 }}>
+                    {listCoverage[pl.id] === 0
+                      ? `Ninguno de los ${selectedIds.length} productos seleccionados tiene precio en "${pl.name}".`
+                      : `${listCoverage[pl.id]} de ${selectedIds.length} productos seleccionados tienen precio en "${pl.name}"; los demás salen sin esa línea.`}
+                  </div>
+                ))}
               </div>
             )}
             <div style={smallLabel}>Estilo general</div>
@@ -662,6 +685,12 @@ export default function EtiquetasPage() {
                     onSelectElement={setEditElement}
                   />
                 </div>
+                {sampleMissingLists.length > 0 && sampleProduct && (
+                  <div role="status" style={{ marginTop: 10, fontSize: 12, lineHeight: 1.45, color: 'var(--warn)', background: 'rgba(243,156,18,0.12)', border: '1px solid rgba(243,156,18,0.3)', borderRadius: 8, padding: '8px 10px' }}>
+                    <strong>{sampleProduct.parent ? sampleProduct.parent.name : sampleProduct.name}</strong> no tiene precio en {sampleMissingLists.map((l) => `"${l.name}"`).join(' ni en ')}, por eso esa línea no aparece.{' '}
+                    <a href={`/${tenant}/productos/listas-de-precios`} style={{ color: 'inherit', textDecoration: 'underline', fontWeight: 600 }}>Cargarlo en Listas de precios</a>
+                  </div>
+                )}
               </div>
 
               {/* Controles */}
