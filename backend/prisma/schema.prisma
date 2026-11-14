@@ -176,6 +176,10 @@ model Tenant {
   // null = sin ajustes. Lo aplica el POS al elegir el metodo (como descuento
   // manual de la venta, editable) - ver tenant.service.ts#getPaymentSettings.
   paymentMethodAdjustments Json?
+  // Diseno de las etiquetas de codigo de barra (Productos -> Etiquetas):
+  // { chico, mediano, grande } con medidas, letras, colores y orden de cada
+  // elemento. null = diseno por defecto. Ver services/labelDesign.ts.
+  labelDesign              Json?
 
   paymentLogs     TenantPaymentLog[]
   transferReports TenantTransferReport[]

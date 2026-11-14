@@ -578,12 +578,30 @@ export const productController = {
   async barcodesPdf(req: Request, res: Response, next: NextFunction) {
     try {
       const { productIds, quantities, sizes, priceListIds } = barcodeParams(req);
+      // Diseno de la vista previa (POST); sin el se usa el guardado.
+      const designs = req.method === "POST" ? req.body?.designs : undefined;
 
-      const buffer = await barcodeService.exportPdf({ productIds, quantities, sizes, priceListIds });
+      const buffer = await barcodeService.exportPdf({ productIds, quantities, sizes, priceListIds, designs });
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", 'attachment; filename="codigos-de-barra.pdf"');
       res.send(buffer);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getLabelDesign(_req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json({ designs: await barcodeService.getSavedDesigns() });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async saveLabelDesign(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json({ designs: await barcodeService.saveDesigns(req.body?.designs) });
     } catch (err) {
       next(err);
     }

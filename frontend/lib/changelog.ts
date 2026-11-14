@@ -14,6 +14,20 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2.11',
+    date: '2026-11-14',
+    title: 'Etiquetas con vista previa y diseño propio',
+    sections: [
+      {
+        title: 'Nuevo',
+        items: [
+          'Imprimir etiquetas tiene su propia pantalla (Productos → Imprimir etiquetas): muestra cómo queda la etiqueta en tamaño chico, mediano y grande con un producto real antes de descargar el PDF.',
+          'Diseño de la etiqueta a tu gusto: tamaño de letra, negrita, color y alineación del nombre, el número y los precios; alto y ancho del código de barras; qué elementos se muestran y en qué orden; y las medidas de cada tamaño. Cada lista de precios puede tener su propio estilo (por ejemplo, el precio en efectivo en rojo). El diseño se guarda para todo el negocio y el PDF sale igual que la vista previa.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.10',
     date: '2026-11-13',
     title: 'Códigos de barra por categoría',

@@ -2,18 +2,19 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import SkuScannerModal from '@/components/SkuScannerModal';
 import ImageCropModal, { PRODUCT_IMAGE_SIZE } from '@/components/ImageCropModal';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import type { Product, ProductCategory, Supplier, BusinessLocation, PriceList } from '@/types';
+import type { Product, ProductCategory, Supplier, BusinessLocation } from '@/types';
 import { categoryName, fmtKg, fmtMoney, normalizeArray, num, productStock, productMinStock, productHasLowStockLocation, skuKey, cleanSku } from '@/lib/helpers';
 import ResponsiveTable, { type ResponsiveTableColumn } from '@/components/mobile/ResponsiveTable';
 import FilterBar from '@/components/mobile/FilterBar';
-import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, Camera, AlertTriangle, ScanBarcode, Barcode, Download, FileSpreadsheet, ChevronRight, ChevronDown, Layers } from 'lucide-react';
+import { Package, PackagePlus, Plus, Edit2, Trash2, X, RefreshCcw, ImagePlus, Camera, AlertTriangle, ScanBarcode, Barcode, ChevronRight, ChevronDown, Layers } from 'lucide-react';
 import type { VariantOption } from '@/types';
 import VariantOptionsEditor from '@/components/products/VariantOptionsEditor';
 import VariantGrid, { reconcileRows, rowsFromVariants, rowToVariantInput, type VariantRow } from '@/components/products/VariantGrid';
@@ -31,14 +32,8 @@ const emptyForm = {
 
 type Form = typeof emptyForm;
 
-type BarcodeSize = 'chico' | 'mediano' | 'grande';
-const BARCODE_SIZE_LABELS: Record<BarcodeSize, string> = {
-  chico: 'Chico',
-  mediano: 'Mediano',
-  grande: 'Grande',
-};
-
 export default function ProductosPage() {
+  const { tenant } = useParams<{ tenant: string }>();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -67,22 +62,6 @@ export default function ProductosPage() {
   const [stockModal, setStockModal] = useState<Product | null>(null);
   const [stockForm, setStockForm] = useState({ businessLocationId: '', quantity: '', reason: '' });
   const [addingStock, setAddingStock] = useState(false);
-
-  // Módulo de códigos de barra: seleccionar productos (con SKU) y cuántas
-  // etiquetas de cada uno, para descargar un PDF listo para imprimir en hojas
-  // de stickers o un Excel con el código embebido.
-  const [barcodeModal, setBarcodeModal] = useState(false);
-  const [barcodeSelected, setBarcodeSelected] = useState<Record<string, boolean>>({});
-  const [barcodeQty, setBarcodeQty] = useState<Record<string, string>>({});
-  const [barcodeSize, setBarcodeSize] = useState<Record<string, BarcodeSize>>({});
-  const [barcodeSearch, setBarcodeSearch] = useState('');
-  const [barcodeSupplier, setBarcodeSupplier] = useState('');
-  const [barcodeCategory, setBarcodeCategory] = useState('');
-  const [barcodeDownloading, setBarcodeDownloading] = useState<'pdf' | 'excel' | null>(null);
-  // Listas de precios extra para imprimir en la etiqueta debajo del precio
-  // principal (ej. "Efectivo"). La default (Minorista) ya es el precio.
-  const [barcodePriceLists, setBarcodePriceLists] = useState<PriceList[]>([]);
-  const [barcodeListSel, setBarcodeListSel] = useState<Record<string, boolean>>({});
 
   // Variantes: opciones + grilla de combinaciones del form, padres
   // desplegados en el listado y el modal de "convertir".
@@ -407,143 +386,6 @@ export default function ProductosPage() {
     }
   };
 
-  // Una etiqueta por variante (con su SKU); los padres sin SKU no generan
-  // etiqueta. Las variantes se listan con el nombre de su padre.
-  const barcodeProducts = useMemo(
-    () => products
-      .flatMap((p) => (p.hasVariants
-        ? sortedVariants(p).map((v) => ({ ...v, supplierId: v.supplierId ?? p.supplierId, categoryId: v.categoryId ?? p.categoryId, parent: { id: p.id, name: p.name, sku: p.sku, imageUrl: p.imageUrl, variantOptions: p.variantOptions, hasVariants: true } }))
-        : [p]))
-      .filter((p) => p.sku && p.sku.trim() && p.isActive !== false),
-    [products]
-  );
-
-  // Filtros de proveedor y categoria ('none' = sin asignar).
-  const barcodeMatchesFilters = useCallback((p: { supplierId?: string | null; categoryId?: string | null }) => {
-    if (barcodeSupplier && (barcodeSupplier === 'none' ? !!p.supplierId : p.supplierId !== barcodeSupplier)) return false;
-    if (barcodeCategory && (barcodeCategory === 'none' ? !!p.categoryId : p.categoryId !== barcodeCategory)) return false;
-    return true;
-  }, [barcodeSupplier, barcodeCategory]);
-
-  const barcodeFiltered = useMemo(() => {
-    const byFilters = barcodeProducts.filter(barcodeMatchesFilters);
-    if (!barcodeSearch.trim()) return byFilters;
-    const q = barcodeSearch.toLowerCase();
-    return byFilters.filter((p) => p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || Boolean(p.parent?.name.toLowerCase().includes(q)));
-  }, [barcodeProducts, barcodeSearch, barcodeMatchesFilters]);
-
-  const openBarcodeModal = () => {
-    const selected: Record<string, boolean> = {};
-    const qty: Record<string, string> = {};
-    const size: Record<string, BarcodeSize> = {};
-    barcodeProducts.forEach((p) => { selected[p.id] = true; qty[p.id] = '1'; size[p.id] = 'mediano'; });
-    setBarcodeSelected(selected);
-    setBarcodeQty(qty);
-    setBarcodeSize(size);
-    setBarcodeSearch('');
-    setBarcodeSupplier('');
-    setBarcodeCategory('');
-    setBarcodeModal(true);
-    api.get('/price-lists')
-      .then(({ data }) => setBarcodePriceLists(normalizeArray<PriceList>(data).filter((pl) => !pl.isDefault)))
-      .catch(() => setBarcodePriceLists([]));
-  };
-
-  // Una etiqueta por unidad en stock (ej. 15 cocas = 15 etiquetas). Los
-  // productos por kilo quedan en 1 (no se cuenta por unidad) y los que no
-  // tienen stock se desmarcan.
-  const barcodeQtyFromStock = (p: Product) => (p.saleUnit === 'KG' ? 1 : Math.max(0, Math.floor(productStock(p))));
-
-  const applyStockQtyToAll = () => {
-    const qty: Record<string, string> = { ...barcodeQty };
-    const selected: Record<string, boolean> = { ...barcodeSelected };
-    barcodeFiltered.forEach((p) => {
-      if (!selected[p.id]) return;
-      const n = barcodeQtyFromStock(p);
-      if (n > 0) qty[p.id] = String(n);
-      else selected[p.id] = false;
-    });
-    setBarcodeQty(qty);
-    setBarcodeSelected(selected);
-  };
-
-  const toggleBarcodeAll = (checked: boolean) => {
-    const next: Record<string, boolean> = { ...barcodeSelected };
-    barcodeFiltered.forEach((p) => { next[p.id] = checked; });
-    setBarcodeSelected(next);
-  };
-
-  const applyBarcodeSizeToAll = (size: BarcodeSize) => {
-    const next: Record<string, BarcodeSize> = { ...barcodeSize };
-    barcodeFiltered.forEach((p) => { next[p.id] = size; });
-    setBarcodeSize(next);
-  };
-
-  // Con un proveedor o categoria elegidos solo cuentan los productos que
-  // coinciden, aunque otros hayan quedado tildados (al abrir se tildan todos).
-  const barcodeSelectedIds = useMemo(() => {
-    const ids = Object.entries(barcodeSelected).filter(([, v]) => v).map(([id]) => id);
-    if (!barcodeSupplier && !barcodeCategory) return ids;
-    const allowed = new Set(barcodeProducts.filter(barcodeMatchesFilters).map((p) => p.id));
-    return ids.filter((id) => allowed.has(id));
-  }, [barcodeSelected, barcodeSupplier, barcodeCategory, barcodeProducts, barcodeMatchesFilters]);
-
-  const downloadBarcodes = async (type: 'pdf' | 'excel') => {
-    if (barcodeSelectedIds.length === 0) {
-      toast.error('Seleccioná al menos un producto');
-      return;
-    }
-    setBarcodeDownloading(type);
-    try {
-      // Por POST (body JSON): con todos los productos tildados la query
-      // string superaba el limite del servidor (431) y no bajaba nada. Solo
-      // viajan las cantidades/tamanos distintos del default (1 / mediano).
-      const body: {
-        productIds: string[];
-        priceListIds?: string[];
-        quantities?: Record<string, number>;
-        sizes?: Record<string, BarcodeSize>;
-      } = { productIds: barcodeSelectedIds };
-      const priceListIds = barcodePriceLists.filter((pl) => barcodeListSel[pl.id]).map((pl) => pl.id);
-      if (priceListIds.length > 0) body.priceListIds = priceListIds;
-      if (type === 'pdf') {
-        const quantities: Record<string, number> = {};
-        const sizes: Record<string, BarcodeSize> = {};
-        barcodeSelectedIds.forEach((id) => {
-          const qty = Math.max(1, num(barcodeQty[id] ?? '1') || 1);
-          if (qty !== 1) quantities[id] = qty;
-          const size = barcodeSize[id] ?? 'mediano';
-          if (size !== 'mediano') sizes[id] = size;
-        });
-        body.quantities = quantities;
-        body.sizes = sizes;
-      }
-      const res = await api.post(`/products/barcodes/${type === 'pdf' ? 'pdf' : 'excel'}`, body, {
-        responseType: 'blob',
-      });
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `codigos-de-barra.${type === 'pdf' ? 'pdf' : 'xlsx'}`;
-      a.click();
-      // Revocar al toque puede cancelar la descarga en algunos navegadores.
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-    } catch (err: any) {
-      // Con responseType 'blob' el error del backend tambien llega como
-      // Blob: hay que leerlo para mostrar el mensaje real.
-      let message: string | undefined;
-      const data = err?.response?.data;
-      if (data instanceof Blob) {
-        try { message = JSON.parse(await data.text())?.message; } catch { /* no era JSON */ }
-      } else {
-        message = data?.message;
-      }
-      toast.error(message ?? 'Error al generar el archivo');
-    } finally {
-      setBarcodeDownloading(null);
-    }
-  };
-
   const isKg = form.saleUnit === 'KG';
 
   return (
@@ -552,9 +394,9 @@ export default function ProductosPage() {
       subtitle={`${filtered.length} de ${products.length} productos`}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={openBarcodeModal} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
-            <Barcode size={13} /> Códigos de barra
-          </button>
+          <a href={`/${tenant}/productos/etiquetas`} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+            <Barcode size={13} /> Imprimir etiquetas
+          </a>
           <button onClick={openCreate} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
             <Plus size={13} /> Nuevo producto
           </button>
@@ -1136,178 +978,6 @@ export default function ProductosPage() {
                 className="btn btn-primary btn-sm"
               >
                 {addingStock ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Agregar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Códigos de barra */}
-      {barcodeModal && (
-        <div className="modal-overlay" onClick={() => !barcodeDownloading && setBarcodeModal(false)}>
-          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '92vh' }}>
-            <div className="modal-header">
-              <span style={{ fontWeight: 800, fontSize: 15 }}>Códigos de barra</span>
-              <button onClick={() => setBarcodeModal(false)} className="btn btn-ghost btn-xs"><X size={14} /></button>
-            </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>
-                Elegí los productos, el tamaño de etiqueta y cuántas querés imprimir de cada uno. Solo se listan los productos activos con SKU cargado.
-              </p>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <input
-                  value={barcodeSearch}
-                  onChange={(e) => setBarcodeSearch(e.target.value)}
-                  placeholder="Buscar por nombre o SKU..."
-                  style={{ flex: '1 1 200px' }}
-                />
-                {/* Filtro por proveedor: al llegar mercaderia de un proveedor
-                    se imprimen las etiquetas de lo suyo sin buscar uno por uno.
-                    "Seleccionar todos" y "Cantidad = stock" actuan sobre lo filtrado. */}
-                <select
-                  value={barcodeSupplier}
-                  onChange={(e) => setBarcodeSupplier(e.target.value)}
-                  style={{ flex: '0 1 220px' }}
-                  title="Filtrar por proveedor"
-                >
-                  <option value="">Todos los proveedores</option>
-                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  <option value="none">Sin proveedor</option>
-                </select>
-                <select
-                  value={barcodeCategory}
-                  onChange={(e) => setBarcodeCategory(e.target.value)}
-                  style={{ flex: '0 1 220px' }}
-                  title="Filtrar por categoría"
-                >
-                  <option value="">Todas las categorías</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  <option value="none">Sin categoría</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={barcodeFiltered.length > 0 && barcodeFiltered.every((p) => barcodeSelected[p.id])}
-                    onChange={(e) => toggleBarcodeAll(e.target.checked)}
-                  />
-                  Seleccionar todos
-                </label>
-                <span>· {barcodeSelectedIds.length} seleccionados</span>
-                <button
-                  onClick={applyStockQtyToAll}
-                  className="btn btn-secondary btn-xs"
-                  title="Pone como cantidad de etiquetas el stock actual de cada producto seleccionado"
-                >
-                  Cantidad = stock
-                </button>
-                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Tamaño para todos:
-                  <select
-                    defaultValue=""
-                    onChange={(e) => {
-                      if (e.target.value) applyBarcodeSizeToAll(e.target.value as BarcodeSize);
-                      e.target.value = '';
-                    }}
-                    style={{ fontSize: 11 }}
-                  >
-                    <option value="" disabled>Elegir...</option>
-                    {(Object.keys(BARCODE_SIZE_LABELS) as BarcodeSize[]).map((s) => (
-                      <option key={s} value={s}>{BARCODE_SIZE_LABELS[s]}</option>
-                    ))}
-                  </select>
-                </span>
-              </div>
-
-              {barcodePriceLists.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)', padding: '8px 10px', background: 'var(--bg2)', borderRadius: 6 }}>
-                  <span style={{ fontWeight: 600 }}>Mostrar también el precio de:</span>
-                  {barcodePriceLists.map((pl) => (
-                    <label key={pl.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={!!barcodeListSel[pl.id]}
-                        onChange={(e) => setBarcodeListSel((prev) => ({ ...prev, [pl.id]: e.target.checked }))}
-                      />
-                      {pl.name}
-                    </label>
-                  ))}
-                </div>
-              )}
-              <div style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid var(--border2)', borderRadius: 6 }}>
-                {barcodeFiltered.length === 0 ? (
-                  <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
-                    No hay productos con SKU que coincidan.
-                  </div>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <tbody>
-                      {barcodeFiltered.map((p) => (
-                        <tr key={p.id} style={{ borderBottom: '1px solid var(--border2)' }}>
-                          <td style={{ padding: '6px 8px', width: 28 }}>
-                            <input
-                              type="checkbox"
-                              checked={!!barcodeSelected[p.id]}
-                              onChange={(e) => setBarcodeSelected((prev) => ({ ...prev, [p.id]: e.target.checked }))}
-                            />
-                          </td>
-                          <td style={{ padding: '6px 8px', fontSize: 12 }}>
-                            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{p.parent ? p.parent.name : p.name}</div>
-                            {p.parent && <div style={{ fontSize: 11, color: 'var(--text2)' }}>{p.variantLabel}</div>}
-                            <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text3)' }}>
-                              {p.sku} · stock {p.saleUnit === 'KG' ? fmtKg(productStock(p)) : productStock(p)}
-                            </div>
-                          </td>
-                          <td style={{ padding: '6px 8px', width: 100 }}>
-                            <select
-                              value={barcodeSize[p.id] ?? 'mediano'}
-                              disabled={!barcodeSelected[p.id]}
-                              onChange={(e) => setBarcodeSize((prev) => ({ ...prev, [p.id]: e.target.value as BarcodeSize }))}
-                              style={{ width: '100%', fontSize: 11 }}
-                              title="Tamaño de la etiqueta"
-                            >
-                              {(Object.keys(BARCODE_SIZE_LABELS) as BarcodeSize[]).map((s) => (
-                                <option key={s} value={s}>{BARCODE_SIZE_LABELS[s]}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td style={{ padding: '6px 8px', width: 90, textAlign: 'right' }}>
-                            <input
-                              type="number" min="1" step="1"
-                              value={barcodeQty[p.id] ?? '1'}
-                              disabled={!barcodeSelected[p.id]}
-                              onChange={(e) => setBarcodeQty((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                              style={{ width: 70, textAlign: 'center' }}
-                              title="Cantidad de etiquetas"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button onClick={() => setBarcodeModal(false)} className="btn btn-secondary btn-sm">Cerrar</button>
-              <button
-                onClick={() => downloadBarcodes('excel')}
-                disabled={!!barcodeDownloading || barcodeSelectedIds.length === 0}
-                className="btn btn-secondary btn-sm"
-                style={{ gap: 6 }}
-              >
-                {barcodeDownloading === 'excel' ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <FileSpreadsheet size={13} />}
-                Excel
-              </button>
-              <button
-                onClick={() => downloadBarcodes('pdf')}
-                disabled={!!barcodeDownloading || barcodeSelectedIds.length === 0}
-                className="btn btn-primary btn-sm"
-                style={{ gap: 6 }}
-              >
-                {barcodeDownloading === 'pdf' ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <Download size={13} />}
-                PDF para imprimir
               </button>
             </div>
           </div>
