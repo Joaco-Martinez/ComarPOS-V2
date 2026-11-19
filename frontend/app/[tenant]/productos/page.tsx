@@ -19,6 +19,7 @@ import type { VariantOption } from '@/types';
 import VariantOptionsEditor from '@/components/products/VariantOptionsEditor';
 import VariantGrid, { reconcileRows, rowsFromVariants, rowToVariantInput, type VariantRow } from '@/components/products/VariantGrid';
 import ConvertToVariantsModal from '@/components/products/ConvertToVariantsModal';
+import ComponentsEditor, { componentCandidates, componentsPayload, type ComponentRow } from '@/components/products/ComponentsEditor';
 import { combinationsCount, MAX_VARIANT_COMBINATIONS, matchesSearch, parentStock, priceRange, productImage, sortedVariants, valuesKey, variantValues } from '@/lib/variants';
 
 const emptyForm = {
@@ -69,6 +70,9 @@ export default function ProductosPage() {
   const [variantRows, setVariantRows] = useState<VariantRow[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [convertTarget, setConvertTarget] = useState<Product | null>(null);
+
+  // Producto COMPUESTO: productos base que lleva y cuánto de cada uno.
+  const [componentRows, setComponentRows] = useState<ComponentRow[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -126,12 +130,12 @@ export default function ProductosPage() {
     setVariantRows((prev) => reconcileRows(prev, next));
   };
 
-  const openCreate = () => { setForm(emptyForm); setEditing(null); setImgFile(null); setCropSourceFile(null); setInitialStock({}); setInitialMinStock({}); resetVariantState(); setModal('create'); };
+  const openCreate = () => { setForm(emptyForm); setEditing(null); setImgFile(null); setCropSourceFile(null); setInitialStock({}); setInitialMinStock({}); resetVariantState(); setComponentRows([]); setModal('create'); };
   const openEdit = async (target: Product) => {
     // Una variante se edita desde la grilla de su padre (precio, SKU, foto,
     // activa); el padre trae todas sus variantes, incluso las inactivas.
     let p = target;
-    if (target.parentId || target.hasVariants) {
+    if (target.parentId || target.hasVariants || target.type === 'COMPUESTO') {
       try {
         const { data } = await api.get(`/products/${target.parentId ?? target.id}`);
         p = data;
@@ -145,6 +149,12 @@ export default function ProductosPage() {
       setVariantOptions(p.variantOptions ?? []);
       setVariantRows(rowsFromVariants(p));
     }
+    setComponentRows(
+      (p.components ?? []).map((c) => ({
+        componentId: c.componentId,
+        quantity: String(c.quantityKg ?? c.quantity ?? ''),
+      }))
+    );
     setEditing(p);
     setForm({
       name: p.name, description: p.description ?? '', sku: p.sku ?? '',
@@ -225,6 +235,12 @@ export default function ProductosPage() {
 
   const save = async () => {
     if (!form.name.trim()) return;
+    const isComposite = !withVariants && form.type === 'COMPUESTO';
+    const components = isComposite ? componentsPayload(componentRows, componentCandidates(products, editing?.id)) : [];
+    if (isComposite && components.length === 0) {
+      toast.error('Un producto compuesto necesita al menos un componente con cantidad mayor a 0');
+      return;
+    }
     if (variantsInvalid) {
       toast.error('Revisá las variantes: cada opción necesita nombre y al menos un valor, y tiene que quedar al menos una combinación');
       return;
@@ -278,13 +294,15 @@ export default function ProductosPage() {
             ...(isKg ? { quantityKg: e.qty } : { quantity: e.qty }),
             ...(e.min > 0 ? (isKg ? { minQuantityKg: e.min } : { minQuantity: e.min }) : {}),
           }));
-        if (stockEntries.length > 0) {
+        if (stockEntries.length > 0 && !isComposite) {
           body.append('initialStock', JSON.stringify(stockEntries));
         }
+        if (isComposite) body.append('components', JSON.stringify(components));
         await api.post('/products', body);
         toast.success('Producto creado correctamente');
       } else if (editing) {
         await api.put(`/products/${editing.id}`, body);
+        if (isComposite) await api.put(`/products/${editing.id}/components`, { components });
         toast.success('Producto actualizado');
       }
       setModal(null);
@@ -656,7 +674,7 @@ export default function ProductosPage() {
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Unidad de venta</label>
-                  <select value={form.saleUnit} onChange={f('saleUnit')}>
+                  <select value={form.saleUnit} onChange={f('saleUnit')} disabled={form.type === 'COMPUESTO' && !withVariants}>
                     <option value="UNIT">Unidad</option>
                     <option value="KG">Kilogramos</option>
                   </select>
@@ -705,7 +723,14 @@ export default function ProductosPage() {
                 {!withVariants && (
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Tipo</label>
-                    <select value={form.type} onChange={f('type')}>
+                    <select
+                      value={form.type}
+                      onChange={(e) => {
+                        const type = e.target.value;
+                        // Los compuestos se venden por unidad (lo exige el backend).
+                        setForm((prev) => ({ ...prev, type, saleUnit: type === 'COMPUESTO' ? 'UNIT' : prev.saleUnit }));
+                      }}
+                    >
                       <option value="SIMPLE">Simple</option>
                       <option value="COMPUESTO">Compuesto</option>
                     </select>
@@ -789,11 +814,22 @@ export default function ProductosPage() {
                 </>
               )}
 
+              {/* Componentes (producto compuesto) */}
+              {!withVariants && form.type === 'COMPUESTO' && (
+                <>
+                  <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Componentes</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -6 }}>
+                    Elegí los productos base que lleva. El compuesto no tiene stock propio: cada vez que se vende, se descuenta el stock de sus componentes.
+                  </div>
+                  <ComponentsEditor rows={componentRows} onChange={setComponentRows} products={products} selfId={editing?.id} />
+                </>
+              )}
+
               {/* Stock */}
-              {!withVariants && (
+              {!withVariants && form.type !== 'COMPUESTO' && (
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1 }}>Stock</div>
               )}
-              {withVariants ? null : modal === 'create' && form.unlimitedStock === 'false' && locations.length > 0 ? (
+              {withVariants || form.type === 'COMPUESTO' ? null : modal === 'create' && form.unlimitedStock === 'false' && locations.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -4 }}>
                     Opcional: cargá la cantidad inicial y el mínimo por ubicación para no tener que ir después a <b>Stock</b>. El mínimo dispara las alertas y notificaciones de stock bajo.

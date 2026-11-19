@@ -93,6 +93,20 @@ function getKgStockTotal(product: any) {
   return rows.reduce((acc: number, row: any) => acc + Number(row.quantityKg || 0), 0);
 }
 
+const isUntracked = (product: any) => Boolean(product?.unlimitedStock) || Boolean(product?.isService);
+
+/**
+ * true si el producto se vende sin controlar stock: servicio, "sin limite",
+ * o un COMPUESTO cuyos componentes no llevan stock (ninguno limita). Lo usan
+ * el catalogo (tope del carrito) y el checkout (order.service.ts).
+ */
+export function skipsStockCheck(product: any) {
+  if (isUntracked(product)) return true;
+  if (product?.type !== ProductType.COMPUESTO) return false;
+  const components = Array.isArray(product.components) ? product.components : [];
+  return components.length > 0 && components.every((component: any) => isUntracked(component.component));
+}
+
 // Exportada para order.service.ts: el checkout de la tienda tiene que
 // resolver disponibilidad exactamente igual que el catalogo que el
 // comprador esta mirando, para no mostrarle "disponible" y despues
@@ -108,7 +122,21 @@ export function getProductStock(product: any) {
       };
     }
 
-    const maxByComponents = product.components.map((component: any) => {
+    // Los componentes que no llevan stock (servicio / "sin limite") no
+    // limitan cuantos combos se pueden armar (mismo criterio que
+    // dropUntrackedLines en sale.stock.ts al vender).
+    const trackedComponents = product.components.filter((component: any) => !isUntracked(component.component));
+
+    if (trackedComponents.length === 0) {
+      return {
+        availableQuantity: 0,
+        availableKg: 0,
+        stockLabel: "Disponible",
+        canSell: true,
+      };
+    }
+
+    const maxByComponents = trackedComponents.map((component: any) => {
       const componentProduct = component.component;
       const unitQty = Number(component.quantity || 0);
       const kgQty = Number(component.quantityKg || 0);
@@ -231,7 +259,7 @@ export function resolvePrice(product: any, category: CategoryClient, override?: 
 // disponible (unidades o kg segun como se vende). null = sin tope (servicio
 // o "stock ilimitado"), igual que la validacion del checkout.
 function maxQuantity(product: any, stock: { availableQuantity: number; availableKg: number }) {
-  if (product.unlimitedStock || product.isService) return null;
+  if (skipsStockCheck(product)) return null;
   const max = product.saleUnit === SaleUnit.KG ? stock.availableKg : stock.availableQuantity;
   return round2(Math.max(0, Number(max) || 0));
 }

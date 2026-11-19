@@ -321,9 +321,18 @@ export default function PosPage() {
   // y transferencias): su disponible sale de los componentes en la sucursal,
   // igual que getProductStock() del catálogo -- min(floor(stock / cantidad
   // por combo)).
+  // Los componentes servicio / "sin límite" no limitan el combo (el backend
+  // tampoco les descuenta stock, ver dropUntrackedLines en sale.stock.ts).
+  const isUntracked = (p?: Product | null) => Boolean(p?.isService || p?.unlimitedStock);
+  const trackedComponents = (p: Product) => (p.components ?? []).filter((c) => !isUntracked(c.component));
+  // Combo cuyos componentes no llevan stock: se vende siempre.
+  const isUnlimitedCombo = (p: Product) =>
+    p.type === 'COMPUESTO' && (p.components ?? []).length > 0 && trackedComponents(p).length === 0;
+  const sellsWithoutStock = (p: Product) => Boolean(p.isService || p.unlimitedStock) || isUnlimitedCombo(p);
+
   const productStock = (p: Product, locationIds = sellableLocationIds) => {
     if (p.type !== 'COMPUESTO') return ownStock(p, locationIds);
-    const components = p.components ?? [];
+    const components = trackedComponents(p);
     if (components.length === 0) return 0;
     return Math.max(0, Math.min(...components.map((c) => {
       const rows = (c.component?.stock ?? []).filter((s) => locationIds.includes(s.businessLocationId));
@@ -351,7 +360,7 @@ export default function PosPage() {
   // que buildStockLines() del backend.
   const stockUsage = (p: Product, qty: number) => {
     if (p.type !== 'COMPUESTO') return [{ productId: p.id, qty }];
-    return (p.components ?? []).map((c) => ({
+    return trackedComponents(p).map((c) => ({
       productId: c.componentId,
       qty: num(num(c.quantity) > 0 ? c.quantity : c.quantityKg) * qty,
     }));
@@ -398,7 +407,7 @@ export default function PosPage() {
       setKgModal({ product, qty: '', priceType });
       return true;
     }
-    if (!product.isService && !product.unlimitedStock) {
+    if (!sellsWithoutStock(product)) {
       if (!fitsInStock(product, 1)) {
         warnNoStock(product.name, productStock(product));
         return false;
@@ -425,7 +434,7 @@ export default function PosPage() {
     if (!kgModal) return;
     const qty = parseFloat(kgModal.qty);
     if (!qty || qty <= 0) { setKgModal(null); return; }
-    if (!kgModal.product.isService && !kgModal.product.unlimitedStock) {
+    if (!sellsWithoutStock(kgModal.product)) {
       if (!fitsInStock(kgModal.product, qty)) {
         warnNoStock(kgModal.product.name, productStock(kgModal.product));
         return;
@@ -675,7 +684,7 @@ export default function PosPage() {
     const current = cart[idx];
     if (!current) return;
     const newQty = current.quantity + delta;
-    if (delta > 0 && newQty > 0 && !current.product.isService && !current.product.unlimitedStock) {
+    if (delta > 0 && newQty > 0 && !sellsWithoutStock(current.product)) {
       if (!fitsInStock(current.product, delta)) {
         warnNoStock(current.product.name, productStock(current.product));
         return;
@@ -1116,7 +1125,7 @@ export default function PosPage() {
                 const stockRow = p.stock?.find((s) => s.businessLocationId === stockLocationId);
                 const minStock = num(p.saleUnit === 'KG' ? stockRow?.minQuantityKg : stockRow?.minQuantity);
                 const lowStock = stock <= minStock && minStock > 0 && !p.unlimitedStock;
-                const noStock = stock <= 0 && !p.isService && !p.unlimitedStock;
+                const noStock = stock <= 0 && !sellsWithoutStock(p);
                 const variantPrices = p.hasVariants ? groupPrices(p) : [];
                 const retailPrice = p.hasVariants ? Math.min(...variantPrices) : resolvedPrice(p);
                 const pricePrefix = p.hasVariants && Math.max(...variantPrices) !== retailPrice ? 'desde ' : '';
@@ -1143,7 +1152,7 @@ export default function PosPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
                         <span style={{ fontSize: 10, color: lowStock ? 'var(--warn)' : 'var(--text3)', fontFamily: 'var(--mono)' }}>
                           {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
-                          {p.unlimitedStock
+                          {p.unlimitedStock || isUnlimitedCombo(p)
                             ? 'Sin límite'
                             : noStock ? 'Sin stock' : stockLabel(p, stock)}
                         </span>
@@ -1166,7 +1175,7 @@ export default function PosPage() {
                 const stockRow = p.stock?.find((s) => s.businessLocationId === stockLocationId);
                 const minStock = num(p.saleUnit === 'KG' ? stockRow?.minQuantityKg : stockRow?.minQuantity);
                 const lowStock = stock <= minStock && minStock > 0 && !p.unlimitedStock;
-                const noStock = stock <= 0 && !p.isService && !p.unlimitedStock;
+                const noStock = stock <= 0 && !sellsWithoutStock(p);
                 const variantPrices = p.hasVariants ? groupPrices(p) : [];
                 const retailPrice = p.hasVariants ? Math.min(...variantPrices) : resolvedPrice(p);
                 const pricePrefix = p.hasVariants && Math.max(...variantPrices) !== retailPrice ? 'desde ' : '';
@@ -1200,7 +1209,7 @@ export default function PosPage() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 6 }}>
                       <span style={{ fontSize: 10, color: lowStock ? 'var(--warn)' : 'var(--text3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
                         {lowStock && <AlertTriangle size={9} style={{ display: 'inline', marginRight: 2 }} />}
-                        {p.unlimitedStock
+                        {p.unlimitedStock || isUnlimitedCombo(p)
                           ? 'Sin límite'
                           : noStock ? 'Sin stock' : stockLabel(p, stock)}
                       </span>

@@ -14,6 +14,25 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2.12',
+    date: '2026-11-19',
+    title: 'Combos y promos con productos que ya tenés',
+    sections: [
+      {
+        title: 'Nuevo',
+        items: [
+          'Productos compuestos (combos, promos, kits): al crear o editar un producto con Tipo = Compuesto, buscás los productos que ya tenés cargados y ponés cuánto lleva de cada uno (ej. 1 Fernet + 2 Coca-Cola, o 250 g de queso). Al vender el combo se descuenta el stock de cada componente, y el formulario te muestra cuántos combos podés armar con el stock actual.',
+        ],
+      },
+      {
+        title: 'Correcciones',
+        items: [
+          'Un combo que incluía un servicio o un producto "sin límite" no se podía vender (decía "Stock insuficiente") y en la tienda online aparecía sin stock. Ahora esos componentes no se controlan y el combo se vende normalmente.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.11',
     date: '2026-11-14',
     title: 'Etiquetas con vista previa y diseño propio',

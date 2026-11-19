@@ -10,7 +10,7 @@ import { useParams } from 'next/navigation';
 // navegador. No usa el store de notificaciones (Notification model) a
 // proposito: esto es un anuncio de producto para TODOS los usuarios, no un
 // evento de negocio individual.
-const LATEST_ID = 'etiquetas-editor-2026-11-14';
+const LATEST_ID = 'combos-compuestos-2026-11-19';
 const STORAGE_KEY = 'comarpos-whatsnew-seen';
 
 export default function WhatsNewModal() {
@@ -40,20 +40,20 @@ export default function WhatsNewModal() {
             </div>
             <div>
               <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Novedades</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Etiquetas a tu gusto</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Combos con tus productos</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-xs" onClick={dismiss}><X size={14} /></button>
         </div>
 
         <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, margin: '0 0 12px' }}>
-          Ahora ves cómo queda la etiqueta antes de imprimirla y la podés diseñar como quieras.
+          Ahora podés armar combos y promos con los productos que ya tenés cargados, y al venderlos se descuenta el stock de cada uno.
         </p>
 
         <ul style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 18px', paddingLeft: 18 }}>
-          <li><strong>Dónde</strong>: en Productos → Imprimir etiquetas.</li>
-          <li><strong>Vista previa</strong>: ves la etiqueta chica, mediana y grande con un producto real.</li>
-          <li><strong>A tu gusto</strong>: agrandá el nombre, achicá el código de barras, cambiá colores (ej. el precio en efectivo en rojo), el orden y las medidas. El diseño queda guardado para todo el negocio.</li>
+          <li><strong>Dónde</strong>: en Productos → Nuevo producto, elegí Tipo = Compuesto.</li>
+          <li><strong>Componentes</strong>: buscá los productos que lleva y poné la cantidad de cada uno (ej. 1 Fernet + 2 Coca-Cola).</li>
+          <li><strong>Stock</strong>: el combo no tiene stock propio; te mostramos cuántos podés armar y al venderlo baja el stock de cada componente.</li>
         </ul>
 
         <div style={{ display: 'flex', gap: 8 }}>

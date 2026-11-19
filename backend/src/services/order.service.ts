@@ -19,7 +19,7 @@ import { tenantScope } from "../utils/tenantScope";
 import { currentTenantId, runWithTenant } from "../context/tenantContext";
 import { notificationService } from "./notification.service";
 import { AppError } from "../utils/asyncHandler";
-import { resolvePrice, getProductStock, resolveStorefrontPriceList } from "./catalog.service";
+import { resolvePrice, getProductStock, resolveStorefrontPriceList, skipsStockCheck } from "./catalog.service";
 import { storefrontConfigService } from "./storefrontConfig.service";
 import { saleService } from "./sale.service";
 import { tenantMpConfigService } from "./tenantMpConfig.service";
@@ -85,7 +85,7 @@ async function resolveAndValidateItems(
       throw new AppError("INVALID_QUANTITY", `Cantidad inválida para "${product.name}"`, 400);
     }
 
-    if (!product.isService && !product.unlimitedStock) {
+    if (!skipsStockCheck(product)) {
       const stock = getProductStock(product);
       const available = isKg ? stock.availableKg : stock.availableQuantity;
 
@@ -601,7 +601,7 @@ export const orderService = {
       if (!product) {
         return { statusCode: 400, message: `El producto "${item.productNameSnapshot}" ya no existe` };
       }
-      if (!product.isService && !product.unlimitedStock) {
+      if (!skipsStockCheck(product)) {
         const isKg = item.quantityKg != null;
         const needed = isKg ? Number(item.quantityKg) : Number(item.quantity);
         const stock = getProductStock(product);
