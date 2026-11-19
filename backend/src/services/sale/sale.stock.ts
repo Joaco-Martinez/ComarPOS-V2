@@ -68,6 +68,29 @@ function buildStockLines(items: ResolvedSaleItem[]) {
   );
 }
 
+/**
+ * Saca las lineas de productos que no llevan stock (servicios o "sin
+ * limite"). buildStockLines ya filtra los items vendidos directamente, pero
+ * los componentes de un COMPUESTO llegan solo con su id: sin esto, un combo
+ * que incluye un servicio o un producto sin limite fallaba con "Stock
+ * insuficiente" (y si alcanzaba, le descontaba stock a algo que no lo
+ * controla).
+ */
+async function dropUntrackedLines(tx: any, stockLines: StockLine[]): Promise<StockLine[]> {
+  if (stockLines.length === 0) return stockLines;
+  const untracked = await tx.product.findMany({
+    where: {
+      id: { in: stockLines.map((l) => l.productId) },
+      OR: [{ isService: true }, { unlimitedStock: true }],
+      ...tenantScope(),
+    },
+    select: { id: true },
+  });
+  if (untracked.length === 0) return stockLines;
+  const skip = new Set(untracked.map((p: any) => p.id));
+  return stockLines.filter((l) => !skip.has(l.productId));
+}
+
 /** Valida que la ubicación exista y pertenezca al tenant. Tira si no. */
 async function requireStockLocationId(stockLocationId: unknown): Promise<string> {
   if (typeof stockLocationId !== "string" || !stockLocationId) {
@@ -176,9 +199,10 @@ async function getFallbackLocations(tx: any, stockLocationId: string) {
  * respaldo en orden. Sin respaldo, todo sale de la ubicacion de la venta
  * (comportamiento de siempre). Tira si entre todas no alcanza.
  */
-async function allocateStockLines(tx: any, stockLines: StockLine[], stockLocationId: string) {
+async function allocateStockLines(tx: any, allStockLines: StockLine[], stockLocationId: string) {
   const allocations: StockAllocation[] = [];
   const fallbackUses: StockFallbackUse[] = [];
+  const stockLines = await dropUntrackedLines(tx, allStockLines);
   if (stockLines.length === 0) return { allocations, fallbackUses };
 
   const location = await tx.businessLocation.findFirst({
@@ -366,12 +390,13 @@ async function getOutstandingFallbackStock(tx: any, saleId: string, productIds: 
 
 async function restoreStockLines(
   tx: any,
-  stockLines: StockLine[],
+  allStockLines: StockLine[],
   userId: string | undefined,
   saleId: string,
   stockLocationId: string,
   pendingAlerts: string[]
 ) {
+  const stockLines = await dropUntrackedLines(tx, allStockLines);
   const outstanding = stockLines.length > 0
     ? await getOutstandingFallbackStock(tx, saleId, stockLines.map((l) => l.productId), stockLocationId)
     : new Map<string, Map<string, { quantity: number; quantityKg: number }>>();
